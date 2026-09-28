@@ -4,7 +4,8 @@ This file describes the **current state of the code**: what lives where and how 
 Goals and decisions are in [`PLAN.md`](PLAN.md). After every change to the structure, a new module, endpoint
 or dependency, update the relevant section.
 
-Status: **stage 1 in progress**: login, guard and logout on the frontend side done, backend not yet.
+Status: frontend of stages 1 and 2 done (login, explorer, editor). The backend has only `/api/health`.
+The frontend is tested against a mock API that follows the contracts below.
 
 ## Flow
 
@@ -42,8 +43,18 @@ to the API at `http://localhost:5080` (`web/proxy.conf.json`).
 | `web/src/app/core/auth/return-url.ts` | `returnUrl` validation (open redirect protection) |
 | `web/src/app/core/browser/hard-navigation.ts` | full page reload (clears all in-memory state) |
 | `web/src/app/core/browser/bfcache-guard.ts` | reload of a page restored from the back/forward cache |
+| `web/src/app/core/browser/dialogs.ts` | the browser's `confirm()` wrapped in a service (to swap out in tests) |
+| `web/src/app/core/api/files-api.ts` | files API client: directory listing, read, save with conflict detection |
+| `web/src/app/core/api/project-path.ts` | relative path validation (no `..`, leading `/`, `\`) |
+| `web/src/app/features/explorer/` | file tree, directories loaded lazily on expand, "Odśwież" (Refresh) |
+| `web/src/app/features/editor/editor-store.ts` | state of open files: tabs, unsaved changes, save, conflicts (no dependency on Monaco) |
+| `web/src/app/features/editor/code-editor.ts` | Monaco instance, one model per open file, synchronization with EditorStore |
+| `web/src/app/features/editor/editor-pane.*` | tabs, path, error and conflict messages, the slot for the editor |
+| `web/src/app/features/editor/monaco-loader.ts` | lazy loading of Monaco, its styles (`monaco.css`), workers and theme |
+| `web/src/app/features/editor/workers/` | entry points of the Monaco web workers (editor, TS, JSON, CSS, HTML) |
+| `web/tsconfig.worker.json` | tsconfig for the workers (referenced in `angular.json` as `webWorkerTsConfig`) |
 | `web/src/app/features/login/` | login screen: username, password, TOTP code |
-| `web/src/app/features/workspace/` | main layout after login, "Wyloguj" (log out) button, the other areas as placeholders |
+| `web/src/app/features/workspace/` | main layout: explorer + editor, "Wyloguj" (log out), status bar, Ctrl+S. Console and bottom panel as placeholders |
 | `web/proxy.conf.json` | dev server proxy to the API |
 | `deploy/docker-compose.yml` | PostgreSQL 17 on `127.0.0.1:5432` |
 | `deploy/.env.example` | template of variables for Compose (copy to `deploy/.env`) |
@@ -91,6 +102,50 @@ Backend requirements that follow from the frontend:
 - every endpoint except `/api/health` and the three above returns `401` without a session,
 - `index.html` with the `Cache-Control: no-store` header.
 
+## Files and editor
+
+### Rules
+
+- Paths in the API are **relative to the projects directory** (`/srv/projects`), with `/` slashes, e.g.
+  `studia/lab-3-sieci/src/main.c`. An empty string is the projects directory itself. The frontend rejects paths with `..`,
+  a leading `/` and `\` before sending, but **the real check is done by the backend**.
+- For now the explorer shows the whole projects directory. Choosing a workspace and repository will come in stage 4
+  (then `Explorer.root` will get the repository path).
+- **Saving never silently overwrites changes on disk.** Every file has a version (e.g. a content hash). A save sends
+  the version the edit was based on. If the file changed on disk in the meantime (e.g. the console edited it),
+  the server rejects the save (409) and the user chooses: "Wczytaj z dysku" (Load from disk) or "Nadpisz moją wersją" (Overwrite with my version).
+- The editor state (`EditorStore`) is provided in the Workspace component, and logout reloads the page,
+  so open files disappear from memory together with the session.
+- **There is deliberately no `beforeunload` warning** for unsaved changes: it would block the reload on
+  logout in another tab or on session expiry, and then the code would stay visible on screen. Instead
+  we ask before closing a tab and before logout. Unsaved changes are lost on session expiry.
+
+### Monaco
+
+- The `monaco-editor` package in its ESM version, built in by the Angular bundler, loaded lazily on the first
+  opening of the view (the login screen does not download it).
+- Styles: `node_modules/monaco-editor/min/vs/editor/editor.main.css` as a separate `monaco.css` stylesheet
+  (`angular.json` → `styles`, `inject: false`), loaded by `monaco-loader.ts`. The bundler does not load CSS
+  imported from lazy modules, hence this exception. The `.ttf` loader in `angular.json` is needed because the Monaco
+  modules import the icon font.
+- Monaco displays spaces as `\u00a0`. Keep this in mind in tests that read text from the editor.
+- Shortcuts: Ctrl+S / Cmd+S saves the active file (also when focus is outside the editor). The middle mouse button
+  closes a tab.
+
+### Files API contract (to be implemented in the backend)
+
+All endpoints require a session (otherwise `401`). `PUT` requires the XSRF header.
+
+| Method | Path | Response |
+|---|---|---|
+| GET | `/api/files/list?path=<katalog>` | `200 [{"name","path","kind":"file"\|"directory"}]`. Without the `.git` directory. `404` when the directory does not exist |
+| GET | `/api/files/content?path=<plik>` | `200 {"path","content","version"}`. `404` no file, `413` too large, `415` binary file |
+| PUT | `/api/files/content?path=<plik>` | body `{"content","baseVersion"}`. `200 {"version"}` or `409 {"currentVersion"}` when the version on disk differs from `baseVersion` |
+
+Common to all: `400` when the path is invalid or, after resolution (including symlinks), goes outside
+the projects directory. The `index.html` and `monaco.css` files are served with `Cache-Control: no-cache`
+(the name `monaco.css` has no hash, so after a Monaco update the browser must download the new version).
+
 ## Backend
 
 Endpoints:
@@ -112,12 +167,13 @@ Conventions:
 - Colors and fonts only through the variables from `styles.scss`, no hard-coded colors in components
   (exceptions to be removed when the palette is refined).
 
-Planned folders: `core/api`, `core/realtime` (SignalR), `features/explorer`, `features/editor`,
-`features/console`, `features/terminal`, `features/workspaces`.
+Planned folders: `core/realtime` (SignalR), `features/console`, `features/terminal`, `features/workspaces`.
+
+Dependencies besides Angular: `monaco-editor` (editor).
 
 ## Tests
 
 | Part | Command | Tool |
 |---|---|---|
-| Frontend | `cd web && npm test` | Vitest (auth: service, guards, interceptor, `returnUrl`, login screen) |
+| Frontend | `cd web && npm test` | Vitest: auth (service, guards, interceptor, `returnUrl`, login screen), files API, paths, explorer, `EditorStore`. `CodeEditor` (Monaco) has no unit tests, because Monaco does not work in jsdom; checked manually in the browser |
 | Backend | no tests (they will come in stage 1, project `tests/Claushh.Api.Tests`) | xUnit |

@@ -127,7 +127,12 @@ The order is chosen so that only already secured things reach the internet.
         antiforgery, sessions, rate limiting, login history, notifications, ForwardedHeaders.
   - [ ] Frontend: session countdown in the top bar (requires expiry information from the API).
   - [ ] Deployment: Cloudflare Tunnel, systemd service.
-- [ ] **Stage 2: files and editor.** Files API with path protection, file tree, Monaco with saving.
+- [ ] **Stage 2: files and editor.**
+  - [x] Frontend: explorer with lazy loading, Monaco with tabs, saving (Ctrl+S), detection of
+        conflicts with changes on disk, status bar (cursor, language, unsaved).
+  - [ ] Backend: files API from the contract in `ARCHITECTURE.md`, path protection (including symlinks), file versions,
+        size limits, binary file detection.
+  - [ ] Marking of changed files (`M`) in the explorer (requires git from stage 4).
 - [ ] **Stage 3: console.** `claude` process with stream-json, Console panel, model / effort / mode,
       permission requests through MCP, resuming conversations.
 - [ ] **Stage 4: git, terminal, workspaces.** Workspace panel, status / diff / commit / push,

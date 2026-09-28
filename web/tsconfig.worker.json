@@ -1,0 +1,10 @@
+/* TypeScript configuration for the Monaco web workers (src/app/features/editor/workers). */
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./out-tsc/worker",
+    "lib": ["es2022", "webworker"],
+    "types": []
+  },
+  "include": ["src/**/*.worker.ts"]
+}

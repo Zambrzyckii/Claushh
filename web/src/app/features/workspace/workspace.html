@@ -16,12 +16,11 @@
 
 <div class="main">
   <nav class="explorer" aria-label="Eksplorator plików">
-    <div class="section-title">EKSPLORATOR</div>
-    <p class="placeholder">Drzewo plików (etap 2)</p>
+    <app-explorer [activePath]="editor.activePath()" (openFile)="editor.open($event)" />
   </nav>
 
   <main class="editor">
-    <p class="placeholder">Edytor Monaco (etap 2)</p>
+    <app-editor-pane />
   </main>
 
   @if (consoleOpen()) {
@@ -53,5 +52,17 @@
 }
 
 <footer class="statusbar">
-  <span>Szkielet interfejsu</span>
+  <div class="statusbar__group">
+    @if (editor.unsavedCount() > 0) {
+      <span class="statusbar__unsaved">Niezapisane: {{ editor.unsavedCount() }}</span>
+    }
+  </div>
+  <div class="statusbar__group">
+    @if (editor.cursor(); as c) {
+      <span>Ln {{ c.line }}, Kol {{ c.column }}</span>
+    }
+    @if (editor.language(); as lang) {
+      <span>{{ lang }}</span>
+    }
+  </div>
 </footer>

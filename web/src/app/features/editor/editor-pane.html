@@ -1,0 +1,58 @@
+<div class="tabs" role="tablist" aria-label="Otwarte pliki">
+  @for (doc of store.documents(); track doc.path) {
+    <div class="tab" [class.tab--active]="doc.path === store.activePath()" (auxclick)="closeWithMiddleClick(doc, $event)">
+      <button type="button" role="tab" class="tab__name" [attr.aria-selected]="doc.path === store.activePath()"
+              [title]="doc.path" (click)="store.activate(doc.path)">
+        {{ doc.name }}
+        @if (dirty(doc)) {
+          <span class="tab__dirty" aria-label="niezapisane zmiany">●</span>
+        }
+      </button>
+      <button type="button" class="tab__close" [attr.aria-label]="'Zamknij ' + doc.name" (click)="close(doc, $event)">×</button>
+    </div>
+  }
+</div>
+
+@if (store.active(); as doc) {
+  <div class="breadcrumb">
+    @for (part of breadcrumb(); track $index; let last = $last) {
+      <span [class.breadcrumb__current]="last">{{ part }}</span>
+      @if (!last) {
+        <span class="breadcrumb__sep">›</span>
+      }
+    }
+    @if (doc.saving) {
+      <span class="breadcrumb__state">zapisywanie…</span>
+    }
+  </div>
+
+  @if (doc.conflict) {
+    <div class="banner banner--warning" role="alert">
+      <span>Plik zmienił się na dysku, np. edytowała go konsola. Twoja wersja nie została zapisana.</span>
+      <button type="button" (click)="reload(doc)">Wczytaj z dysku</button>
+      <button type="button" (click)="overwrite(doc)">Nadpisz moją wersją</button>
+    </div>
+  } @else if (doc.status === 'ready' && doc.error) {
+    <div class="banner banner--warning" role="alert">
+      <span>{{ doc.error }}</span>
+      <button type="button" (click)="store.save(doc.path)">Spróbuj ponownie</button>
+    </div>
+  }
+}
+
+<div class="body">
+  <app-code-editor [class.hidden]="store.active()?.status !== 'ready'" />
+
+  @if (store.active(); as doc) {
+    @if (doc.status === 'loading') {
+      <p class="message">Wczytywanie…</p>
+    } @else if (doc.status === 'error') {
+      <div class="message" role="alert">
+        <p>{{ doc.error }}</p>
+        <button type="button" (click)="retry(doc)">Spróbuj ponownie</button>
+      </div>
+    }
+  } @else {
+    <p class="message">Wybierz plik w eksploratorze.</p>
+  }
+</div>
