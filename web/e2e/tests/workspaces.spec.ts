@@ -1,5 +1,6 @@
-import { Page, expect, test } from '@playwright/test';
+import { Page } from '@playwright/test';
 
+import { expect, test } from './fixtures';
 import {
   BAZY_SQL,
   LAB,
@@ -158,9 +159,11 @@ test('clones only https repositories without credentials', async ({ page, reques
   const clone = panel(page).getByRole('button', { name: 'Klonuj' });
 
   for (const [value, message] of [
-    ['git@github.com:owner/projekt.git', 'Nieprawidłowy adres.'],
+    ['git@github.com:owner/projekt.git', 'Dozwolone są tylko adresy https://.'],
     ['http://github.com/owner/projekt.git', 'Dozwolone są tylko adresy https://.'],
-    ['https://user:token@github.com/owner/projekt.git', 'Adres nie może zawierać loginu ani hasła.']
+    ['https://user:token@github.com/owner/projekt.git', 'Adres nie może zawierać loginu ani hasła.'],
+    // The browser sees the host github.com, and git sees evil.example (with the login "github.com\").
+    ['https://github.com\\@evil.example/owner/projekt.git', 'Adres nie może zawierać loginu ani hasła.']
   ]) {
     await url.fill(value);
     await clone.click();

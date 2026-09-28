@@ -140,6 +140,18 @@ describe('Workspaces (integration)', () => {
     await settle();
     expect(root.textContent).toContain('Dozwolone są tylko adresy https://.');
 
+    // The browser sees the host github.com here, and git sees evil.com: a URL with `\` or `@` must not pass.
+    for (const [address, message] of [
+      ['https://github.com\\@evil.com/org/repo', 'Adres nie może zawierać loginu ani hasła.'],
+      ['https://github.com/org/repo?x=1', 'Adres może zawierać tylko litery łacińskie'],
+      ['https://github.com/org/../repo', 'Nieprawidłowy adres. Skopiuj go bez zmian']
+    ]) {
+      url.value = address;
+      url.form!.dispatchEvent(new Event('submit'));
+      await settle();
+      expect(root.textContent).toContain(message);
+    }
+
     http.expectNone((r) => r.method === 'POST');
   });
 

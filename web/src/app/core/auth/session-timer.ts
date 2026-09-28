@@ -8,6 +8,11 @@ export const SESSION_WARNING_MS = 2 * 60_000;
 export const KEEPALIVE_INTERVAL_MS = 60_000;
 /** After the countdown reaches zero, the server is asked about the session at most once per this many milliseconds. */
 const VERIFY_INTERVAL_MS = 10_000;
+/**
+ * How long after the expiry time we wait for the server's response. After that, if the server still does not respond
+ * (no network, tunnel failure), the session ends locally: the view with code must not stay on the screen forever.
+ */
+export const EXPIRY_GRACE_MS = 30_000;
 
 const ACTIVITY_EVENTS = ['keydown', 'pointerdown', 'wheel'] as const;
 
@@ -18,6 +23,8 @@ const ACTIVITY_EVENTS = ['keydown', 'pointerdown', 'wheel'] as const;
  *   `AuthService.keepAlive()`, at most once a minute. Background refresh alone does not extend the session.
  * - When the countdown reaches zero, we ask the server: an expired session ends with a return to login,
  *   and one extended in another tab simply updates the countdown.
+ * - Safe without a network: if the server does not respond and `EXPIRY_GRACE_MS` has passed since the deadline,
+ *   the session ends locally the same way as on 401.
  * Provided in the Workspace component. Description: docs/ARCHITECTURE.md, section "Authentication".
  */
 @Injectable()
@@ -26,6 +33,7 @@ export class SessionTimer {
   private readonly now = signal(Date.now());
   private lastKeepAlive = Date.now();
   private lastVerify = 0;
+  private verifying = false;
 
   /** Remaining time in ms, or `null` when the server did not give an expiry time. */
   readonly remainingMs = computed(() => {
@@ -73,9 +81,23 @@ export class SessionTimer {
   private tick(): void {
     const now = Date.now();
     this.now.set(now);
-    if (this.remainingMs() === 0 && now - this.lastVerify >= VERIFY_INTERVAL_MS) {
+    if (this.remainingMs() === 0 && !this.verifying && now - this.lastVerify >= VERIFY_INTERVAL_MS) {
       this.lastVerify = now;
-      void this.auth.verifySession();
+      void this.checkExpired();
+    }
+  }
+
+  /** The countdown reached zero: the server decides, and when it stays silent longer than `EXPIRY_GRACE_MS` after the deadline, we end locally. */
+  private async checkExpired(): Promise<void> {
+    this.verifying = true;
+    try {
+      const result = await this.auth.verifySession();
+      const at = this.auth.expiresAt();
+      if (result === 'unknown' && at !== null && Date.now() - at >= EXPIRY_GRACE_MS) {
+        this.auth.handleSessionExpired();
+      }
+    } finally {
+      this.verifying = false;
     }
   }
 }

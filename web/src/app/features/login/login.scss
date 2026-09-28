@@ -48,6 +48,13 @@
       opacity: 0.5;
       cursor: not-allowed;
     }
+
+    &.secondary {
+      margin: 0 0 16px;
+      background: transparent;
+      color: var(--text);
+      border: 1px solid var(--border-strong);
+    }
   }
 }
 

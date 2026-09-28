@@ -21,6 +21,8 @@ export interface TerminalAttachment {
   snapshot: string;
   /** Number of the last output fragment included in the snapshot. */
   seq: number;
+  /** Number of the last `Input` batch accepted from the `client` given in `Attach` (0 when none). */
+  inputSeq: number;
 }
 
 export interface TerminalOutput {
@@ -32,6 +34,16 @@ export interface TerminalOutput {
 export interface TerminalExit {
   id: string;
   exitCode: number | null;
+}
+
+/** `Input` argument: a batch of typed characters with the sender's (terminal view's) sequence number. */
+export interface TerminalInput {
+  id: string;
+  /** Random identifier of the terminal view. */
+  client: string;
+  /** Increases by 1 for each new batch of a given `client`. A batch with `seq` not greater than the last accepted one is skipped. */
+  seq: number;
+  data: string;
 }
 
 export const TERMINAL_HUB = {

@@ -6,6 +6,8 @@ import { defineConfig, devices } from '@playwright/test';
  * CHROMIUM_PATH lets you use a browser installed on the system instead of `npx playwright install chromium`.
  */
 const PORT = 4400;
+/** The mock listens only on 127.0.0.1 (it has unsecured /__test/* endpoints). */
+const BASE_URL = `http://127.0.0.1:${PORT}`;
 
 export default defineConfig({
   testDir: 'e2e/tests',
@@ -16,14 +18,14 @@ export default defineConfig({
   timeout: 30_000,
   use: {
     ...devices['Desktop Chrome'],
-    baseURL: `http://localhost:${PORT}`,
+    baseURL: BASE_URL,
     viewport: { width: 1440, height: 900 },
     trace: 'retain-on-failure',
     launchOptions: process.env['CHROMIUM_PATH'] ? { executablePath: process.env['CHROMIUM_PATH'] } : {}
   },
   webServer: {
     command: 'node e2e/mock-api/server.mjs',
-    url: `http://localhost:${PORT}/__test/state`,
+    url: `${BASE_URL}/__test/state`,
     reuseExistingServer: false,
     env: { MOCK_PORT: String(PORT) }
   }

@@ -2,6 +2,13 @@
 <html lang="pl">
 <head>
   <meta charset="utf-8">
+  <!--
+    Content-Security-Policy: second line of defense against XSS (docs/ARCHITECTURE.md, "Security headers").
+    The backend sends the same policy in a header, adding frame-ancestors 'none' (it does not work in <meta>).
+    Inline styles are needed by Angular, Monaco and xterm. Scripts only from our own domain, no inline.
+    Trusted Types: strings will not reach innerHTML or script URLs (policy: src/app/core/browser/trusted-types.ts).
+  -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; base-uri 'self'; form-action 'none'; object-src 'none'; require-trusted-types-for 'script'">
   <title>Workspace</title>
   <base href="/">
   <meta name="viewport" content="width=device-width, initial-scale=1">

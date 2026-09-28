@@ -116,6 +116,17 @@ button {
   border: 1px solid var(--border-strong);
   border-radius: 4px;
 
+  // The whole command must be visible: new lines as new lines, long runs broken at any point.
+  &__text,
+  &__rule {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  &__rule {
+    color: var(--text-muted);
+  }
+
   &__buttons {
     display: flex;
     gap: 8px;

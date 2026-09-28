@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { ActivatedRouteSnapshot, Router, RouterStateSnapshot, UrlTree, provideRouter } from '@angular/router';
+import { ActivatedRouteSnapshot, Router, RouterStateSnapshot, UrlTree, convertToParamMap, provideRouter } from '@angular/router';
 import { vi } from 'vitest';
 
 import { authGuard, guestGuard } from './auth.guards';
@@ -7,13 +7,13 @@ import { AuthService } from './auth.service';
 
 describe('auth guards', () => {
   let ensureSession: ReturnType<typeof vi.fn>;
-  const route = {} as ActivatedRouteSnapshot;
+  const route = { queryParamMap: convertToParamMap({}) } as ActivatedRouteSnapshot;
   const state = { url: '/projects?open=1' } as RouterStateSnapshot;
 
   beforeEach(() => {
     ensureSession = vi.fn();
     TestBed.configureTestingModule({
-      providers: [provideRouter([]), { provide: AuthService, useValue: { ensureSession } }]
+      providers: [provideRouter([]), { provide: AuthService, useValue: { ensureSession, pendingLogout: () => null } }]
     });
   });
 

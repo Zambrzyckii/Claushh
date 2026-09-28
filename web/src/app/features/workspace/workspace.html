@@ -95,4 +95,4 @@
   </div>
 </footer>
 
-<app-security-dialog (logoutEverywhere)="logout()" />
+<app-security-dialog [unsavedCount]="editor.unsavedCount()" (logoutEverywhere)="logout(true)" />

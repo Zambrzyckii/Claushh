@@ -101,12 +101,13 @@ export class Workspace {
     void this.workspaces.refreshRepos();
   }
 
-  protected async logout(): Promise<void> {
+  /** `unsavedConfirmed`: the user has already agreed to discard unsaved files ("Wyloguj wszędzie"). */
+  protected async logout(unsavedConfirmed = false): Promise<void> {
     if (this.loggingOut()) {
       return;
     }
     const unsaved = this.editor.unsavedCount();
-    if (unsaved > 0 && !this.dialogs.confirm(`Niezapisane pliki: ${unsaved}. Wylogować i porzucić zmiany?`)) {
+    if (!unsavedConfirmed && unsaved > 0 && !this.dialogs.confirm(`Niezapisane pliki: ${unsaved}. Wylogować i porzucić zmiany?`)) {
       return;
     }
     this.loggingOut.set(true);

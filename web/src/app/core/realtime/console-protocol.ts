@@ -26,7 +26,17 @@ export type ConsoleEvent =
   | { type: 'step'; conversationId: string; stepId: string; kind: StepKind; target: string; added?: number; removed?: number }
   | { type: 'step-output'; conversationId: string; stepId: string; text: string; isError: boolean }
   | { type: 'text'; conversationId: string; messageId: string; delta: string }
-  | { type: 'permission'; conversationId: string; requestId: string; description: string }
+  | {
+      type: 'permission';
+      conversationId: string;
+      requestId: string;
+      description: string;
+      /**
+       * The rule that the `allow-always` answer will save, e.g. `Bash(git push:*)`. Without it, the console does not offer
+       * "tak, zawsze" (yes, always), because the user would not know what they are permanently agreeing to.
+       */
+      alwaysRule?: string | null;
+    }
   | { type: 'permission-resolved'; conversationId: string; requestId: string; decision: PermissionDecision }
   | { type: 'status'; conversationId: string; state: ConsoleState; message?: string }
   | { type: 'files-changed'; conversationId: string; paths: string[] };

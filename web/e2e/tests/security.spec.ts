@@ -1,16 +1,21 @@
-import { Browser, Page, expect, test } from '@playwright/test';
+import { Page } from '@playwright/test';
 
-import { fillLogin, login, mockState, resetMock, setSessionTimeout } from './helpers';
+import { expect, test } from './fixtures';
+import {
+  MAIN,
+  expectEditorToContain,
+  fillLogin,
+  killSessions,
+  login,
+  mockState,
+  openFile,
+  resetMock,
+  setSessionTimeout
+} from './helpers';
 
 test.beforeEach(async ({ request }) => resetMock(request));
 
 const countdown = (page: Page) => page.getByRole('timer');
-
-/** A second browser (separate cookies) pretends to be a second device. */
-async function otherDevice(browser: Browser): Promise<Page> {
-  const context = await browser.newContext({ baseURL: test.info().project.use.baseURL, viewport: { width: 1440, height: 900 } });
-  return context.newPage();
-}
 
 async function openSecurity(page: Page): Promise<void> {
   await page.getByRole('button', { name: /Bezpieczeństwo i sesje/ }).click();
@@ -55,8 +60,8 @@ test('an expired session sends the user back to login when the countdown ends', 
   await expect(page).toHaveURL(/\/login\?reason=expired/, { timeout: 15000 });
 });
 
-test('the security dialog lists sessions and logins and can end another session', async ({ page, browser }) => {
-  const phone = await otherDevice(browser);
+test('the security dialog lists sessions and logins and can end another session', async ({ page, newDevice }) => {
+  const phone = await newDevice();
   await phone.goto('/login');
   await fillLogin(phone, { password: 'zle' });
   await expect(phone.getByRole('alert')).toBeVisible();
@@ -82,8 +87,8 @@ test('the security dialog lists sessions and logins and can end another session'
   await expect(page.locator('.topbar__user')).toBeVisible();
 });
 
-test('"Wyloguj wszędzie" ends every session, including this one', async ({ page, browser, request }) => {
-  const laptop = await otherDevice(browser);
+test('"Wyloguj wszędzie" ends every session, including this one', async ({ page, newDevice, request }) => {
+  const laptop = await newDevice();
   await login(laptop);
   await login(page);
 
@@ -92,6 +97,78 @@ test('"Wyloguj wszędzie" ends every session, including this one', async ({ page
   await page.getByRole('button', { name: 'Wyloguj wszędzie' }).click();
   await expect(page).toHaveURL('/login?logout=ok');
   await expect(laptop).toHaveURL(/\/login\?reason=expired/);
+  const log = (await mockState(request)).log.map((l) => l.path);
+  expect(log).toContain('revoke-others');
+  expect(log).toContain('/api/auth/logout');
+});
+
+test('without an answer from the server the session still ends on this screen after the deadline', async ({ page, request }) => {
+  await page.clock.install();
+  await setSessionTimeout(request, 5);
+  await login(page);
+  await expect(countdown(page)).toBeVisible();
+  // The server (or the network, the tunnel) stops responding.
+  let checks = 0;
+  await page.route('**/api/**', (route) => {
+    if (route.request().url().endsWith('/api/auth/me')) checks++;
+    return route.abort('internetdisconnected');
+  });
+
+  await page.clock.fastForward('00:06');
+  await expect(countdown(page)).toHaveText('Sesja wygasa za 0:00');
+  await expect.poll(() => checks).toBeGreaterThanOrEqual(1);
+  await page.clock.fastForward('00:15');
+  await expect.poll(() => checks).toBeGreaterThanOrEqual(2);
+  await page.waitForTimeout(300); // the response (network error) has had time to reach the page
+  await expect(page).toHaveURL('/'); // a brief lack of response does not log out yet
+
+  await page.clock.fastForward('00:30');
+  await expect(page).toHaveURL(/\/login\?reason=expired/);
+});
+
+test('the server closes the live connections of a session that expired', async ({ page, request }) => {
+  // The countdown in the browser still shows almost 30 minutes: only the server can notice the shortened expiry,
+  // by closing the session's open WebSockets (without that the page would stay logged in).
+  await login(page);
+  await expect(page.locator('app-console-panel')).toContainText('Pusta rozmowa');
+  await setSessionTimeout(request, 1);
+  await expect(page).toHaveURL(/\/login\?reason=expired/, { timeout: 10_000 });
+});
+
+test('a hub call with a session the server no longer has closes the connection', async ({ page, request }) => {
+  await login(page);
+  await expect(page.locator('app-console-panel')).toContainText('Pusta rozmowa');
+  // The session disappears on the server, but open WebSockets stay: only the check on a hub invocation will notice it.
+  await killSessions(request, { keepSockets: true });
+  const prompt = page.getByRole('textbox', { name: 'Polecenie' });
+  await prompt.fill('dodaj komentarz');
+  await prompt.press('Enter');
+  await expect(page).toHaveURL(/\/login\?reason=expired/);
+  expect((await mockState(request)).prompts).toHaveLength(0);
+});
+
+test('"Wyloguj wszędzie" with unsaved files asks a single question before ending any session', async ({ page, request }) => {
+  await login(page);
+  await openFile(page, MAIN);
+  await expectEditorToContain(page, 'int main');
+  await page.locator('.monaco-editor .view-lines').click();
+  await page.keyboard.type('// niezapisane');
+  await expect(page.locator('.tab__dirty')).toBeVisible();
+  await openSecurity(page);
+
+  const questions: string[] = [];
+  page.on('dialog', (dialog) => {
+    questions.push(dialog.message());
+    void (questions.length === 1 ? dialog.dismiss() : dialog.accept());
+  });
+  await page.getByRole('button', { name: 'Wyloguj wszędzie' }).click();
+  await expect.poll(() => questions).toEqual(['Wylogować wszystkie sesje, także tę? Niezapisane pliki (1) zostaną porzucone.']);
+  expect((await mockState(request)).log.map((l) => l.path)).not.toContain('revoke-others');
+  await expect(page.locator('.topbar__user')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Wyloguj wszędzie' }).click();
+  await expect(page).toHaveURL('/login?logout=ok');
+  expect(questions).toHaveLength(2);
   const log = (await mockState(request)).log.map((l) => l.path);
   expect(log).toContain('revoke-others');
   expect(log).toContain('/api/auth/logout');

@@ -84,7 +84,13 @@ console conversation identifiers, settings (default model, effort, mode).
 - Cookies `HttpOnly`, `Secure`, `SameSite=Strict`, antiforgery.
 - Short sessions (e.g. 30 minutes of inactivity, hard limit of 12 h), extended only by user activity,
   list of active sessions, login history, "wyloguj wszędzie" (log out everywhere).
-- `[Authorize]` on SignalR hubs and checking the `Origin` header on WebSockets.
+- `[Authorize]` on SignalR hubs and checking the `Origin` header on WebSockets. The session is checked on every
+  hub call, and open connections are closed when the session ends (including expiry).
+- Expiry also works without a connection to the server: after the deadline the browser returns to the login screen on its own.
+- An unconfirmed logout (e.g. a tunnel failure) does not allow returning to the app without logging in, and the browser
+  retries ending the session until the server confirms.
+- Content-Security-Policy (no inline scripts, with Trusted Types), no embedding in a frame (`frame-ancestors 'none'`),
+  `nosniff`, `Referrer-Policy`, HSTS. Details: `ARCHITECTURE.md`, "Security headers".
 - `ForwardedHeaders` trusts only the local `cloudflared`, the real IP from the `CF-Connecting-IP` header.
 
 ### Limiting damage
@@ -96,7 +102,10 @@ console conversation identifiers, settings (default model, effort, mode).
   inside the projects folder.
 - GitHub token with access only to selected repositories.
 - Secrets in an environment file with `600` permissions or through `LoadCredential=`, never in the repo.
-- By default the console asks for permission before edits and commands such as `git push`.
+- By default the console asks for permission before edits and commands such as `git push`. The request shows the command with all
+  hidden characters, and a permanent permission ("tak, zawsze" – yes, always) requires a known rule and confirmation.
+- Terminal: pasted text without control characters, multiple lines only after confirmation, typed characters are not lost
+  or duplicated when the connection drops.
 
 ### Using untrusted computers
 
@@ -151,5 +160,9 @@ The order is chosen so that only already secured things reach the internet.
 - [ ] **Stage 5: polish.**
   - [x] Frontend: session countdown with extension on activity, "Bezpieczeństwo" (security) dialog (active sessions,
         login history, "Wyloguj pozostałe" (log out other sessions) and "Wyloguj wszędzie" (log out everywhere)), diff view against HEAD in the editor.
+  - [x] Frontend: fixes from the security review (pasting and typing in the terminal, OSC 8 links, focus,
+        permission requests in the console, strict clone URL, unconfirmed logout without returning to the app,
+        expiry without the server, "Wyloguj wszędzie", CSP with Trusted Types and headers, XSRF token bound to the identity,
+        mock only on `127.0.0.1`), verified in several rounds of independent review, with integration and e2e tests.
   - [ ] Backend: session endpoints from the contract, passkeys, backups.
   - [ ] Colors (the owner will refine them in later iterations), a possible phone view (low priority).

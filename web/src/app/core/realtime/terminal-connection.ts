@@ -3,7 +3,7 @@ import { HubConnection } from '@microsoft/signalr';
 import { Observable, Subject } from 'rxjs';
 
 import { HubClient } from './hub-client';
-import { TERMINAL_HUB, TerminalAttachment, TerminalExit, TerminalInfo, TerminalOutput } from './terminal-protocol';
+import { TERMINAL_HUB, TerminalAttachment, TerminalExit, TerminalInfo, TerminalInput, TerminalOutput } from './terminal-protocol';
 
 /**
  * SignalR connection to the terminal hub (`/hubs/terminal`). Connecting, reconnecting and session control: HubClient.
@@ -32,12 +32,17 @@ export class TerminalConnection extends HubClient {
     return this.invoke(TERMINAL_HUB.open, { projectPath, cols, rows });
   }
 
-  attach(id: string, cols: number, rows: number): Promise<TerminalAttachment> {
-    return this.invoke(TERMINAL_HUB.attach, { id, cols, rows });
+  /** `client`: sender of typed characters (TerminalInputQueue); the server returns the number of its last accepted batch. */
+  attach(id: string, cols: number, rows: number, client: string): Promise<TerminalAttachment> {
+    return this.invoke(TERMINAL_HUB.attach, { id, cols, rows, client });
   }
 
-  input(id: string, data: string): void {
-    this.send(TERMINAL_HUB.input, { id, data });
+  /**
+   * Typed characters. `invoke`, because the server confirms receipt. `client` + `seq` let the server skip a batch
+   * sent again after a dropped connection (TerminalInputQueue).
+   */
+  input(id: string, client: string, seq: number, data: string): Promise<void> {
+    return this.invoke(TERMINAL_HUB.input, { id, client, seq, data } satisfies TerminalInput);
   }
 
   resize(id: string, cols: number, rows: number): void {

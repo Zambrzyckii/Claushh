@@ -33,7 +33,7 @@ export type ConsoleEntry =
   | { kind: 'prompt'; text: string }
   | { kind: 'steps'; steps: ConsoleStep[] }
   | { kind: 'text'; messageId: string; text: string }
-  | { kind: 'permission'; requestId: string; description: string; decision: PermissionDecision | null }
+  | { kind: 'permission'; requestId: string; description: string; alwaysRule: string | null; decision: PermissionDecision | null }
   | { kind: 'notice'; text: string; error: boolean };
 
 @Injectable()
@@ -45,9 +45,15 @@ export class ConsoleStore {
   private readonly entriesSignal = signal<readonly ConsoleEntry[]>([]);
   private readonly stateSignal = signal<ConsoleState>('idle');
   private readonly loading = signal(false);
+  /**
+   * A prompt is being sent or a new conversation is being created (until the server responds): a second Enter during this time sends nothing.
+   */
+  private readonly sending = signal(false);
   private readonly failure = signal<string | null>(null);
 
   readonly entries = this.entriesSignal.asReadonly();
+  /** Current conversation (`null` before the first prompt in the project). */
+  readonly conversation = this.conversationId.asReadonly();
   readonly state = this.stateSignal.asReadonly();
   readonly connectionState = this.connection.state;
   readonly error = this.failure.asReadonly();
@@ -66,7 +72,12 @@ export class ConsoleStore {
 
   /** Whether a prompt can be sent: there is a connection, the conversation is loaded and Claude is not working. */
   readonly canSend = computed(
-    () => this.connection.state() === 'connected' && !this.loading() && this.stateSignal() !== 'working' && this.stateSignal() !== 'waiting'
+    () =>
+      this.connection.state() === 'connected' &&
+      !this.loading() &&
+      !this.sending() &&
+      this.stateSignal() !== 'working' &&
+      this.stateSignal() !== 'waiting'
   );
 
   constructor() {
@@ -77,6 +88,19 @@ export class ConsoleStore {
       this.project.path();
       untracked(() => void this.init());
     });
+
+    // Automatic connection attempts have ended (e.g. a long network outage): show "połącz ponownie" (reconnect).
+    let wasConnected = false;
+    effect(() => {
+      const state = this.connection.state();
+      untracked(() => {
+        if (state === 'connected') {
+          wasConnected = true;
+        } else if (state === 'disconnected' && wasConnected && !this.failure()) {
+          this.failure.set('Brak połączenia z konsolą.');
+        }
+      });
+    });
   }
 
   /** Sends a prompt. The prompt text appears in the conversation only as an event from the server. */
@@ -85,6 +109,9 @@ export class ConsoleStore {
     if (!trimmed || !this.canSend()) {
       return false;
     }
+    // Lock right away, before the first await: otherwise a second Enter during `StartConversation` would create a second
+    // conversation and send the same prompt again.
+    this.sending.set(true);
     this.failure.set(null);
     try {
       let conversationId = this.conversationId();
@@ -100,6 +127,8 @@ export class ConsoleStore {
       this.stateSignal.set('idle');
       this.failure.set('Nie udało się wysłać polecenia.');
       return false;
+    } finally {
+      this.sending.set(false);
     }
   }
 
@@ -124,14 +153,18 @@ export class ConsoleStore {
 
   /** A new, empty conversation in the same project. The previous one stays on the server. */
   async newConversation(): Promise<void> {
-    if (this.stateSignal() === 'working' || this.stateSignal() === 'waiting') {
+    if (this.sending() || this.stateSignal() === 'working' || this.stateSignal() === 'waiting') {
       return;
     }
+    // The same lock as when sending: a prompt sent in the meantime would still go to the previous conversation.
+    this.sending.set(true);
     this.failure.set(null);
     try {
       this.switchTo(await this.connection.startConversation(this.project.path()));
     } catch {
       this.failure.set('Nie udało się rozpocząć nowej rozmowy.');
+    } finally {
+      this.sending.set(false);
     }
   }
 
@@ -247,7 +280,13 @@ export class ConsoleStore {
         });
         break;
       case 'permission':
-        this.push({ kind: 'permission', requestId: event.requestId, description: event.description, decision: null });
+        this.push({
+          kind: 'permission',
+          requestId: event.requestId,
+          description: event.description,
+          alwaysRule: event.alwaysRule || null,
+          decision: null
+        });
         break;
       case 'permission-resolved':
         this.entriesSignal.update((entries) =>

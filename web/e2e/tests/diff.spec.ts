@@ -1,5 +1,6 @@
-import { Page, expect, test } from '@playwright/test';
+import { Page } from '@playwright/test';
 
+import { expect, test } from './fixtures';
 import { MAIN, expectEditorToContain, login, mockState, openFile, openRepo, resetMock } from './helpers';
 
 test.beforeEach(async ({ page, request }) => {

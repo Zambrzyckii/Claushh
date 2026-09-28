@@ -11,6 +11,7 @@ import {
 } from '@angular/core';
 import type * as MonacoApi from 'monaco-editor';
 
+import { isTypingElsewhere } from '../../core/browser/focus';
 import { EditorStore, OpenDocument } from './editor-store';
 import { MONACO_THEME, Monaco, loadMonaco } from './monaco-loader';
 
@@ -72,6 +73,7 @@ const EDITOR_OPTIONS: MonacoApi.editor.IEditorOptions & MonacoApi.editor.IGlobal
 })
 export class CodeEditor {
   private readonly store = inject(EditorStore);
+  private readonly element: HTMLElement = inject(ElementRef).nativeElement;
   private readonly host = viewChild.required<ElementRef<HTMLElement>>('host');
   private readonly diffHost = viewChild.required<ElementRef<HTMLElement>>('diffHost');
 
@@ -175,7 +177,7 @@ export class CodeEditor {
       diff.setModel({ original: diffOriginal, modified: target.model });
       this.showDiff.set(true);
       this.reportPosition(diff.getModifiedEditor(), target.model);
-      diff.getModifiedEditor().focus();
+      this.focus(diff.getModifiedEditor());
       return;
     }
 
@@ -187,7 +189,7 @@ export class CodeEditor {
         editor.restoreViewState(target.viewState);
       }
       this.reportPosition(editor, target.model);
-      editor.focus();
+      this.focus(editor);
     } else {
       this.store.cursor.set(null);
       this.store.language.set(null);
@@ -259,6 +261,16 @@ export class CodeEditor {
       this.wire(this.diffEditor.getModifiedEditor());
     }
     return this.diffEditor;
+  }
+
+  /**
+   * Focus to the editor after showing a file, but not when the user is typing somewhere else at that time
+   * (e.g. in the console or a terminal): the file loads asynchronously and focus would jump while typing.
+   */
+  private focus(editor: MonacoApi.editor.ICodeEditor): void {
+    if (!isTypingElsewhere(this.element)) {
+      editor.focus();
+    }
   }
 
   private reportPosition(editor: MonacoApi.editor.ICodeEditor, model: MonacoApi.editor.ITextModel): void {

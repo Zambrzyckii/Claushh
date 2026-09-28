@@ -45,6 +45,40 @@ export async function killSessions(request: APIRequestContext, options: { keepSo
   await request.post(options.keepSockets ? '/__test/kill-sessions?keepSockets=1' : '/__test/kill-sessions');
 }
 
+/** Drops hub connections without ending the session (a brief network failure). The client reconnects. */
+export async function dropSockets(request: APIRequestContext): Promise<void> {
+  await request.post('/__test/drop-sockets');
+}
+
+/**
+ * Failures in the mock: `dropInputAck` (this many `Input` batches will be accepted without acknowledgment, dropping the connection),
+ * `downAfterDropMs` (after such a drop the hubs are unavailable for this many ms), `attachDelayMs` (delay of `Attach`),
+ * `hubDownMs` (from now on, for this many ms the hubs reject new connections), `listDelayMs` (delay of `ListTerminals`).
+ */
+export async function setFault(
+  request: APIRequestContext,
+  faults: { dropInputAck?: number; downAfterDropMs?: number; attachDelayMs?: number; hubDownMs?: number; listDelayMs?: number }
+): Promise<void> {
+  const query = new URLSearchParams(Object.entries(faults).map(([key, value]) => [key, String(value)]));
+  await request.post(`/__test/fault?${query}`);
+}
+
+/** Everything that reached the terminal shell (`Input` batches joined in order). */
+export async function terminalInputs(request: APIRequestContext, index = 0): Promise<string> {
+  return ((await mockState(request)).terminals[index]?.inputs ?? []).join('');
+}
+
+/** Pastes text into the active terminal the way the browser would (a `paste` event with the clipboard). */
+export async function pasteIntoTerminal(page: Page, text: string): Promise<void> {
+  await activeTerminal(page)
+    .locator('textarea')
+    .evaluate((textarea, value) => {
+      const data = new DataTransfer();
+      data.setData('text/plain', value);
+      textarea.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+    }, text);
+}
+
 export async function fillLogin(page: Page, overrides: Partial<typeof USER> = {}): Promise<void> {
   const values = { ...USER, ...overrides };
   await page.fill('#userName', values.userName);

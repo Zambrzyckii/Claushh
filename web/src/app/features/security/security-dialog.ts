@@ -1,4 +1,4 @@
-import { Component, ElementRef, inject, output, signal, viewChild } from '@angular/core';
+import { Component, ElementRef, inject, input, output, signal, viewChild } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 
 import { ActiveSession, LoginAttempt, SessionsApi } from '../../core/api/sessions-api';
@@ -20,7 +20,12 @@ export class SecurityDialog {
   private readonly dialogs = inject(Dialogs);
   protected readonly timer = inject(SessionTimer);
 
-  /** "Wyloguj wszędzie": the other sessions are already ended, the parent logs out this one (asking about unsaved files). */
+  /** Number of unsaved files. "Wyloguj wszędzie" asks about them right away, together with the confirmation. */
+  readonly unsavedCount = input(0);
+  /**
+   * "Wyloguj wszędzie": the other sessions are already ended, and the user has also confirmed discarding unsaved
+   * files, so the parent logs out this session without further questions.
+   */
   readonly logoutEverywhere = output<void>();
 
   private readonly dialog = viewChild.required<ElementRef<HTMLDialogElement>>('dialog');
@@ -55,7 +60,13 @@ export class SecurityDialog {
   }
 
   protected async everywhere(): Promise<void> {
-    if (!this.dialogs.confirm('Wylogować wszystkie sesje, także tę?')) {
+    // One question before anything: cancelling after ending the other sessions would leave this one logged in.
+    const unsaved = this.unsavedCount();
+    const question =
+      unsaved > 0
+        ? `Wylogować wszystkie sesje, także tę? Niezapisane pliki (${unsaved}) zostaną porzucone.`
+        : 'Wylogować wszystkie sesje, także tę?';
+    if (!this.dialogs.confirm(question)) {
       return;
     }
     const ok = await this.run(() => firstValueFrom(this.api.revokeOthers()), 'Nie udało się zakończyć pozostałych sesji.', false);

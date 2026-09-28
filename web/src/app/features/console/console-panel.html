@@ -18,7 +18,7 @@
       @case ('steps') {
         <div class="steps">
           @for (step of entry.steps; track step.stepId) {
-            <div class="line">{{ verb(step.kind) }}{{ step.target }}{{ stats(step) }}</div>
+            <div class="line">{{ verb(step.kind) }}{{ reveal(step.target) }}{{ stats(step) }}</div>
             @for (out of step.output; track $index) {
               <div class="output" [class.output--error]="out.isError">{{ out.text }}</div>
             }
@@ -30,16 +30,25 @@
       }
       @case ('permission') {
         @if (entry.decision === null) {
-          <div class="permission" role="group" [attr.aria-label]="'Zezwolić na: ' + entry.description">
-            <span>Zezwolić na: {{ entry.description }}?</span>
+          <div class="permission" role="group" [attr.data-request-id]="entry.requestId"
+               [attr.aria-label]="'Zezwolić na: ' + reveal(entry.description)">
+            <span class="permission__text">Zezwolić na: {{ reveal(entry.description) }}?</span>
+            @if (entry.alwaysRule; as rule) {
+              <span class="permission__rule">„tak, zawsze” zapisze regułę: {{ reveal(rule) }}</span>
+            }
+            @if (lengthNote(entry.description); as note) {
+              <span class="permission__rule">{{ note }}</span>
+            }
             <div class="permission__buttons">
-              <button type="button" (click)="answer(entry.requestId, 'allow')">tak</button>
-              <button type="button" (click)="answer(entry.requestId, 'allow-always')">tak, zawsze</button>
+              <button type="button" [disabled]="!armed().has(entry.requestId)" (click)="answer(entry.requestId, 'allow')">tak</button>
+              @if (entry.alwaysRule; as rule) {
+                <button type="button" [disabled]="!armed().has(entry.requestId)" (click)="answerAlways(entry.requestId, rule)">tak, zawsze</button>
+              }
               <button type="button" (click)="answer(entry.requestId, 'deny')">nie</button>
             </div>
           </div>
         } @else {
-          <div class="line faint">{{ decisionLabel(entry.decision) }}: {{ entry.description }}</div>
+          <div class="line faint">{{ decisionLabel(entry.decision) }}: {{ reveal(entry.description) }}</div>
         }
       }
       @case ('notice') {
@@ -74,6 +83,7 @@
   <div class="composer__input">
     <span class="composer__prompt" aria-hidden="true">&gt;</span>
     <textarea #input rows="3" aria-label="Polecenie" placeholder="napisz polecenie…"
+              spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"
               (keydown)="onKeydown($event)"></textarea>
   </div>
   <div class="composer__options">

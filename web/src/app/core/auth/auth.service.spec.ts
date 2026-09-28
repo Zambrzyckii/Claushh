@@ -77,8 +77,17 @@ describe('AuthService', () => {
   });
 
   describe('login', () => {
-    it('posts credentials and re-checks the session', async () => {
+    /** Login always starts with GET /me for a fresh XSRF token (response 401: nobody is logged in). */
+    async function startLogin() {
       const result = service.login(credentials);
+      http.expectOne(AUTH_API.me).flush(null, { status: 401, statusText: 'Unauthorized' });
+      await flushMicrotasks();
+      return result;
+    }
+
+    it('posts credentials and re-checks the session', async () => {
+      const result = startLogin();
+      await flushMicrotasks();
       const req = http.expectOne(AUTH_API.login);
       expect(req.request.method).toBe('POST');
       expect(req.request.body).toEqual(credentials);
@@ -90,13 +99,15 @@ describe('AuthService', () => {
     });
 
     it('reports invalid credentials on 401 without revealing details', async () => {
-      const result = service.login(credentials);
+      const result = startLogin();
+      await flushMicrotasks();
       http.expectOne(AUTH_API.login).flush(null, { status: 401, statusText: 'Unauthorized' });
       expect(await result).toEqual({ ok: false, reason: 'invalid' });
     });
 
     it('reports rate limiting with Retry-After', async () => {
-      const result = service.login(credentials);
+      const result = startLogin();
+      await flushMicrotasks();
       http
         .expectOne(AUTH_API.login)
         .flush(null, { status: 429, statusText: 'Too Many Requests', headers: { 'Retry-After': '30' } });
@@ -104,13 +115,15 @@ describe('AuthService', () => {
     });
 
     it('reports network errors', async () => {
-      const result = service.login(credentials);
+      const result = startLogin();
+      await flushMicrotasks();
       http.expectOne(AUTH_API.login).error(new ProgressEvent('error'));
       expect(await result).toEqual({ ok: false, reason: 'network' });
     });
 
     it('fails when the session cookie does not work after login', async () => {
-      const result = service.login(credentials);
+      const result = startLogin();
+      await flushMicrotasks();
       http.expectOne(AUTH_API.login).flush(null, { status: 204, statusText: 'No Content' });
       await flushMicrotasks();
       http.expectOne(AUTH_API.me).flush(null, { status: 401, statusText: 'Unauthorized' });
@@ -147,8 +160,9 @@ describe('AuthService', () => {
       const done = service.logout();
       http.expectOne(AUTH_API.logout).error(new ProgressEvent('error'));
       await done;
+      // Only the unconfirmed logout marker remains, for the login screen and the guards.
       expect(sessionStorage.length).toBe(0);
-      expect(localStorage.length).toBe(0);
+      expect(Object.keys(localStorage)).toEqual(['claushh-pending-logout']);
       expect(navigation.replace).toHaveBeenCalledExactlyOnceWith('/login?logout=unconfirmed');
     });
   });

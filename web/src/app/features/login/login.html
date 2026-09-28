@@ -1,8 +1,13 @@
 <form class="login" [formGroup]="form" (ngSubmit)="submit()" novalidate>
   <h1>Workspace</h1>
 
-  @if (notice; as n) {
+  @if (notice(); as n) {
     <p class="notice" [class.notice--warning]="n.warning" role="status">{{ n.text }}</p>
+  }
+  @if (logoutUnconfirmed()) {
+    <button type="button" class="secondary" [disabled]="retryingLogout() || submitting()" (click)="retryLogout()">
+      {{ retryingLogout() ? 'Wylogowywanie…' : 'Ponów wylogowanie' }}
+    </button>
   }
 
   <label for="userName">Login</label>
@@ -15,7 +20,7 @@
 
   <label for="totpCode">Kod z aplikacji</label>
   <input id="totpCode" formControlName="totpCode" type="text" inputmode="numeric"
-         autocomplete="one-time-code" maxlength="6" required>
+         autocomplete="one-time-code" spellcheck="false" maxlength="6" required>
 
   @if (error(); as message) {
     <p class="error" role="alert">{{ message }}</p>

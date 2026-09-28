@@ -7,6 +7,7 @@ import { Login } from './login';
 
 describe('Login', () => {
   let login: ReturnType<typeof vi.fn>;
+  let confirmLogout: ReturnType<typeof vi.fn>;
   let navigateByUrl: ReturnType<typeof vi.fn>;
 
   function create(query: Record<string, string> = {}) {
@@ -14,7 +15,7 @@ describe('Login', () => {
       imports: [Login],
       providers: [
         provideRouter([]),
-        { provide: AuthService, useValue: { login } },
+        { provide: AuthService, useValue: { login, confirmLogout, pendingLogout: () => null, hasNoSession: () => new Promise(() => undefined) } },
         { provide: ActivatedRoute, useValue: { snapshot: { queryParamMap: convertToParamMap(query) } } }
       ]
     });
@@ -43,6 +44,7 @@ describe('Login', () => {
 
   beforeEach(() => {
     login = vi.fn();
+    confirmLogout = vi.fn(() => new Promise(() => undefined));
   });
 
   it('does not send an incomplete form', async () => {
@@ -58,7 +60,7 @@ describe('Login', () => {
     fill(fixture.nativeElement, valid);
     await submit(fixture);
     expect(login).toHaveBeenCalledWith(valid);
-    expect(navigateByUrl).toHaveBeenCalledWith('/projects');
+    expect(navigateByUrl).toHaveBeenCalledWith('/projects', { replaceUrl: true });
   });
 
   it('ignores a return address pointing outside the app', async () => {
@@ -66,7 +68,7 @@ describe('Login', () => {
     const fixture = create({ returnUrl: '//evil.example' });
     fill(fixture.nativeElement, valid);
     await submit(fixture);
-    expect(navigateByUrl).toHaveBeenCalledWith('/');
+    expect(navigateByUrl).toHaveBeenCalledWith('/', { replaceUrl: true });
   });
 
   it('clears the password and code after a failed attempt and shows a generic error', async () => {

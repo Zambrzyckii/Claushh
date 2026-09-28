@@ -1,5 +1,4 @@
-import { expect, test } from '@playwright/test';
-
+import { expect, test } from './fixtures';
 import { MAIN, editorText, expectEditorToContain, login, mockState, openFile, resetMock, setFile, treeRow } from './helpers';
 
 test.beforeEach(async ({ page, request }) => {
@@ -22,6 +21,15 @@ test('explorer loads directories lazily, directories first', async ({ page, requ
   ]);
   const listed = (await mockState(request)).log.filter((l) => l.path === 'list').map((l) => l.p);
   expect(listed).toEqual(['', 'studia', 'studia/lab-3-sieci']);
+});
+
+test('Monaco language workers start (the Trusted Types policy lets their scripts through)', async ({ page }) => {
+  const workers: string[] = [];
+  page.on('worker', (worker) => workers.push(worker.url()));
+  await openFile(page, MAIN);
+  await expectEditorToContain(page, 'int main');
+  await expect.poll(() => workers.length).toBeGreaterThan(0);
+  expect(workers.every((url) => /^http:\/\/127\.0\.0\.1:4400\/worker-[\w-]+\.js$/.test(url))).toBe(true);
 });
 
 test('opens a file in Monaco with highlighting, breadcrumb and status bar', async ({ page }) => {
@@ -113,4 +121,22 @@ test('closing a dirty tab and logging out ask for confirmation', async ({ page, 
   await expect(page).toHaveURL('/login?logout=ok');
   await expect(page.locator('.monaco-editor')).toHaveCount(0);
   expect((await mockState(request)).files[MAIN]).not.toContain('unsaved');
+});
+
+test('a file that loads slowly does not take the focus from the console', async ({ page }) => {
+  await page.route(
+    (url) => url.pathname === '/api/files/content',
+    async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      await route.continue();
+    }
+  );
+  await openFile(page, MAIN);
+  const prompt = page.getByRole('textbox', { name: 'Polecenie' });
+  await prompt.click();
+  await page.keyboard.type('piszę w konsoli');
+  await expectEditorToContain(page, 'int main');
+  await page.keyboard.type(' dalej');
+  await expect(prompt).toHaveValue('piszę w konsoli dalej');
+  await expect(page.locator('.tab__dirty')).toHaveCount(0);
 });
