@@ -3,10 +3,12 @@ import { APIRequestContext, Locator, Page, expect } from '@playwright/test';
 /** Data and paths from the mock backend (e2e/mock-api/server.mjs). */
 export const USER = { userName: 'owner', password: 'secret', totpCode: '123456' };
 export const MAIN = 'studia/lab-3-sieci/src/main.c';
+export const LAB = 'studia/lab-3-sieci';
+export const BAZY_SQL = 'studia/bazy-danych-lab/zadanie4.sql';
 
 export interface MockState {
   files: Record<string, string | null>;
-  log: { path: string; xsrf?: boolean; hadSession?: boolean; p?: string }[];
+  log: { path: string; xsrf?: boolean; hadSession?: boolean; p?: string; repo?: string; url?: string; name?: string }[];
   prompts: { conversationId: string; text: string; model: string; effort: string; mode: string }[];
 }
 
@@ -39,6 +41,18 @@ export async function login(page: Page): Promise<void> {
   await page.goto('/login');
   await fillLogin(page);
   await page.waitForURL('/');
+}
+
+/** Row of the repository table in the Workspace panel. */
+export function repoRow(page: Page, name: string): Locator {
+  return page.locator('app-workspaces-panel tr.repo').filter({ has: page.locator('.repo__name', { hasText: new RegExp(`^${escape(name)}$`) }) });
+}
+
+/** Opens a repository with the "Otwórz" (Open) button in the Workspace panel. */
+export async function openRepo(page: Page, name: string, workspace = 'Studia'): Promise<void> {
+  await page.locator('app-workspaces-panel .workspace', { hasText: workspace }).click();
+  await repoRow(page, name).getByRole('button', { name: `Otwórz ${name}` }).click();
+  await expect(repoRow(page, name).getByRole('button', { name: `Otwarte: ${name}` })).toBeVisible();
 }
 
 /** File explorer row with exactly this name. */

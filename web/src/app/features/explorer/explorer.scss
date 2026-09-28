@@ -66,9 +66,21 @@
   }
 
   &__name {
+    flex-grow: 1;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  &__mark {
+    flex-shrink: 0;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--accent);
+
+    &--dir {
+      color: var(--text-faint);
+    }
   }
 }
 

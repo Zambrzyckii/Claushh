@@ -34,7 +34,7 @@ export interface OpenDocument {
   error: string | null;
   /** Set when a save was rejected because the file changed on disk. */
   conflict: { currentVersion: string | null } | null;
-  /** The console changed the file on disk and the editor has unsaved changes (so we did not load it ourselves). */
+  /** The file changed on disk (console, pull) and the editor has unsaved changes (so we did not load it ourselves). */
   changedOnDisk: boolean;
 }
 
@@ -59,14 +59,16 @@ export class EditorStore {
   readonly cursor = signal<CursorPosition | null>(null);
   readonly language = signal<string | null>(null);
 
+  private readonly project = inject(ProjectContext, { optional: true });
+
   constructor() {
-    inject(ProjectContext, { optional: true })
-      ?.filesChanged.pipe(takeUntilDestroyed(inject(DestroyRef)))
+    this.project?.filesChanged
+      .pipe(takeUntilDestroyed(inject(DestroyRef)))
       .subscribe((paths) => this.onExternalChange(paths));
   }
 
   /**
-   * Files changed outside the editor (e.g. by the console). Clean files are reloaded right away,
+   * Files changed outside the editor (console, pull). Clean files are reloaded right away,
    * and with unsaved changes we only mark the file, so that the user decides.
    */
   onExternalChange(paths: readonly string[]): void {
@@ -223,6 +225,7 @@ export class EditorStore {
       const { version } = await firstValueFrom(this.files.write(doc.path, sent, baseVersion));
       // The content could have changed during the save. We treat as saved only the content that went to the server.
       this.patch(doc.path, (d) => ({ ...d, savedValue: sent, version, saving: false, conflict: null }));
+      this.project?.announceFilesSaved([doc.path]);
     } catch (error) {
       if (error instanceof FileApiError && error.kind === 'conflict') {
         this.patch(doc.path, (d) => ({

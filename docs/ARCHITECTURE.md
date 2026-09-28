@@ -4,7 +4,8 @@ This file describes the **current state of the code**: what lives where and how 
 Goals and decisions are in [`PLAN.md`](PLAN.md). After every change to the structure, a new module, endpoint
 or dependency, update the relevant section.
 
-Status: frontend of stages 1–3 done (login, explorer, editor, console). The backend has only `/api/health`.
+Status: frontend of stages 1–3 done (login, explorer, editor, console), from stage 4 the Workspace panel
+(workspaces, repositories, git). The terminal is missing. The backend has only `/api/health`.
 The frontend is tested against a mock backend (`web/e2e/mock-api/`) that follows the contracts below.
 
 ## Flow
@@ -45,11 +46,16 @@ to the API at `http://localhost:5080` (`web/proxy.conf.json`).
 | `web/src/app/core/browser/bfcache-guard.ts` | reload of a page restored from the back/forward cache |
 | `web/src/app/core/browser/dialogs.ts` | the browser's `confirm()` wrapped in a service (to swap out in tests) |
 | `web/src/app/core/api/files-api.ts` | files API client: directory listing, read, save with conflict detection |
-| `web/src/app/core/project/project-context.ts` | the current project (repo path, `''` for now) and the "files changed outside the editor" event |
+| `web/src/app/core/api/api-error.ts` | shared API error for workspaces and git (`ApiError`, HTTP code mapping) |
+| `web/src/app/core/api/workspaces-api.ts` | API client for workspaces and repositories: list, create, clone |
+| `web/src/app/core/api/git-api.ts` | git API client: status, pull, push |
+| `web/src/app/core/project/project-context.ts` | the open repository (from the `?repo=` URL), "files changed" and "files saved" events |
+| `web/src/app/core/project/repo-status.ts` | git status of the open repo: branch, changes, badges for the explorer |
+| `web/src/app/core/text/polish.ts` | number declension (1 zmiana, 2 zmiany, 5 zmian) and relative time ("12 minut temu" (12 minutes ago)) |
 | `web/src/app/core/realtime/console-protocol.ts` | console hub contract: events, methods, option types |
 | `web/src/app/core/realtime/console-connection.ts` | SignalR connection to `/hubs/console` (WebSocket, auto-reconnect, session check) |
 | `web/src/app/core/api/project-path.ts` | relative path validation (no `..`, leading `/`, `\`) |
-| `web/src/app/features/explorer/` | file tree, directories loaded lazily on expand, "Odśwież" (Refresh) |
+| `web/src/app/features/explorer/` | file tree, directories loaded lazily on expand, git badges, "Odśwież" (Refresh) |
 | `web/src/app/features/editor/editor-store.ts` | state of open files: tabs, unsaved changes, save, conflicts (no dependency on Monaco) |
 | `web/src/app/features/editor/code-editor.ts` | Monaco instance, one model per open file, synchronization with EditorStore |
 | `web/src/app/features/editor/editor-pane.*` | tabs, path, error and conflict messages, the slot for the editor |
@@ -59,10 +65,13 @@ to the API at `http://localhost:5080` (`web/proxy.conf.json`).
 | `web/src/app/features/login/` | login screen: username, password, TOTP code |
 | `web/src/app/features/console/console-store.ts` | conversation state built from hub events, sending, permissions, interrupt, new conversation |
 | `web/src/app/features/console/console-panel.*` | the Konsola (Console) panel: the conversation as plain text, prompt field, model / effort / mode |
-| `web/src/app/features/workspace/` | main layout: explorer, editor, console, "Wyloguj" (log out), status bar, Ctrl+S. Bottom panel as a placeholder |
+| `web/src/app/features/workspaces/workspaces-store.ts` | state of the Workspace panel: workspaces, repositories, pull / push, create, clone |
+| `web/src/app/features/workspaces/workspaces-panel.*` | the "Workspace" tab in the bottom panel (workspace list, repository table) |
+| `web/src/app/features/workspaces/validation.ts` | validation of the workspace name and the clone URL |
+| `web/src/app/features/workspace/` | main layout: path and branch in the top bar, explorer, editor, console, bottom panel, status bar, Ctrl+S. Terminal tab as a placeholder |
 | `web/playwright.config.ts` | e2e configuration (build from `dist/`, mock on port 4400, Chromium) |
-| `web/e2e/mock-api/server.mjs` | mock backend: auth, files, console hub (SignalR JSON over WebSocket), response scripts, `/__test/*` |
-| `web/e2e/tests/` | e2e tests: `auth`, `editor`, `console` + `helpers.ts` |
+| `web/e2e/mock-api/server.mjs` | mock backend: auth, files, workspaces and simulated git, console hub (SignalR JSON over WebSocket), `/__test/*` |
+| `web/e2e/tests/` | e2e tests: `auth`, `editor`, `console`, `workspaces` + `helpers.ts` |
 | `web/proxy.conf.json` | dev server proxy to the API |
 | `deploy/docker-compose.yml` | PostgreSQL 17 on `127.0.0.1:5432` |
 | `deploy/.env.example` | template of variables for Compose (copy to `deploy/.env`) |
@@ -117,8 +126,7 @@ Backend requirements that follow from the frontend:
 - Paths in the API are **relative to the projects directory** (`/srv/projects`), with `/` slashes, e.g.
   `studia/lab-3-sieci/src/main.c`. An empty string is the projects directory itself. The frontend rejects paths with `..`,
   a leading `/` and `\` before sending, but **the real check is done by the backend**.
-- For now the explorer shows the whole projects directory. Choosing a workspace and repository will come in stage 4
-  (then `Explorer.root` will get the repository path).
+- The explorer shows the open repository (`ProjectContext.path`), and without one the whole projects directory.
 - **Saving never silently overwrites changes on disk.** Every file has a version (e.g. a content hash). A save sends
   the version the edit was based on. If the file changed on disk in the meantime (e.g. the console edited it),
   the server rejects the save (409) and the user chooses: "Wczytaj z dysku" (Load from disk) or "Nadpisz moją wersją" (Overwrite with my version).
@@ -158,9 +166,10 @@ the projects directory. The `index.html` and `monaco.css` files are served with 
 
 ### Rules
 
-- The console is a conversation with Claude Code running on the server in the project directory (`ProjectContext.path`,
-  for now `''`, i.e. the whole projects directory). The backend runs `claude -p --output-format stream-json
-  --input-format stream-json` and translates the output into events from the contract below.
+- The console is a conversation with Claude Code running on the server in the directory of the open repository
+  (`ProjectContext.path`, without a repo: the whole projects directory). Every repository has its own conversation.
+  The backend runs `claude -p --output-format stream-json --input-format stream-json` and translates the output
+  into events from the contract below.
 - **Look:** plain monospace text, without icons, colors, animations or the product name (a requirement from the mockup,
   enforced by an e2e test). Steps aligned with spaces as in a terminal.
 - **All content (prompts, responses, command output, paths) is displayed only as text.** We do not
@@ -168,8 +177,9 @@ the projects directory. The `index.html` and `monaco.css` files are served with 
 - The conversation lives on the server. A page reload, another tab or another device replays it via
   `GetConversation` and sees further events live. Collapsing the panel does not interrupt the work.
 - A prompt appears in the conversation only as a `prompt` event from the server (a single source of truth for all tabs).
-- When the console changes files (`files-changed`), the explorer refreshes, clean open files are
-  reloaded, and files with unsaved changes get the message "Konsola zmieniła ten plik na dysku" (The console changed this file on disk).
+- When the console changes files (`files-changed`), the explorer, the git status and the repository list refresh,
+  clean open files are reloaded, and files with unsaved changes get the message
+  "Plik zmienił się na dysku (konsola lub pull)" (The file changed on disk (console or pull)).
 - A dropped connection checks the session immediately (`AuthService.verifySession`). An expired session ends as on a 401.
 - Shortcuts in the prompt field: Enter sends, Shift+Enter new line, Esc interrupts the work.
 
@@ -199,13 +209,61 @@ Events sent by the server with the `ConsoleEvent` method to all of the user's co
 |---|---|---|
 | `conversation` | `projectPath`, `startedAt` | a new conversation in the project |
 | `prompt` | `text` | the user's prompt |
-| `step` | `stepId`, `kind` (`read`/`edit`/`write`/`command`/`search`/`other`), `target`, `added?`, `removed?` | a work step (file, command) |
+| `step` | `stepId`, `kind` (`read`/`edit`/`write`/`command`/`search`/`other`), `target`, `added?`, `removed?` | a work step. `target` is the text to display: a path relative to the conversation's repository or a command |
 | `step-output` | `stepId`, `text`, `isError` | step output, e.g. a command result |
 | `text` | `messageId`, `delta` | a fragment of the response (subsequent fragments with the same `messageId` are appended) |
 | `permission` | `requestId`, `description` | a permission request, e.g. `git push origin main` |
 | `permission-resolved` | `requestId`, `decision` | the answer to the question (also from another tab) |
 | `status` | `state` (`idle`/`working`/`waiting`/`error`), `message?` | work state. `message` is shown as a note |
 | `files-changed` | `paths` (relative to the projects directory) | files changed by the console |
+
+## Workspaces and git
+
+### Rules
+
+- A **workspace** is a top-level directory in the projects directory (e.g. `studia`), with a display name
+  (e.g. "Studia"). A **repository** is a directory with a git repository directly in the workspace
+  (e.g. `studia/lab-3-sieci`). The source of truth is the file system, not the database.
+- The open repository is in the page URL (`/?repo=studia%2Flab-3-sieci`). A page reload stays
+  in the same repo, and after session expiry `returnUrl` returns to it after login.
+- Opening a repository sets: the explorer directory, the console directory and conversation, the git status (top bar,
+  status bar, badges in the explorer). **Open editor tabs stay** (their paths are full).
+- Explorer badges as in VS Code: `M` modified, `A` added, `D` deleted, `R` renamed,
+  `U` untracked, `!` conflict, `•` a directory containing changes.
+- The git status and the repository list refresh: after opening a repo, after a save in the editor, after changes from the console,
+  after pull / push / clone, after "Odśwież" and after returning to the browser tab.
+- Pull changes files on disk: the response contains `changedPaths`, so the editor reloads clean files,
+  and for unsaved changes shows a message, as with changes from the console.
+- Commits are made via the console or the terminal. The panel has only Otwórz / Pull / Push (Open / Pull / Push) (as in the mockup).
+- Cloning only from `https://` URLs without a username and password in the URL (otherwise the token would end up in `.git/config`).
+  The frontend checks this before sending, the backend must check it again.
+- Git messages from the server (`message`) are displayed only as text.
+
+### API contract (to be implemented in the backend)
+
+All endpoints require a session (otherwise `401`). `POST` requires the XSRF header.
+Errors have a `{"message"}` body with a description (e.g. git output), which the frontend shows under its own message.
+
+| Method | Path | Response |
+|---|---|---|
+| GET | `/api/workspaces` | `200 [{"name","path","repoCount"}]` in display order |
+| POST | `/api/workspaces` | body `{"name"}`. `201 {"name","path","repoCount":0}`. Name: letters, digits, spaces, `-`, `_`, up to 40 characters. Directory: lowercase, Polish characters replaced with Latin ones (`ł`→`l`), spaces with `-`. `400` bad name, `409` directory exists |
+| GET | `/api/repos?workspace=<katalog>` | `200 [RepoSummary]`. `404` when the workspace does not exist |
+| POST | `/api/repos/clone` | body `{"workspace","url"}`. `201 RepoSummary`. Directory name from the last URL segment without `.git`. `400` bad URL, `404` no workspace, `409` directory exists, `502` git error (e.g. no repository) |
+| GET | `/api/git/status?repo=<repo>` | `200 {"branch","ahead","behind","files":[{"path","status"}]}`. `status`: `modified`/`added`/`deleted`/`renamed`/`untracked`/`conflicted`. Untracked files individually (`--untracked-files=all`). `404` when it is not a repository |
+| POST | `/api/git/pull?repo=<repo>` | `git pull --ff-only`. `200 {"message","changedPaths"}`. `409` when it cannot fast-forward or local changes would be overwritten. `400` no remote branch, `502` remote repository error |
+| POST | `/api/git/push?repo=<repo>` | `200 {"message"}` (without an upstream: `git push -u origin HEAD`). `409` rejected (pull first). `400` no remote repository, `502` other remote error |
+
+`RepoSummary`: `{"name","path","branch" | null,"changes","upstream" | null,"ahead","behind","lastCommit": {"message","date"} | null}`.
+Paths (`path`, `files[].path`, `changedPaths`) are always relative to the projects directory.
+
+Security requirements for the backend:
+- `workspace` and `repo` are checked like file paths (inside the projects directory, also after resolving symlinks).
+  `repo` must be a repository directly in the workspace.
+- Git runs without a shell, with arguments as a list. The clone URL goes after `--`, URLs
+  starting with `-` are rejected. Only the https protocol (`-c protocol.allow=never -c protocol.https.allow=always`).
+- The GitHub token lives outside the repository and outside the remote URL (credential helper), with access only to selected repos.
+- A timeout for git network operations.
 
 ## Backend
 
@@ -223,12 +281,13 @@ Planned folder layout in `src/Claushh.Api/` (created together with the code they
 
 Conventions:
 - Standalone components, local state in `signal()`.
-- Things shared by the whole app (auth, browser access, later API and SignalR) go in `web/src/app/core/`.
+- Things shared by the whole app (auth, browser access, API clients, SignalR, the open project,
+  Polish texts) go in `web/src/app/core/`.
 - Each app feature in a separate folder `web/src/app/features/<nazwa>/`, lazy-loaded from the routes.
 - Colors and fonts only through the variables from `styles.scss`, no hard-coded colors in components
   (exceptions to be removed when the palette is refined).
 
-Planned folders: `features/terminal`, `features/workspaces`.
+Planned folders: `features/terminal`.
 
 Dependencies besides Angular: `monaco-editor` (editor), `@microsoft/signalr` (console).
 Development: `@playwright/test`, `ws` (hub mock), `@types/node`.
@@ -239,11 +298,12 @@ Rules: `CLAUDE.md`, section "Tests" (new code: only integration and e2e tests).
 
 | Kind | Command | What it covers |
 |---|---|---|
-| Integration + older unit | `cd web && npm test` | Vitest (jsdom). Console: `console.integration.spec.ts` (panel + store + editor, SignalR and HTTP stubbed). Older unit tests: auth, files API, paths, explorer, `EditorStore` |
-| E2E | `cd web && npm run e2e` | build + Playwright in Chromium on `e2e/mock-api/server.mjs`: login and sessions, explorer and Monaco, console (steps, options, permissions, interrupt, replay, multiple tabs, file changes) |
+| Integration + older unit | `cd web && npm test` | Vitest (jsdom). Integration: `console.integration.spec.ts` (panel + store + editor, SignalR and HTTP stubbed), `workspaces.integration.spec.ts` (Workspace panel + router + git status + explorer + editor, HTTP stubbed). Older unit tests: auth, files API, paths, explorer, `EditorStore` |
+| E2E | `cd web && npm run e2e` | build + Playwright in Chromium on `e2e/mock-api/server.mjs`: login and sessions, explorer and Monaco, console (steps, options, permissions, interrupt, replay, multiple tabs, file changes), workspaces (opening a repo, git status, pull, push, create, clone, a conversation per repo) |
 | Backend | none (they will come with the backend, project `tests/Claushh.Api.Tests`) | xUnit |
 
 Notes on e2e:
 - The mock has one shared state, the tests run sequentially and start with `POST /__test/reset`.
+- Git in the mock is simulated: the "committed" state is the file content from the reset, the status is the difference from it.
 - Browser: `npx playwright install chromium` or the `CHROMIUM_PATH` variable pointing to the system Chromium.
 - Monaco displays spaces as `\u00a0`. `helpers.ts` → `editorText` normalizes the text.

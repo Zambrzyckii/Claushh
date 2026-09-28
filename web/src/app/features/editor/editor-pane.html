@@ -34,7 +34,7 @@
     </div>
   } @else if (doc.changedOnDisk) {
     <div class="banner banner--warning" role="alert">
-      <span>Konsola zmieniła ten plik na dysku, a masz w nim niezapisane zmiany.</span>
+      <span>Plik zmienił się na dysku (konsola lub pull), a masz w nim niezapisane zmiany.</span>
       <button type="button" (click)="store.reload(doc.path)">Wczytaj z dysku</button>
       <button type="button" (click)="store.keepLocalVersion(doc.path)">Zostaw moją wersję</button>
     </div>

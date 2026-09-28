@@ -1,6 +1,7 @@
 // Mock backend for e2e tests: serves the built frontend (dist/web/browser) and implements the contracts
-// from docs/ARCHITECTURE.md (authentication, files, the console hub in the SignalR JSON protocol over WebSocket).
-// Instead of the real Claude Code it replays short scripts that depend on the prompt text.
+// from docs/ARCHITECTURE.md (authentication, files, workspaces and git, the console hub in the SignalR JSON protocol
+// over WebSocket). Instead of the real Claude Code it replays short scripts that depend on the prompt text.
+// Git is simulated: the "committed" file content is their state at reset, and status is the difference from it.
 //
 // For tests only. The /__test/* endpoints let tests reset and inspect the state.
 // Started by Playwright (playwright.config.ts → webServer).
@@ -25,8 +26,32 @@ const INITIAL_FILES = {
   'studia/lab-3-sieci/src/parser.c': 'int parse(void)\n{\n    return 1;\n}\n',
   'studia/lab-3-sieci/Makefile': 'all:\n\tcc -o app src/main.c\n',
   'studia/lab-3-sieci/logo.png': null,
+  'studia/so-projekt-shell/src/shell.c': 'int main(void) { return 0; }\n',
+  'studia/bazy-danych-lab/zadanie4.sql': '-- zadanie 4\nCREATE VIEW v AS SELECT 1;\n',
   'prywatne/notatki/README.md': '# Notatki\n'
 };
+
+export const BAZY_SQL = 'studia/bazy-danych-lab/zadanie4.sql';
+
+const INITIAL_WORKSPACES = [
+  ['studia', 'Studia'],
+  ['prywatne', 'Prywatne']
+];
+
+const minutesAgo = (m) => new Date(Date.now() - m * 60_000).toISOString();
+
+function initialRepos() {
+  return new Map([
+    ['studia/lab-3-sieci', { branch: 'main', upstream: 'origin/main', ahead: 1, behind: 0, lastCommit: { message: 'parser: szkielet parse_ipv4', date: minutesAgo(12) } }],
+    ['studia/so-projekt-shell', { branch: 'dev', upstream: 'origin/dev', ahead: 0, behind: 0, lastCommit: { message: 'obsługa potoków', date: minutesAgo(2 * 1440) } }],
+    ['studia/bazy-danych-lab', {
+      branch: 'main', upstream: 'origin/main', ahead: 0, behind: 2,
+      lastCommit: { message: 'zadanie 4: widoki', date: minutesAgo(7 * 1440) },
+      remote: { message: 'poprawki od prowadzącego', files: { [BAZY_SQL]: '-- zadanie 4 (poprawione)\nCREATE VIEW v AS SELECT 2;\n' } }
+    }],
+    ['prywatne/notatki', { branch: 'main', upstream: null, ahead: 0, behind: 0, lastCommit: { message: 'semestr 5', date: minutesAgo(3 * 1440) } }]
+  ]);
+}
 
 let state;
 function reset() {
@@ -35,6 +60,8 @@ function reset() {
     sessions: new Map(),
     loginFailures: 0,
     files: new Map(Object.entries(INITIAL_FILES)),
+    workspaces: new Map(INITIAL_WORKSPACES),
+    repos: initialRepos(),
     log: [],
     sockets: new Set(),
     conversations: new Map(), // id -> { projectPath, events, running }
@@ -43,6 +70,14 @@ function reset() {
   };
 }
 reset();
+
+/** "Committed" state = repository file content at reset time (or after pull/clone). */
+function snapshotCommitted() {
+  for (const [repoPath, repo] of state.repos) {
+    repo.committed = new Map([...state.files].filter(([p]) => p.startsWith(repoPath + '/')));
+  }
+}
+snapshotCommitted();
 
 // ---------- helpers ----------
 
@@ -67,14 +102,47 @@ function json(res, status, body, headers = {}) {
 
 function listDir(dir) {
   const out = new Map();
-  for (const p of state.files.keys()) {
-    if (dir && !p.startsWith(dir + '/')) continue;
+  const add = (p, isDirectory) => {
+    if (dir && !p.startsWith(dir + '/')) return;
     const rest = dir ? p.slice(dir.length + 1) : p;
     const [name, ...more] = rest.split('/');
-    out.set(name, { name, path: dir ? `${dir}/${name}` : name, kind: more.length ? 'directory' : 'file' });
-  }
+    out.set(name, { name, path: dir ? `${dir}/${name}` : name, kind: more.length || isDirectory ? 'directory' : 'file' });
+  };
+  for (const p of state.files.keys()) add(p, false);
+  for (const p of [...state.workspaces.keys(), ...state.repos.keys()]) add(p, true);
   return [...out.values()];
 }
+
+function gitFiles(repoPath) {
+  const repo = state.repos.get(repoPath);
+  const files = [];
+  for (const [p, content] of state.files) {
+    if (!p.startsWith(repoPath + '/')) continue;
+    if (!repo.committed.has(p)) files.push({ path: p, status: 'untracked' });
+    else if (repo.committed.get(p) !== content) files.push({ path: p, status: 'modified' });
+  }
+  for (const p of repo.committed.keys()) {
+    if (!state.files.has(p)) files.push({ path: p, status: 'deleted' });
+  }
+  return files;
+}
+
+function repoSummary(repoPath) {
+  const repo = state.repos.get(repoPath);
+  return {
+    name: repoPath.slice(repoPath.lastIndexOf('/') + 1),
+    path: repoPath,
+    branch: repo.branch,
+    changes: gitFiles(repoPath).length,
+    upstream: repo.upstream,
+    ahead: repo.ahead,
+    behind: repo.behind,
+    lastCommit: repo.lastCommit
+  };
+}
+
+const reposIn = (workspace) => [...state.repos.keys()].filter((p) => p.split('/')[0] === workspace);
+const slug = (name) => name.trim().toLowerCase().replace(/ł/g, 'l').normalize('NFD').replace(/\p{M}/gu, '').replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '');
 
 // ---------- HTTP ----------
 
@@ -83,7 +151,12 @@ const server = http.createServer(async (req, res) => {
   const session = sessionOf(req);
 
   // test control
-  if (url.pathname === '/__test/reset') { reset(); json(res, 204); return; }
+  if (url.pathname === '/__test/reset') {
+    reset();
+    snapshotCommitted();
+    json(res, 204);
+    return;
+  }
   if (url.pathname === '/__test/kill-sessions') {
     state.sessions.clear();
     // keepSockets=1: the session is invalidated, but open WebSockets stay (a test of the HTTP interceptor alone).
@@ -134,6 +207,97 @@ const server = http.createServer(async (req, res) => {
       'Set-Cookie': ['sid=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict', 'XSRF-TOKEN=; Path=/; Max-Age=0; SameSite=Strict'],
       'Clear-Site-Data': '"cache", "storage"'
     });
+  }
+
+  // workspaces and git
+  if (['/api/workspaces', '/api/repos', '/api/repos/clone'].includes(url.pathname) || url.pathname.startsWith('/api/git/')) {
+    if (!session) return json(res, 401);
+    if (req.method !== 'GET' && !xsrfOk(req)) return json(res, 400, { message: 'Brak tokenu XSRF.' });
+
+    if (url.pathname === '/api/workspaces' && req.method === 'GET') {
+      return json(res, 200, [...state.workspaces].map(([p, name]) => ({ name, path: p, repoCount: reposIn(p).length })));
+    }
+    if (url.pathname === '/api/workspaces' && req.method === 'POST') {
+      const { name } = (await readBody(req)) ?? {};
+      state.log.push({ path: 'create-workspace', name });
+      if (typeof name !== 'string' || !/^[\p{L}\p{N} _-]{1,40}$/u.test(name.trim()) || !slug(name)) {
+        return json(res, 400, { message: 'Nieprawidłowa nazwa.' });
+      }
+      const p = slug(name);
+      if (state.workspaces.has(p)) return json(res, 409, { message: 'Workspace już istnieje.' });
+      state.workspaces.set(p, name.trim());
+      return json(res, 201, { name: name.trim(), path: p, repoCount: 0 });
+    }
+    if (url.pathname === '/api/repos' && req.method === 'GET') {
+      const ws = url.searchParams.get('workspace') ?? '';
+      if (!state.workspaces.has(ws)) return json(res, 404);
+      return json(res, 200, reposIn(ws).map(repoSummary));
+    }
+    if (url.pathname === '/api/repos/clone' && req.method === 'POST') {
+      const { workspace, url: remote } = (await readBody(req)) ?? {};
+      state.log.push({ path: 'clone', workspace, url: remote });
+      if (!state.workspaces.has(workspace)) return json(res, 404);
+      let parsed;
+      try {
+        parsed = new URL(remote);
+      } catch {
+        return json(res, 400, { message: 'Nieprawidłowy adres.' });
+      }
+      if (parsed.protocol !== 'https:' || parsed.username || parsed.password) return json(res, 400, { message: 'Tylko https bez danych logowania.' });
+      await sleep(300);
+      const name = parsed.pathname.split('/').filter(Boolean).pop()?.replace(/\.git$/, '') ?? '';
+      if (!name) return json(res, 400, { message: 'Nie da się ustalić nazwy repozytorium.' });
+      const repoPath = `${workspace}/${name}`;
+      if (state.repos.has(repoPath)) return json(res, 409, { message: 'Katalog już istnieje.' });
+      if (remote.includes('nie-istnieje')) {
+        return json(res, 502, { message: `remote: Repository not found.\nfatal: repository '${remote}' not found` });
+      }
+      state.files.set(`${repoPath}/README.md`, `# ${name}\n`);
+      state.repos.set(repoPath, {
+        branch: 'main', upstream: 'origin/main', ahead: 0, behind: 0,
+        lastCommit: { message: 'Initial commit', date: minutesAgo(60 * 24 * 30) },
+        committed: new Map([[`${repoPath}/README.md`, `# ${name}\n`]])
+      });
+      return json(res, 201, repoSummary(repoPath));
+    }
+
+    const repoPath = url.searchParams.get('repo') ?? '';
+    const repo = state.repos.get(repoPath);
+    if (!repo) return json(res, 404);
+    if (url.pathname === '/api/git/status' && req.method === 'GET') {
+      return json(res, 200, { branch: repo.branch, ahead: repo.ahead, behind: repo.behind, files: gitFiles(repoPath) });
+    }
+    if (url.pathname === '/api/git/pull' && req.method === 'POST') {
+      state.log.push({ path: 'pull', repo: repoPath });
+      await sleep(150);
+      if (!repo.upstream) return json(res, 400, { message: 'Gałąź nie ma gałęzi zdalnej.' });
+      if (repo.behind === 0 || !repo.remote) return json(res, 200, { message: 'Już aktualne.', changedPaths: [] });
+      const incoming = Object.keys(repo.remote.files);
+      const blocked = incoming.filter((p) => state.files.get(p) !== repo.committed.get(p));
+      if (blocked.length) {
+        return json(res, 409, { message: `error: Your local changes to the following files would be overwritten by merge:\n\t${blocked.join('\n\t')}` });
+      }
+      for (const [p, content] of Object.entries(repo.remote.files)) {
+        state.files.set(p, content);
+        repo.committed.set(p, content);
+      }
+      repo.lastCommit = { message: repo.remote.message, date: new Date().toISOString() };
+      repo.remote = null;
+      const pulled = repo.behind;
+      repo.behind = 0;
+      return json(res, 200, { message: `Pobrano ${pulled} commity.`, changedPaths: incoming });
+    }
+    if (url.pathname === '/api/git/push' && req.method === 'POST') {
+      state.log.push({ path: 'push', repo: repoPath });
+      await sleep(150);
+      if (!repo.upstream) return json(res, 400, { message: "Brak zdalnego repozytorium 'origin'." });
+      if (repo.behind > 0) return json(res, 409, { message: ` ! [rejected]        ${repo.branch} -> ${repo.branch} (fetch first)` });
+      if (repo.ahead === 0) return json(res, 200, { message: 'Nic do wypchnięcia.' });
+      const pushed = repo.ahead;
+      repo.ahead = 0;
+      return json(res, 200, { message: `Wypchnięto ${pushed} commit do ${repo.upstream}.` });
+    }
+    return json(res, 404);
   }
 
   // files
@@ -284,6 +448,8 @@ async function runScript(conversationId, conversation, text) {
     if (cancelled) throw new Error('cancelled');
   };
   const root = conversation.projectPath === '' ? '' : conversation.projectPath + '/';
+  // Steps show paths relative to the conversation's project, `files-changed` always relative to the projects directory.
+  const display = (p) => (root && p.startsWith(root) ? p.slice(root.length) : p);
 
   try {
     emit({ type: 'prompt', text });
@@ -294,13 +460,13 @@ async function runScript(conversationId, conversation, text) {
     }
 
     await step();
-    emit({ type: 'step', stepId: 's1', kind: 'read', target: `${root}${MAIN}` });
+    emit({ type: 'step', stepId: 's1', kind: 'read', target: display(MAIN) });
     await step();
     state.files.set(MAIN, state.files.get(MAIN) + '// claude\n');
-    emit({ type: 'step', stepId: 's2', kind: 'edit', target: MAIN, added: 1 });
+    emit({ type: 'step', stepId: 's2', kind: 'edit', target: display(MAIN), added: 1 });
     await step();
     state.files.set('studia/lab-3-sieci/NOTES.md', '# Notatki z konsoli\n');
-    emit({ type: 'step', stepId: 's3', kind: 'write', target: 'studia/lab-3-sieci/NOTES.md', added: 1 });
+    emit({ type: 'step', stepId: 's3', kind: 'write', target: display('studia/lab-3-sieci/NOTES.md'), added: 1 });
     emit({ type: 'files-changed', paths: [MAIN, 'studia/lab-3-sieci/NOTES.md'] });
     await step();
     emit({ type: 'step', stepId: 's4', kind: 'command', target: 'make test' });

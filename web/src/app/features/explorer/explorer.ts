@@ -31,7 +31,11 @@ export class Explorer {
   /** Directory shown as the tree root (relative path, '' = the whole projects directory). */
   readonly root = input('');
   readonly activePath = input<string | null>(null);
+  /** Badges from the git status: path → letter (M, U, …) or `•` for a directory with changes. */
+  readonly decorations = input<ReadonlyMap<string, string>>(new Map());
   readonly openFile = output<string>();
+  /** The user clicked "Odśwież" (refresh) (e.g. to also refresh the git status). */
+  readonly refreshed = output<void>();
 
   private readonly directories = signal<ReadonlyMap<string, DirectoryState>>(new Map());
   private readonly expanded = signal<ReadonlySet<string>>(new Set());
@@ -75,8 +79,17 @@ export class Explorer {
     this.expanded.set(next);
   }
 
+  protected markLabel(mark: string): string {
+    return MARK_LABELS[mark] ?? mark;
+  }
+
   /** Reloads the root and all expanded directories (e.g. after changes made by the console). */
-  protected refresh(): void {
+  protected refreshClicked(): void {
+    this.refresh();
+    this.refreshed.emit();
+  }
+
+  private refresh(): void {
     void this.load(this.root());
     for (const path of this.expanded()) {
       void this.load(path);
@@ -122,6 +135,16 @@ export class Explorer {
     }
   }
 }
+
+const MARK_LABELS: Record<string, string> = {
+  M: 'zmieniony',
+  A: 'dodany',
+  D: 'usunięty',
+  R: 'przeniesiony',
+  U: 'nieśledzony',
+  '!': 'konflikt',
+  '•': 'zawiera zmiany'
+};
 
 const collator = new Intl.Collator('pl', { numeric: true, sensitivity: 'base' });
 

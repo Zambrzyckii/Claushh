@@ -132,14 +132,18 @@ The order is chosen so that only already secured things reach the internet.
         conflicts with changes on disk, status bar (cursor, language, unsaved).
   - [ ] Backend: files API from the contract in `ARCHITECTURE.md`, path protection (including symlinks), file versions,
         size limits, binary file detection.
-  - [ ] Marking of changed files (`M`) in the explorer (requires git from stage 4).
+  - [x] Marking of changed files (`M`, `U`, …) in the explorer (frontend, based on the git status from stage 4).
 - [ ] **Stage 3: console.**
   - [x] Frontend: Console panel (plain text), model / effort / mode, permission requests, interrupt (Esc),
         new conversation, replaying the conversation after a reload and in other tabs, refreshing files changed
         by the console, SignalR connection with session control.
   - [ ] Backend: hub `/hubs/console` from the contract in `ARCHITECTURE.md`, `claude` process with stream-json,
         permission requests through MCP (`--permission-prompt-tool`), storing conversations, resuming (`--resume`).
-- [ ] **Stage 4: git, terminal, workspaces.** Workspace panel, status / diff / commit / push,
-      terminal xterm.js + PTY + tmux.
+- [ ] **Stage 4: git, terminal, workspaces.**
+  - [x] Frontend: Workspace panel (workspaces, repository table, Otwórz (open) / Pull / Push, creating a
+        workspace, cloning), open repo in the URL, path and branch in the top bar, branch and number of changes
+        in the status bar, git markers in the explorer, a separate console conversation for each repo.
+  - [ ] Frontend: Terminal tab (xterm.js).
+  - [ ] Backend: workspaces and git API from the contract in `ARCHITECTURE.md`, terminal PTY + tmux.
 - [ ] **Stage 5: polish.** Colors, diff view, session list and "wyloguj wszędzie" (log out everywhere), passkeys,
       backups, a possible phone view.

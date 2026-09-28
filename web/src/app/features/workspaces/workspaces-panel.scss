@@ -1,0 +1,244 @@
+:host {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  font-size: 13px;
+}
+
+button {
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  border-radius: 3px;
+  color: var(--text);
+  padding: 3px 10px;
+  font-size: 12px;
+
+  &:disabled {
+    cursor: default;
+    opacity: 0.45;
+  }
+
+  &.primary {
+    background: var(--text);
+    border-color: var(--text);
+    color: var(--bg);
+    opacity: 1;
+  }
+}
+
+.link {
+  border: none;
+  padding: 2px 4px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+
+  &:hover {
+    color: var(--text-strong);
+  }
+}
+
+.dashed {
+  text-align: left;
+  border-style: dashed;
+  color: var(--text-muted);
+  padding: 6px 10px;
+}
+
+.faint {
+  color: var(--text-faint);
+}
+
+.changed {
+  color: var(--accent);
+}
+
+.error {
+  margin: 4px 0;
+  color: var(--accent);
+  font-size: 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.padded {
+  padding: 10px 16px;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.workspaces {
+  width: 220px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 8px;
+  overflow-y: auto;
+  border-right: 1px solid var(--border);
+
+  .dashed {
+    margin-top: 6px;
+  }
+}
+
+.workspace {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  border: none;
+  border-radius: 4px;
+  padding: 7px 10px;
+  font-size: 13px;
+  color: #c4c4bd;
+  text-align: left;
+
+  &--active {
+    background: #24262c;
+    color: var(--text-strong);
+  }
+
+  &__name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__count {
+    flex-shrink: 0;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+}
+
+.inline-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+
+  &--row {
+    flex-direction: row;
+    align-items: center;
+    margin-top: 0;
+
+    input {
+      flex-grow: 1;
+      max-width: 520px;
+    }
+  }
+
+  input {
+    padding: 5px 8px;
+    background: var(--bg);
+    border: 1px solid var(--border-strong);
+    border-radius: 3px;
+    color: var(--text);
+    font-size: 12px;
+  }
+
+  &__buttons {
+    display: flex;
+    gap: 6px;
+  }
+}
+
+.repos {
+  flex-grow: 1;
+  min-width: 0;
+  overflow: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+th {
+  position: sticky;
+  top: 0;
+  background: var(--surface-2);
+  padding: 8px 8px;
+  border-bottom: 1px solid #222429;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  text-align: left;
+
+  &:first-child {
+    padding-left: 16px;
+    width: 180px;
+  }
+
+  &:nth-child(2) {
+    width: 140px;
+  }
+
+  &:nth-child(3) {
+    width: 96px;
+  }
+
+  &:nth-child(5) {
+    width: 112px;
+  }
+
+  &.actions-head {
+    width: 210px;
+    text-align: right;
+    padding-right: 16px;
+  }
+}
+
+td {
+  padding: 6px 8px;
+  border-bottom: 1px solid #1f2126;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+
+  &:first-child {
+    padding-left: 16px;
+  }
+}
+
+.repo {
+  &--open {
+    background: #1c1e23;
+  }
+
+  &__name {
+    font-weight: 500;
+  }
+}
+
+.commit {
+  color: var(--text-muted);
+}
+
+.actions {
+  text-align: right;
+  padding-right: 16px;
+
+  button + button {
+    margin-left: 6px;
+  }
+}
+
+.repo-message td {
+  padding: 4px 16px 8px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  color: var(--text-muted);
+
+  &.error {
+    color: var(--accent);
+  }
+}

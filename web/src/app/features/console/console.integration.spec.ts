@@ -2,6 +2,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { Component, inject, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 import { Subject } from 'rxjs';
 
 import { ProjectContext } from '../../core/project/project-context';
@@ -64,7 +65,7 @@ class Host {
 describe('Console (integration)', () => {
   async function setup(snapshot?: ConversationSnapshot) {
     FakeConnection.nextSnapshot = snapshot ?? { conversationId: null, events: [] };
-    TestBed.configureTestingModule({ providers: [provideHttpClient(), provideHttpClientTesting()] });
+    TestBed.configureTestingModule({ providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])] });
     const fixture = TestBed.createComponent(Host);
     const host = fixture.componentInstance;
     fixture.detectChanges();

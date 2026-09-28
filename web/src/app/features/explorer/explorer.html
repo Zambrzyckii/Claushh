@@ -1,6 +1,6 @@
 <div class="header">
   <span>EKSPLORATOR</span>
-  <button type="button" class="header__refresh" (click)="refresh()">Odśwież</button>
+  <button type="button" class="header__refresh" (click)="refreshClicked()">Odśwież</button>
 </div>
 
 <div class="tree">
@@ -16,6 +16,10 @@
           <span class="row__chevron" aria-hidden="true"></span>
         }
         <span class="row__name">{{ row.entry.name }}</span>
+        @if (decorations().get(row.entry.path); as mark) {
+          <span class="row__mark" [class.row__mark--dir]="row.entry.kind === 'directory'"
+                [attr.aria-label]="markLabel(mark)" [title]="markLabel(mark)">{{ mark }}</span>
+        }
       </button>
     } @else {
       <p class="status" [class.status--error]="row.error" [style.padding-left.px]="16 + row.depth * 14">{{ row.text }}</p>

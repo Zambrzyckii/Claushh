@@ -70,7 +70,7 @@ test('a 401 from the API sends the user back to login', async ({ page, request }
   await login(page);
   await expect(page.locator('app-console-panel')).toContainText('Pusta rozmowa'); // console connected
   await killSessions(request, { keepSockets: true });
-  await page.getByRole('button', { name: 'Odśwież' }).click();
+  await page.getByRole('navigation', { name: 'Eksplorator plików' }).getByRole('button', { name: 'Odśwież' }).click();
   await expect(page).toHaveURL(/\/login\?reason=expired/);
   await expect(page.getByRole('status')).toHaveText('Sesja wygasła. Zaloguj się ponownie.');
 });

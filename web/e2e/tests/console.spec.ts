@@ -64,7 +64,7 @@ test('a tab with unsaved changes is not overwritten by console changes', async (
 
   await prompt(page).fill('dodaj komentarz');
   await prompt(page).press('Enter');
-  const banner = page.locator('.banner', { hasText: 'Konsola zmieniła ten plik' });
+  const banner = page.locator('.banner', { hasText: 'zmienił się na dysku (konsola lub pull)' });
   await expect(banner).toBeVisible();
   await expectEditorToContain(page, '// mine');
 

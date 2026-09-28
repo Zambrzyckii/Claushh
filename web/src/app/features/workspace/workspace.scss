@@ -32,16 +32,38 @@ button {
   &__path {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 8px;
+    min-width: 0;
+    white-space: nowrap;
   }
 
   &__user {
     color: var(--text-muted);
     font-size: 12px;
+    margin-right: 8px;
+  }
+
+  &__sep {
+    color: var(--text-faint);
+  }
+
+  &__muted {
+    color: var(--text-muted);
+  }
+
+  &__branch {
+    margin-left: 6px;
+    padding: 2px 8px;
+    border: 1px solid var(--border-strong);
+    border-radius: 4px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-muted);
   }
 
   &__actions {
     display: flex;
+    align-items: center;
     gap: 8px;
   }
 }
@@ -98,13 +120,22 @@ button {
 .bottom {
   height: 232px;
   flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
   background: var(--surface-2);
   border-top: 1px solid var(--border);
 
+  &__bar {
+    height: 34px;
+    flex-shrink: 0;
+    display: flex;
+    justify-content: space-between;
+    padding: 0 8px;
+    border-bottom: 1px solid var(--border);
+  }
+
   &__tabs {
     display: flex;
-    height: 34px;
-    border-bottom: 1px solid var(--border);
 
     button {
       border: none;
@@ -119,6 +150,16 @@ button {
         border-bottom-color: var(--accent);
       }
     }
+  }
+
+  &__collapse {
+    border: none;
+    padding: 0 8px;
+  }
+
+  &__content {
+    flex-grow: 1;
+    min-height: 0;
   }
 }
 
@@ -140,6 +181,10 @@ button {
   }
 
   &__unsaved {
+    color: var(--accent);
+  }
+
+  &__changes--dirty {
     color: var(--accent);
   }
 }

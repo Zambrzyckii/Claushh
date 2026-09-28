@@ -10,7 +10,16 @@ test.beforeEach(async ({ page, request }) => {
 test('explorer loads directories lazily, directories first', async ({ page, request }) => {
   await expect(page.locator('.row__name')).toHaveText(['prywatne', 'studia']);
   await openFile(page, 'studia/lab-3-sieci');
-  await expect(page.locator('.row__name')).toHaveText(['prywatne', 'studia', 'lab-3-sieci', 'src', 'logo.png', 'Makefile']);
+  await expect(page.locator('.row__name')).toHaveText([
+    'prywatne',
+    'studia',
+    'bazy-danych-lab',
+    'lab-3-sieci',
+    'src',
+    'logo.png',
+    'Makefile',
+    'so-projekt-shell'
+  ]);
   const listed = (await mockState(request)).log.filter((l) => l.path === 'list').map((l) => l.p);
   expect(listed).toEqual(['', 'studia', 'studia/lab-3-sieci']);
 });
