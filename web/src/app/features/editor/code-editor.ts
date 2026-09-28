@@ -83,7 +83,7 @@ export class CodeEditor {
   private readonly models = new Map<string, ModelEntry>();
   /** Versions from HEAD for files with the diff view turned on. */
   private readonly originals = new Map<string, MonacoApi.editor.ITextModel>();
-  /** What is shown now: `ścieżka|plain` or `ścieżka|diff`. */
+  /** What is shown now: `path|plain` or `path|diff`. */
   private shownKey: string | null = null;
   private shownPath: string | null = null;
   private destroyed = false;

@@ -18,7 +18,7 @@ export function validateWorkspaceName(name: string): string | null {
 }
 
 /**
- * Clone URL in strict form: `https://host[:port]/ścieżka`, host and path only from Latin letters,
+ * Clone URL in strict form: `https://host[:port]/path`, host and path only from Latin letters,
  * digits and `.` `_` `~` `-`. No login and password (a token would end up in `.git/config`), no `@`, `\`, `%`, `?`, `#`
  * and spaces, because different parsers (browser, .NET, git, curl) read them differently: e.g. in
  * `https://github.com\@evil.com/r` the browser sees the host `github.com`, and git sees `evil.com`.

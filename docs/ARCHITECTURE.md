@@ -389,7 +389,7 @@ Events sent by the server with the `ConsoleEvent` method to all of the user's co
 - Pull changes files on disk: the response contains `changedPaths`, so the editor reloads clean files,
   and for unsaved changes shows a message, as with changes from the console.
 - Commits are made via the console or the terminal. The panel has only Otwórz / Pull / Push (Open / Pull / Push) (as in the mockup).
-- Cloning only from `https://` URLs in strict form: `https://host[:port]/ścieżka`, where host is
+- Cloning only from `https://` URLs in strict form: `https://host[:port]/path`, where host is
   `[a-z0-9.-]`, and path segments are `[A-Za-z0-9._~-]` (the `CLONE_URL` expression in `validation.ts`), and in
   canonical form (`new URL(adres).href` equal to the URL, so no `..`, no port 443, no uppercase letters in the host).
   No username and password (the token would end up in `.git/config`) and no `@`, `\`, `%`, `?`, `#`, spaces: different parsers
