@@ -32,6 +32,12 @@
       <button type="button" (click)="reload(doc)">Wczytaj z dysku</button>
       <button type="button" (click)="overwrite(doc)">Nadpisz moją wersją</button>
     </div>
+  } @else if (doc.changedOnDisk) {
+    <div class="banner banner--warning" role="alert">
+      <span>Konsola zmieniła ten plik na dysku, a masz w nim niezapisane zmiany.</span>
+      <button type="button" (click)="store.reload(doc.path)">Wczytaj z dysku</button>
+      <button type="button" (click)="store.keepLocalVersion(doc.path)">Zostaw moją wersję</button>
+    </div>
   } @else if (doc.status === 'ready' && doc.error) {
     <div class="banner banner--warning" role="alert">
       <span>{{ doc.error }}</span>

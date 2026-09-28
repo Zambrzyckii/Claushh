@@ -1,8 +1,10 @@
-import { Injectable, computed, inject, signal } from '@angular/core';
+import { DestroyRef, Injectable, computed, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { firstValueFrom } from 'rxjs';
 
 import { FileApiError, FilesApi, fileErrorMessage } from '../../core/api/files-api';
 import { baseName } from '../../core/api/project-path';
+import { ProjectContext } from '../../core/project/project-context';
 
 /**
  * State of the files open in the editor: tabs, active file, content, unsaved changes, saving and conflicts.
@@ -32,6 +34,8 @@ export interface OpenDocument {
   error: string | null;
   /** Set when a save was rejected because the file changed on disk. */
   conflict: { currentVersion: string | null } | null;
+  /** The console changed the file on disk and the editor has unsaved changes (so we did not load it ourselves). */
+  changedOnDisk: boolean;
 }
 
 export interface CursorPosition {
@@ -55,6 +59,35 @@ export class EditorStore {
   readonly cursor = signal<CursorPosition | null>(null);
   readonly language = signal<string | null>(null);
 
+  constructor() {
+    inject(ProjectContext, { optional: true })
+      ?.filesChanged.pipe(takeUntilDestroyed(inject(DestroyRef)))
+      .subscribe((paths) => this.onExternalChange(paths));
+  }
+
+  /**
+   * Files changed outside the editor (e.g. by the console). Clean files are reloaded right away,
+   * and with unsaved changes we only mark the file, so that the user decides.
+   */
+  onExternalChange(paths: readonly string[]): void {
+    for (const path of paths) {
+      const doc = this.find(path);
+      if (!doc || doc.status !== 'ready') {
+        continue;
+      }
+      if (isDirty(doc) || doc.saving) {
+        this.patch(path, (d) => ({ ...d, changedOnDisk: true }));
+      } else {
+        void this.reload(path);
+      }
+    }
+  }
+
+  /** The user keeps their version despite the change on disk (saving will detect the conflict anyway). */
+  keepLocalVersion(path: string): void {
+    this.patch(path, (d) => ({ ...d, changedOnDisk: false }));
+  }
+
   isDirty(path: string): boolean {
     const doc = this.find(path);
     return doc ? isDirty(doc) : false;
@@ -76,7 +109,8 @@ export class EditorStore {
       revision: 0,
       saving: false,
       error: null,
-      conflict: null
+      conflict: null,
+      changedOnDisk: false
     };
     this.docs.update((docs) => (existing ? docs.map((d) => (d.path === path ? placeholder : d)) : [...docs, placeholder]));
 
@@ -174,7 +208,8 @@ export class EditorStore {
         revision: d.revision + 1,
         saving: false,
         error: null,
-        conflict: null
+        conflict: null,
+        changedOnDisk: false
       }));
     } catch (error) {
       this.patch(path, (d) => ({ ...d, saving: false, error: messageOf(error) }));

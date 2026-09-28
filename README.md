@@ -4,7 +4,8 @@ A private web portal for working on projects from any device: code editor, conso
 terminal and git in the browser. Runs on a home computer (EndeavourOS), access through Cloudflare Tunnel,
 login with a password and a TOTP code. One user.
 
-Status: **stage 0, project skeleton.** Nothing is fit to be exposed to the internet yet.
+Status: **frontend of login, editor and console ready, backend not yet.** Nothing is fit to be exposed
+to the internet. Progress: [`docs/PLAN.md`](docs/PLAN.md), section "Stages".
 
 ## Documentation
 
@@ -30,4 +31,13 @@ dotnet run --project src/Claushh.Api
 cd web
 npm install
 npm start
+```
+
+## Frontend tests
+
+```bash
+cd web
+npm test                          # integration (Vitest)
+npx playwright install chromium   # once, browser for e2e
+npm run e2e                       # build + e2e on the mock backend (e2e/mock-api)
 ```

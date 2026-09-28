@@ -133,8 +133,12 @@ The order is chosen so that only already secured things reach the internet.
   - [ ] Backend: files API from the contract in `ARCHITECTURE.md`, path protection (including symlinks), file versions,
         size limits, binary file detection.
   - [ ] Marking of changed files (`M`) in the explorer (requires git from stage 4).
-- [ ] **Stage 3: console.** `claude` process with stream-json, Console panel, model / effort / mode,
-      permission requests through MCP, resuming conversations.
+- [ ] **Stage 3: console.**
+  - [x] Frontend: Console panel (plain text), model / effort / mode, permission requests, interrupt (Esc),
+        new conversation, replaying the conversation after a reload and in other tabs, refreshing files changed
+        by the console, SignalR connection with session control.
+  - [ ] Backend: hub `/hubs/console` from the contract in `ARCHITECTURE.md`, `claude` process with stream-json,
+        permission requests through MCP (`--permission-prompt-tool`), storing conversations, resuming (`--resume`).
 - [ ] **Stage 4: git, terminal, workspaces.** Workspace panel, status / diff / commit / push,
       terminal xterm.js + PTY + tmux.
 - [ ] **Stage 5: polish.** Colors, diff view, session list and "wyloguj wszędzie" (log out everywhere), passkeys,

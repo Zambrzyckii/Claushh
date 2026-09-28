@@ -16,7 +16,7 @@
 
 <div class="main">
   <nav class="explorer" aria-label="Eksplorator plików">
-    <app-explorer [activePath]="editor.activePath()" (openFile)="editor.open($event)" />
+    <app-explorer [root]="project.path()" [activePath]="editor.activePath()" (openFile)="editor.open($event)" />
   </nav>
 
   <main class="editor">
@@ -25,8 +25,7 @@
 
   @if (consoleOpen()) {
     <aside class="console" aria-label="Konsola">
-      <div class="section-title">KONSOLA</div>
-      <p class="placeholder">Rozmowa, wybór modelu i effortu (etap 3)</p>
+      <app-console-panel (collapse)="toggleConsole()" />
     </aside>
   } @else {
     <button type="button" class="console-collapsed" aria-label="Rozwiń konsolę" (click)="toggleConsole()">
@@ -53,6 +52,7 @@
 
 <footer class="statusbar">
   <div class="statusbar__group">
+    <span>{{ consoleStatus() }}</span>
     @if (editor.unsavedCount() > 0) {
       <span class="statusbar__unsaved">Niezapisane: {{ editor.unsavedCount() }}</span>
     }
@@ -62,7 +62,7 @@
       <span>Ln {{ c.line }}, Kol {{ c.column }}</span>
     }
     @if (editor.language(); as lang) {
-      <span>{{ lang }}</span>
+      <span class="statusbar__language">{{ lang }}</span>
     }
   </div>
 </footer>

@@ -4,8 +4,8 @@ This file describes the **current state of the code**: what lives where and how 
 Goals and decisions are in [`PLAN.md`](PLAN.md). After every change to the structure, a new module, endpoint
 or dependency, update the relevant section.
 
-Status: frontend of stages 1 and 2 done (login, explorer, editor). The backend has only `/api/health`.
-The frontend is tested against a mock API that follows the contracts below.
+Status: frontend of stages 1–3 done (login, explorer, editor, console). The backend has only `/api/health`.
+The frontend is tested against a mock backend (`web/e2e/mock-api/`) that follows the contracts below.
 
 ## Flow
 
@@ -45,6 +45,9 @@ to the API at `http://localhost:5080` (`web/proxy.conf.json`).
 | `web/src/app/core/browser/bfcache-guard.ts` | reload of a page restored from the back/forward cache |
 | `web/src/app/core/browser/dialogs.ts` | the browser's `confirm()` wrapped in a service (to swap out in tests) |
 | `web/src/app/core/api/files-api.ts` | files API client: directory listing, read, save with conflict detection |
+| `web/src/app/core/project/project-context.ts` | the current project (repo path, `''` for now) and the "files changed outside the editor" event |
+| `web/src/app/core/realtime/console-protocol.ts` | console hub contract: events, methods, option types |
+| `web/src/app/core/realtime/console-connection.ts` | SignalR connection to `/hubs/console` (WebSocket, auto-reconnect, session check) |
 | `web/src/app/core/api/project-path.ts` | relative path validation (no `..`, leading `/`, `\`) |
 | `web/src/app/features/explorer/` | file tree, directories loaded lazily on expand, "Odśwież" (Refresh) |
 | `web/src/app/features/editor/editor-store.ts` | state of open files: tabs, unsaved changes, save, conflicts (no dependency on Monaco) |
@@ -54,7 +57,12 @@ to the API at `http://localhost:5080` (`web/proxy.conf.json`).
 | `web/src/app/features/editor/workers/` | entry points of the Monaco web workers (editor, TS, JSON, CSS, HTML) |
 | `web/tsconfig.worker.json` | tsconfig for the workers (referenced in `angular.json` as `webWorkerTsConfig`) |
 | `web/src/app/features/login/` | login screen: username, password, TOTP code |
-| `web/src/app/features/workspace/` | main layout: explorer + editor, "Wyloguj" (log out), status bar, Ctrl+S. Console and bottom panel as placeholders |
+| `web/src/app/features/console/console-store.ts` | conversation state built from hub events, sending, permissions, interrupt, new conversation |
+| `web/src/app/features/console/console-panel.*` | the Konsola (Console) panel: the conversation as plain text, prompt field, model / effort / mode |
+| `web/src/app/features/workspace/` | main layout: explorer, editor, console, "Wyloguj" (log out), status bar, Ctrl+S. Bottom panel as a placeholder |
+| `web/playwright.config.ts` | e2e configuration (build from `dist/`, mock on port 4400, Chromium) |
+| `web/e2e/mock-api/server.mjs` | mock backend: auth, files, console hub (SignalR JSON over WebSocket), response scripts, `/__test/*` |
+| `web/e2e/tests/` | e2e tests: `auth`, `editor`, `console` + `helpers.ts` |
 | `web/proxy.conf.json` | dev server proxy to the API |
 | `deploy/docker-compose.yml` | PostgreSQL 17 on `127.0.0.1:5432` |
 | `deploy/.env.example` | template of variables for Compose (copy to `deploy/.env`) |
@@ -146,6 +154,59 @@ Common to all: `400` when the path is invalid or, after resolution (including sy
 the projects directory. The `index.html` and `monaco.css` files are served with `Cache-Control: no-cache`
 (the name `monaco.css` has no hash, so after a Monaco update the browser must download the new version).
 
+## Console
+
+### Rules
+
+- The console is a conversation with Claude Code running on the server in the project directory (`ProjectContext.path`,
+  for now `''`, i.e. the whole projects directory). The backend runs `claude -p --output-format stream-json
+  --input-format stream-json` and translates the output into events from the contract below.
+- **Look:** plain monospace text, without icons, colors, animations or the product name (a requirement from the mockup,
+  enforced by an e2e test). Steps aligned with spaces as in a terminal.
+- **All content (prompts, responses, command output, paths) is displayed only as text.** We do not
+  render Markdown or HTML, so content from the model or from files cannot inject code into the page.
+- The conversation lives on the server. A page reload, another tab or another device replays it via
+  `GetConversation` and sees further events live. Collapsing the panel does not interrupt the work.
+- A prompt appears in the conversation only as a `prompt` event from the server (a single source of truth for all tabs).
+- When the console changes files (`files-changed`), the explorer refreshes, clean open files are
+  reloaded, and files with unsaved changes get the message "Konsola zmieniła ten plik na dysku" (The console changed this file on disk).
+- A dropped connection checks the session immediately (`AuthService.verifySession`). An expired session ends as on a 401.
+- Shortcuts in the prompt field: Enter sends, Shift+Enter new line, Esc interrupts the work.
+
+### `/hubs/console` hub contract (to be implemented in the backend)
+
+Connection: SignalR, WebSocket only, no negotiation (`skipNegotiation`), JSON protocol. Requires a session
+(cookie) and **a check of the `Origin` header** when opening the WebSocket. Without a session: the connection is rejected.
+Invalidating a session (logout) must close its open connections.
+
+Methods called by the client:
+
+| Method | Arguments | Result |
+|---|---|---|
+| `GetConversation` | `projectPath` | `{ conversationId \| null, events: ConsoleEvent[] }`: the latest conversation in the project as a list of events |
+| `StartConversation` | `projectPath` | `conversationId`. The server also broadcasts a `conversation` event |
+| `SendPrompt` | `{ conversationId, text, model, effort, mode }` | none. An error when the conversation is busy |
+| `AnswerPermission` | `{ conversationId, requestId, decision }` | none |
+| `Interrupt` | `{ conversationId }` | none. Interrupts the work, treats a pending permission request as a denial |
+
+Option values: `model` = `opus` / `sonnet` / `haiku`, `effort` = `low` / `medium` / `high` / `max`,
+`mode` = `default` / `acceptEdits` / `plan` (CLI permission modes), `decision` = `allow` / `allow-always` / `deny`.
+
+Events sent by the server with the `ConsoleEvent` method to all of the user's connections
+(all with `conversationId`, full types in `console-protocol.ts`):
+
+| `type` | Fields | Meaning |
+|---|---|---|
+| `conversation` | `projectPath`, `startedAt` | a new conversation in the project |
+| `prompt` | `text` | the user's prompt |
+| `step` | `stepId`, `kind` (`read`/`edit`/`write`/`command`/`search`/`other`), `target`, `added?`, `removed?` | a work step (file, command) |
+| `step-output` | `stepId`, `text`, `isError` | step output, e.g. a command result |
+| `text` | `messageId`, `delta` | a fragment of the response (subsequent fragments with the same `messageId` are appended) |
+| `permission` | `requestId`, `description` | a permission request, e.g. `git push origin main` |
+| `permission-resolved` | `requestId`, `decision` | the answer to the question (also from another tab) |
+| `status` | `state` (`idle`/`working`/`waiting`/`error`), `message?` | work state. `message` is shown as a note |
+| `files-changed` | `paths` (relative to the projects directory) | files changed by the console |
+
 ## Backend
 
 Endpoints:
@@ -167,13 +228,22 @@ Conventions:
 - Colors and fonts only through the variables from `styles.scss`, no hard-coded colors in components
   (exceptions to be removed when the palette is refined).
 
-Planned folders: `core/realtime` (SignalR), `features/console`, `features/terminal`, `features/workspaces`.
+Planned folders: `features/terminal`, `features/workspaces`.
 
-Dependencies besides Angular: `monaco-editor` (editor).
+Dependencies besides Angular: `monaco-editor` (editor), `@microsoft/signalr` (console).
+Development: `@playwright/test`, `ws` (hub mock), `@types/node`.
 
 ## Tests
 
-| Part | Command | Tool |
+Rules: `CLAUDE.md`, section "Tests" (new code: only integration and e2e tests).
+
+| Kind | Command | What it covers |
 |---|---|---|
-| Frontend | `cd web && npm test` | Vitest: auth (service, guards, interceptor, `returnUrl`, login screen), files API, paths, explorer, `EditorStore`. `CodeEditor` (Monaco) has no unit tests, because Monaco does not work in jsdom; checked manually in the browser |
-| Backend | no tests (they will come in stage 1, project `tests/Claushh.Api.Tests`) | xUnit |
+| Integration + older unit | `cd web && npm test` | Vitest (jsdom). Console: `console.integration.spec.ts` (panel + store + editor, SignalR and HTTP stubbed). Older unit tests: auth, files API, paths, explorer, `EditorStore` |
+| E2E | `cd web && npm run e2e` | build + Playwright in Chromium on `e2e/mock-api/server.mjs`: login and sessions, explorer and Monaco, console (steps, options, permissions, interrupt, replay, multiple tabs, file changes) |
+| Backend | none (they will come with the backend, project `tests/Claushh.Api.Tests`) | xUnit |
+
+Notes on e2e:
+- The mock has one shared state, the tests run sequentially and start with `POST /__test/reset`.
+- Browser: `npx playwright install chromium` or the `CHROMIUM_PATH` variable pointing to the system Chromium.
+- Monaco displays spaces as `\u00a0`. `helpers.ts` → `editorText` normalizes the text.

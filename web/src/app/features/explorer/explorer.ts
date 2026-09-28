@@ -1,7 +1,9 @@
-import { Component, computed, effect, inject, input, output, signal, untracked } from '@angular/core';
+import { Component, DestroyRef, computed, effect, inject, input, output, signal, untracked } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { firstValueFrom } from 'rxjs';
 
 import { DirectoryEntry, FileApiError, FilesApi, fileErrorMessage } from '../../core/api/files-api';
+import { ProjectContext } from '../../core/project/project-context';
 
 type DirectoryState =
   | { status: 'loading' }
@@ -15,7 +17,8 @@ export type ExplorerRow =
 /**
  * File tree. Directories are loaded lazily, only when expanded,
  * so large repositories (e.g. with node_modules) do not slow down the start.
- * Clicking a file emits `openFile` with its path.
+ * Clicking a file emits `openFile` with its path. When the console changes files (ProjectContext.filesChanged),
+ * the tree refreshes itself.
  */
 @Component({
   selector: 'app-explorer',
@@ -48,6 +51,10 @@ export class Explorer {
         void this.load(root);
       });
     });
+
+    inject(ProjectContext, { optional: true })
+      ?.filesChanged.pipe(takeUntilDestroyed(inject(DestroyRef)))
+      .subscribe(() => this.refresh());
   }
 
   protected select(row: Extract<ExplorerRow, { kind: 'entry' }>): void {

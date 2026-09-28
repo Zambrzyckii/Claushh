@@ -98,6 +98,24 @@ export class AuthService implements OnDestroy {
     return this.pendingCheck;
   }
 
+  /**
+   * Checks the session on the server, skipping the remembered result. Used when something outside HttpClient
+   * (e.g. the console WebSocket) stopped working: 401 ends the session as in the interceptor,
+   * and no connection changes nothing (the server may have been only briefly unavailable).
+   */
+  async verifySession(): Promise<void> {
+    if (this.leaving) {
+      return;
+    }
+    try {
+      await firstValueFrom(this.http.get<SessionUser>(AUTH_API.me));
+    } catch (error) {
+      if (error instanceof HttpErrorResponse && error.status === 401) {
+        this.handleSessionExpired();
+      }
+    }
+  }
+
   async login(credentials: LoginCredentials): Promise<LoginResult> {
     try {
       await firstValueFrom(this.http.post(AUTH_API.login, credentials));

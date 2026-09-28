@@ -1,0 +1,107 @@
+<div class="header">
+  <span class="header__title">KONSOLA · {{ project.label() }}</span>
+  <div class="header__actions">
+    <button type="button" class="link" [disabled]="!store.canSend()" (click)="store.newConversation()">Nowa</button>
+    <button type="button" class="link" (click)="collapse.emit()">Zwiń</button>
+  </div>
+</div>
+
+<div #log class="log" (scroll)="onScroll()" aria-live="polite">
+  @for (entry of store.entries(); track $index) {
+    @switch (entry.kind) {
+      @case ('session') {
+        <div class="line faint">sesja · rozpoczęta {{ time(entry.startedAt) }}</div>
+      }
+      @case ('prompt') {
+        <div class="prompt">&gt; {{ entry.text }}</div>
+      }
+      @case ('steps') {
+        <div class="steps">
+          @for (step of entry.steps; track step.stepId) {
+            <div class="line">{{ verb(step.kind) }}{{ step.target }}{{ stats(step) }}</div>
+            @for (out of step.output; track $index) {
+              <div class="output" [class.output--error]="out.isError">{{ out.text }}</div>
+            }
+          }
+        </div>
+      }
+      @case ('text') {
+        <div class="text">{{ entry.text }}</div>
+      }
+      @case ('permission') {
+        @if (entry.decision === null) {
+          <div class="permission" role="group" [attr.aria-label]="'Zezwolić na: ' + entry.description">
+            <span>Zezwolić na: {{ entry.description }}?</span>
+            <div class="permission__buttons">
+              <button type="button" (click)="answer(entry.requestId, 'allow')">tak</button>
+              <button type="button" (click)="answer(entry.requestId, 'allow-always')">tak, zawsze</button>
+              <button type="button" (click)="answer(entry.requestId, 'deny')">nie</button>
+            </div>
+          </div>
+        } @else {
+          <div class="line faint">{{ decisionLabel(entry.decision) }}: {{ entry.description }}</div>
+        }
+      }
+      @case ('notice') {
+        <div class="line" [class.faint]="!entry.error" [class.error]="entry.error">{{ entry.text }}</div>
+      }
+    }
+  } @empty {
+    @if (store.connectionState() === 'connected') {
+      <div class="line faint">Pusta rozmowa. Napisz polecenie poniżej.</div>
+    }
+  }
+
+  @if (store.state() === 'working') {
+    <div class="line faint">pracuje… (Esc przerywa)</div>
+  }
+  @if (store.connectionState() === 'connecting') {
+    <div class="line faint">łączenie…</div>
+  } @else if (store.connectionState() === 'reconnecting') {
+    <div class="line faint">rozłączono, łączenie ponownie…</div>
+  }
+  @if (store.error(); as error) {
+    <div class="line error" role="alert">
+      {{ error }}
+      @if (store.connectionState() === 'disconnected') {
+        <button type="button" class="link" (click)="store.retryConnection()">połącz ponownie</button>
+      }
+    </div>
+  }
+</div>
+
+<div class="composer">
+  <div class="composer__input">
+    <span class="composer__prompt" aria-hidden="true">&gt;</span>
+    <textarea #input rows="3" aria-label="Polecenie" placeholder="napisz polecenie…"
+              (keydown)="onKeydown($event)"></textarea>
+  </div>
+  <div class="composer__options">
+    <label>model
+      <select [ngModel]="store.options().model" (ngModelChange)="setModel($event)">
+        @for (m of models; track m.value) {
+          <option [ngValue]="m.value">{{ m.label }}</option>
+        }
+      </select>
+    </label>
+    <label>effort
+      <select [ngModel]="store.options().effort" (ngModelChange)="setEffort($event)">
+        @for (e of efforts; track e.value) {
+          <option [ngValue]="e.value">{{ e.label }}</option>
+        }
+      </select>
+    </label>
+    <label>tryb
+      <select [ngModel]="store.options().mode" (ngModelChange)="setMode($event)">
+        @for (m of modes; track m.value) {
+          <option [ngValue]="m.value">{{ m.label }}</option>
+        }
+      </select>
+    </label>
+    @if (store.state() === 'working' || store.state() === 'waiting') {
+      <button type="button" class="link composer__hint" (click)="store.interrupt()">przerwij</button>
+    } @else {
+      <span class="composer__hint">Enter wyślij</span>
+    }
+  </div>
+</div>
