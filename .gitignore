@@ -1,0 +1,14 @@
+# .NET
+bin/
+obj/
+*.user
+.vs/
+
+# Sekrety i konfiguracja lokalna
+.env
+!.env.example
+appsettings.*.local.json
+
+# Edytory i system
+.idea/
+.DS_Store
