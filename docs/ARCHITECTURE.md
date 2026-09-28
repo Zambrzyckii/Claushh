@@ -34,6 +34,8 @@ to the API at `http://localhost:5080` (`web/proxy.conf.json`).
 | `src/Claushh.Api/` | ASP.NET Core backend |
 | `src/Claushh.Api/Program.cs` | app configuration and endpoint mapping |
 | `src/Claushh.Api/Properties/launchSettings.json` | development profile, port 5080 |
+| `tests/Claushh.Api.Tests/` | backend integration tests: xUnit, the API in memory (`WebApplicationFactory`), PostgreSQL 17 from Testcontainers (`ApiFactory`) |
+| `global.json` | `dotnet test` runs on Microsoft.Testing.Platform (required by xUnit v3 on the .NET 10 SDK) |
 | `web/` | Angular 21 frontend (standalone components, signals, the new `@if` syntax) |
 | `web/src/index.html` | start page with the Content-Security-Policy in `<meta>` (section "Security headers") |
 | `web/src/main.ts` | app startup: Trusted Types policy, and inside a frame of a foreign page the app does not start |
