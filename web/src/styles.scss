@@ -1,0 +1,35 @@
+// Global color and typography tokens. Values taken from the mockup,
+// the palette will still be refined (see docs/PLAN.md, section "Interface").
+:root {
+  --bg: #141518;
+  --surface: #18191d;
+  --surface-2: #16171a;
+  --border: #26282e;
+  --border-strong: #2c2e35;
+  --text: #d6d6d0;
+  --text-strong: #f0eee6;
+  --text-muted: #8e9098;
+  --text-faint: #6c6f78;
+  --accent: #e0a458;
+
+  --font-ui: 'IBM Plex Sans', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 13px;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+}

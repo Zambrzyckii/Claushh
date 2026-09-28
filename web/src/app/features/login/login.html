@@ -1,0 +1,13 @@
+<form class="login" (submit)="$event.preventDefault()">
+  <h1>Workspace</h1>
+
+  <label for="password">Hasło</label>
+  <input id="password" name="password" type="password" autocomplete="current-password" required>
+
+  <label for="totp">Kod z aplikacji</label>
+  <input id="totp" name="totp" type="text" inputmode="numeric" autocomplete="one-time-code"
+         pattern="[0-9]{6}" maxlength="6" required>
+
+  <button type="submit" disabled>Zaloguj</button>
+  <p class="hint">Logowanie nie jest jeszcze podłączone do API.</p>
+</form>
