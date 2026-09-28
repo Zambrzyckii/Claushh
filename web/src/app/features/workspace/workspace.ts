@@ -5,12 +5,15 @@ import { Dialogs } from '../../core/browser/dialogs';
 import { ProjectContext } from '../../core/project/project-context';
 import { RepoStatusStore } from '../../core/project/repo-status';
 import { ConsoleConnection } from '../../core/realtime/console-connection';
+import { TerminalConnection } from '../../core/realtime/terminal-connection';
 import { countLabel } from '../../core/text/polish';
 import { ConsolePanel } from '../console/console-panel';
 import { ConsoleStore } from '../console/console-store';
 import { EditorPane } from '../editor/editor-pane';
 import { EditorStore } from '../editor/editor-store';
 import { Explorer } from '../explorer/explorer';
+import { TerminalPanel } from '../terminal/terminal-panel';
+import { TerminalStore } from '../terminal/terminal-store';
 import { WorkspacesPanel } from '../workspaces/workspaces-panel';
 import { WorkspacesStore } from '../workspaces/workspaces-store';
 
@@ -19,16 +22,25 @@ import { WorkspacesStore } from '../workspaces/workspaces-store';
  * file explorer | editor | console, below it the Workspace/Terminal panel, at the bottom the status bar.
  *
  * The open repository is chosen in the bottom panel (Workspace tab) and is stored in the URL (`?repo=`).
- * Without it the explorer and the console work on the whole projects directory. The Terminal tab is still a placeholder.
+ * Without it the explorer, the console and new terminals work on the whole projects directory.
  *
- * State services (project, git status, editor, console, workspaces) are provided here, so they live as
- * long as this view. The console keeps running after the panel is collapsed. Changing the repository does not close open
+ * State services (project, git status, editor, console, workspaces, terminals) are provided here, so they live
+ * as long as this view. The console keeps running after the panel is collapsed, terminals live on the server. Changing the repository does not close open
  * editor tabs (their paths are full, so they still point to the right files).
  */
 @Component({
   selector: 'app-workspace',
-  imports: [Explorer, EditorPane, ConsolePanel, WorkspacesPanel],
-  providers: [ProjectContext, RepoStatusStore, EditorStore, ConsoleConnection, ConsoleStore, WorkspacesStore],
+  imports: [Explorer, EditorPane, ConsolePanel, WorkspacesPanel, TerminalPanel],
+  providers: [
+    ProjectContext,
+    RepoStatusStore,
+    EditorStore,
+    ConsoleConnection,
+    ConsoleStore,
+    WorkspacesStore,
+    TerminalConnection,
+    TerminalStore
+  ],
   templateUrl: './workspace.html',
   styleUrl: './workspace.scss'
 })
@@ -93,9 +105,15 @@ export class Workspace {
     await this.auth.logout();
   }
 
-  /** Ctrl+S / Cmd+S saves the active file, also when focus is outside the editor, instead of opening "Save Page As". */
+  /**
+   * Ctrl+S / Cmd+S saves the active file, also when focus is outside the editor, instead of opening "Save Page As".
+   * Exception: in a terminal the shortcut belongs to the program in the terminal (e.g. nano), so we do not intercept it.
+   */
   @HostListener('document:keydown', ['$event'])
   protected onKeydown(event: KeyboardEvent): void {
+    if (event.target instanceof Element && event.target.closest('.xterm')) {
+      return;
+    }
     if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 's') {
       event.preventDefault();
       void this.editor.save();

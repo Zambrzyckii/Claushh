@@ -1,0 +1,34 @@
+<div class="bar">
+  <div class="tabs" role="tablist" aria-label="Terminale">
+    @for (t of store.terminals(); track t.id) {
+      <div class="tab" [class.tab--active]="t.id === store.activeId()">
+        <button type="button" role="tab" class="tab__name" [attr.aria-selected]="t.id === store.activeId()"
+                [title]="t.cwd === '' ? 'katalog projektów' : t.cwd" (click)="store.activate(t.id)">
+          {{ t.title }}@if (t.exited) {<span class="faint"> (zakończony)</span>}
+        </button>
+        <button type="button" class="tab__close" [attr.aria-label]="'Zamknij terminal ' + t.title" (click)="close(t)">×</button>
+      </div>
+    }
+  </div>
+  <button type="button" class="new" [disabled]="store.connectionState() !== 'connected'" (click)="store.open()">+ Nowy</button>
+  @if (store.connectionState() === 'connecting') {
+    <span class="state faint">łączenie…</span>
+  } @else if (store.connectionState() === 'reconnecting') {
+    <span class="state faint">rozłączono, łączenie ponownie…</span>
+  }
+  @if (store.error(); as error) {
+    <span class="state error" role="alert">{{ error }}</span>
+    @if (store.connectionState() === 'disconnected') {
+      <button type="button" class="new" (click)="retry()">połącz ponownie</button>
+    }
+  }
+</div>
+
+<div class="views">
+  @for (t of store.terminals(); track t.id) {
+    <app-terminal-view [terminal]="t" [class.hidden]="t.id !== store.activeId()" [attr.aria-hidden]="t.id !== store.activeId()" />
+  }
+  @if (store.loaded() && store.terminals().length === 0) {
+    <p class="empty faint">Brak otwartych terminali.</p>
+  }
+</div>

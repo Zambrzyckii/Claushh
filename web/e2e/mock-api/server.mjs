@@ -1,6 +1,7 @@
 // Mock backend for e2e tests: serves the built frontend (dist/web/browser) and implements the contracts
 // from docs/ARCHITECTURE.md (authentication, files, workspaces and git, the console hub in the SignalR JSON protocol
-// over WebSocket). Instead of the real Claude Code it replays short scripts that depend on the prompt text.
+// over WebSocket, the terminal hub with a simple simulated shell). Instead of the real Claude Code it replays short
+// scripts that depend on the prompt text.
 // Git is simulated: the "committed" file content is their state at reset, and status is the difference from it.
 //
 // For tests only. The /__test/* endpoints let tests reset and inspect the state.
@@ -55,7 +56,7 @@ function initialRepos() {
 
 let state;
 function reset() {
-  for (const socket of state?.sockets ?? []) socket.terminate();
+  for (const socket of [...(state?.sockets ?? []), ...(state?.terminalSockets ?? [])]) socket.terminate();
   state = {
     sessions: new Map(),
     loginFailures: 0,
@@ -64,6 +65,9 @@ function reset() {
     repos: initialRepos(),
     log: [],
     sockets: new Set(),
+    terminalSockets: new Set(),
+    terminals: new Map(), // id -> { id, title, cwd, exited, seq, history, line, inputs, sizes }
+    terminalCounter: 0,
     conversations: new Map(), // id -> { projectPath, events, running }
     latestByProject: new Map(),
     prompts: []
@@ -161,13 +165,14 @@ const server = http.createServer(async (req, res) => {
     state.sessions.clear();
     // keepSockets=1: the session is invalidated, but open WebSockets stay (a test of the HTTP interceptor alone).
     if (url.searchParams.get('keepSockets') !== '1') {
-      for (const socket of state.sockets) socket.terminate();
+      for (const socket of [...state.sockets, ...state.terminalSockets]) socket.terminate();
     }
     json(res, 204);
     return;
   }
   if (url.pathname === '/__test/state') {
-    json(res, 200, { files: Object.fromEntries(state.files), log: state.log, prompts: state.prompts });
+    const terminals = [...state.terminals.values()].map(({ id, title, cwd, exited, inputs, sizes }) => ({ id, title, cwd, exited, inputs, sizes }));
+    json(res, 200, { files: Object.fromEntries(state.files), log: state.log, prompts: state.prompts, terminals });
     return;
   }
   if (url.pathname === '/__test/file' && req.method === 'PUT') {
@@ -336,18 +341,23 @@ const server = http.createServer(async (req, res) => {
   res.writeHead(200, headers).end(fs.readFileSync(file));
 });
 
-// ---------- console hub (SignalR JSON protocol) ----------
+// ---------- SignalR hubs (JSON protocol): console and terminal ----------
 
 const wss = new WebSocketServer({ noServer: true });
+const HUBS = {
+  '/hubs/console': { sockets: () => state.sockets, invoke: (target, args) => invoke(target, args) },
+  '/hubs/terminal': { sockets: () => state.terminalSockets, invoke: (target, args) => invokeTerminal(target, args) }
+};
 
 server.on('upgrade', (req, socket, head) => {
   const url = new URL(req.url, ORIGIN);
-  if (url.pathname !== '/hubs/console' || !sessionOf(req) || req.headers.origin !== ORIGIN) {
+  const hub = HUBS[url.pathname];
+  if (!hub || !sessionOf(req) || req.headers.origin !== ORIGIN) {
     socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
     socket.destroy();
     return;
   }
-  wss.handleUpgrade(req, socket, head, (ws) => onConnection(ws));
+  wss.handleUpgrade(req, socket, head, (ws) => onConnection(ws, hub));
 });
 
 function send(ws, message) {
@@ -360,19 +370,20 @@ function broadcast(event) {
   for (const ws of state.sockets) send(ws, { type: 1, target: 'ConsoleEvent', arguments: [event] });
 }
 
-function onConnection(ws) {
+function onConnection(ws, hub) {
   let handshake = false;
+  const sockets = hub.sockets();
   const ping = setInterval(() => send(ws, { type: 6 }), 5000);
   ws.on('close', () => {
     clearInterval(ping);
-    state.sockets.delete(ws);
+    sockets.delete(ws);
   });
   ws.on('message', async (raw) => {
     for (const part of raw.toString().split(RS).filter(Boolean)) {
       const message = JSON.parse(part);
       if (!handshake) {
         handshake = true;
-        state.sockets.add(ws);
+        sockets.add(ws);
         ws.send('{}' + RS);
         continue;
       }
@@ -380,7 +391,7 @@ function onConnection(ws) {
       let result = null;
       let error;
       try {
-        result = await invoke(message.target, message.arguments);
+        result = await hub.invoke(message.target, message.arguments);
       } catch (e) {
         error = String(e.message ?? e);
       }
@@ -426,6 +437,114 @@ async function invoke(target, args) {
       conversation?.running?.cancel();
       return null;
     }
+    default:
+      throw new Error(`Nieznana metoda ${target}`);
+  }
+}
+
+// ---------- terminal: simulated shell ----------
+
+const promptFor = (terminal) => `\x1b[32mowner@dom\x1b[0m:\x1b[34m~/projekty${terminal.cwd ? '/' + terminal.cwd : ''}\x1b[0m$ `;
+
+function terminalEmit(terminal, data) {
+  terminal.seq++;
+  terminal.history = (terminal.history + data).slice(-100_000);
+  for (const ws of state.terminalSockets) {
+    send(ws, { type: 1, target: 'TerminalOutput', arguments: [{ id: terminal.id, seq: terminal.seq, data }] });
+  }
+}
+
+function runCommand(terminal, line) {
+  const [command, ...rest] = line.trim().split(/\s+/);
+  switch (command) {
+    case undefined:
+    case '':
+      return '';
+    case 'pwd':
+      return `/srv/projects${terminal.cwd ? '/' + terminal.cwd : ''}\r\n`;
+    case 'ls':
+      return listDir(terminal.cwd).map((e) => e.name).sort().join('  ') + '\r\n';
+    case 'echo':
+      return rest.join(' ') + '\r\n';
+    default:
+      return `bash: ${command}: command not found\r\n`;
+  }
+}
+
+function terminalInput(terminal, data) {
+  terminal.inputs.push(data);
+  if (terminal.exited || data.startsWith('\x1b')) return; // we skip key sequences (arrows etc.)
+  for (const ch of data) {
+    if (ch === '\r') {
+      const line = terminal.line;
+      terminal.line = '';
+      if (line.trim() === 'exit') {
+        terminalEmit(terminal, '\r\nlogout\r\n');
+        terminal.exited = true;
+        for (const ws of state.terminalSockets) {
+          send(ws, { type: 1, target: 'TerminalExited', arguments: [{ id: terminal.id, exitCode: 0 }] });
+        }
+        return;
+      }
+      terminalEmit(terminal, '\r\n' + runCommand(terminal, line) + promptFor(terminal));
+    } else if (ch === '\x7f') {
+      if (terminal.line) {
+        terminal.line = terminal.line.slice(0, -1);
+        terminalEmit(terminal, '\b \b');
+      }
+    } else if (ch === '\x03') {
+      terminal.line = '';
+      terminalEmit(terminal, '^C\r\n' + promptFor(terminal));
+    } else if (ch >= ' ') {
+      terminal.line += ch;
+      terminalEmit(terminal, ch);
+    }
+  }
+}
+
+const terminalInfo = ({ id, title, cwd, exited }) => ({ id, title, cwd, exited });
+
+async function invokeTerminal(target, args) {
+  const request = args[0] ?? {};
+  const terminal = state.terminals.get(request.id);
+  switch (target) {
+    case 'ListTerminals':
+      return [...state.terminals.values()].map(terminalInfo);
+    case 'OpenTerminal': {
+      const cwd = request.projectPath ?? '';
+      const base = cwd ? cwd.slice(cwd.lastIndexOf('/') + 1) : 'projekty';
+      const same = [...state.terminals.values()].filter((t) => t.title === base || t.title.startsWith(base + ' (')).length;
+      const created = {
+        id: `t${++state.terminalCounter}`,
+        title: same ? `${base} (${same + 1})` : base,
+        cwd,
+        exited: false,
+        seq: 0,
+        history: '',
+        line: '',
+        inputs: [],
+        sizes: [[request.cols, request.rows]]
+      };
+      state.terminals.set(created.id, created);
+      state.log.push({ path: 'terminal-open', cwd });
+      terminalEmit(created, promptFor(created));
+      return terminalInfo(created);
+    }
+    case 'Attach':
+      if (!terminal) throw new Error('Nieznany terminal');
+      terminal.sizes.push([request.cols, request.rows]);
+      return { snapshot: terminal.history, seq: terminal.seq };
+    case 'Input':
+      if (terminal) terminalInput(terminal, String(request.data ?? ''));
+      return null;
+    case 'Resize':
+      terminal?.sizes.push([request.cols, request.rows]);
+      return null;
+    case 'CloseTerminal':
+      if (!terminal) throw new Error('Nieznany terminal');
+      state.terminals.delete(request.id);
+      state.log.push({ path: 'terminal-close', id: request.id });
+      return null;
     default:
       throw new Error(`Nieznana metoda ${target}`);
   }

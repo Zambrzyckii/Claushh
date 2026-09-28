@@ -4,8 +4,8 @@ This file describes the **current state of the code**: what lives where and how 
 Goals and decisions are in [`PLAN.md`](PLAN.md). After every change to the structure, a new module, endpoint
 or dependency, update the relevant section.
 
-Status: frontend of stages 1–3 done (login, explorer, editor, console), from stage 4 the Workspace panel
-(workspaces, repositories, git). The terminal is missing. The backend has only `/api/health`.
+Status: frontend of stages 1–4 done (login, explorer, editor, console, workspaces and git, terminal).
+What is left is polish (stage 5). The backend has only `/api/health`.
 The frontend is tested against a mock backend (`web/e2e/mock-api/`) that follows the contracts below.
 
 ## Flow
@@ -52,8 +52,11 @@ to the API at `http://localhost:5080` (`web/proxy.conf.json`).
 | `web/src/app/core/project/project-context.ts` | the open repository (from the `?repo=` URL), "files changed" and "files saved" events |
 | `web/src/app/core/project/repo-status.ts` | git status of the open repo: branch, changes, badges for the explorer |
 | `web/src/app/core/text/polish.ts` | number declension (1 zmiana, 2 zmiany, 5 zmian) and relative time ("12 minut temu" (12 minutes ago)) |
+| `web/src/app/core/realtime/hub-client.ts` | shared base for SignalR connections: WebSocket, auto-reconnect, session check on disconnect |
 | `web/src/app/core/realtime/console-protocol.ts` | console hub contract: events, methods, option types |
-| `web/src/app/core/realtime/console-connection.ts` | SignalR connection to `/hubs/console` (WebSocket, auto-reconnect, session check) |
+| `web/src/app/core/realtime/console-connection.ts` | connection to `/hubs/console` (built on `HubClient`) |
+| `web/src/app/core/realtime/terminal-protocol.ts` | terminal hub contract: methods, events, types |
+| `web/src/app/core/realtime/terminal-connection.ts` | connection to `/hubs/terminal` (built on `HubClient`) |
 | `web/src/app/core/api/project-path.ts` | relative path validation (no `..`, leading `/`, `\`) |
 | `web/src/app/features/explorer/` | file tree, directories loaded lazily on expand, git badges, "Odśwież" (Refresh) |
 | `web/src/app/features/editor/editor-store.ts` | state of open files: tabs, unsaved changes, save, conflicts (no dependency on Monaco) |
@@ -68,10 +71,14 @@ to the API at `http://localhost:5080` (`web/proxy.conf.json`).
 | `web/src/app/features/workspaces/workspaces-store.ts` | state of the Workspace panel: workspaces, repositories, pull / push, create, clone |
 | `web/src/app/features/workspaces/workspaces-panel.*` | the "Workspace" tab in the bottom panel (workspace list, repository table) |
 | `web/src/app/features/workspaces/validation.ts` | validation of the workspace name and the clone URL |
-| `web/src/app/features/workspace/` | main layout: path and branch in the top bar, explorer, editor, console, bottom panel, status bar, Ctrl+S. Terminal tab as a placeholder |
+| `web/src/app/features/terminal/terminal-store.ts` | terminal list, active terminal, opening in the repo directory, closing |
+| `web/src/app/features/terminal/terminal-panel.*` | the "Terminal" tab: the terminal bar and their views |
+| `web/src/app/features/terminal/terminal-view.ts` | a single xterm.js: attaching with a snapshot and `seq` numbers, typing, size fitting |
+| `web/src/app/features/terminal/xterm-loader.ts` | lazy loading of xterm.js and the terminal look (theme, font) |
+| `web/src/app/features/workspace/` | main layout: path and branch in the top bar, explorer, editor, console, bottom panel (Workspace, Terminal), status bar, Ctrl+S |
 | `web/playwright.config.ts` | e2e configuration (build from `dist/`, mock on port 4400, Chromium) |
-| `web/e2e/mock-api/server.mjs` | mock backend: auth, files, workspaces and simulated git, console hub (SignalR JSON over WebSocket), `/__test/*` |
-| `web/e2e/tests/` | e2e tests: `auth`, `editor`, `console`, `workspaces` + `helpers.ts` |
+| `web/e2e/mock-api/server.mjs` | mock backend: auth, files, workspaces and simulated git, console and terminal hubs (SignalR JSON over WebSocket, simulated shell), `/__test/*` |
+| `web/e2e/tests/` | e2e tests: `auth`, `editor`, `console`, `workspaces`, `terminal` + `helpers.ts` |
 | `web/proxy.conf.json` | dev server proxy to the API |
 | `deploy/docker-compose.yml` | PostgreSQL 17 on `127.0.0.1:5432` |
 | `deploy/.env.example` | template of variables for Compose (copy to `deploy/.env`) |
@@ -265,6 +272,48 @@ Security requirements for the backend:
 - The GitHub token lives outside the repository and outside the remote URL (credential helper), with access only to selected repos.
 - A timeout for git network operations.
 
+## Terminal
+
+### Rules
+
+- Every terminal is a **tmux session on the server**, running as the `workspace` user in the directory of the open
+  repository (without a repo: in the projects directory). It lives on after closing the tab, reloading the page
+  and switching tabs. It ends only with "×" (with confirmation, because it kills running processes) or `exit`.
+- The Terminal tab connects to the hub only when first opened. With no terminal at all it opens the first one right away.
+- **Attaching without gaps or duplicates:** `Attach` returns a snapshot (screen + history with ANSI sequences) and the `seq` number
+  of the last fragment included in it. Output fragments that arrive during attaching are buffered,
+  and those with `seq` not greater than in the snapshot are skipped. After reconnecting to the hub every view attaches again.
+- Typed characters go via `send` (without waiting for a response), in order over a single WebSocket connection.
+- The terminal size fits the panel (FitAddon + ResizeObserver) and goes to the server (`Resize`).
+- **Ctrl+S in the terminal belongs to the terminal** (e.g. saving in nano), not to the editor. Browser shortcuts
+  (e.g. Ctrl+W, Ctrl+T) still work in the browser and cannot be intercepted.
+- Security on the browser side: no clipboard addon (OSC 52), so a program in the terminal cannot write
+  anything to the clipboard. The terminal content disappears from memory on logout (full page reload).
+- Font: first `JetBrainsMono Nerd Font` (icons from the dotfiles prompt, if the font is installed
+  on the device), then `JetBrains Mono` and monospace.
+
+### `/hubs/terminal` hub contract (to be implemented in the backend)
+
+Connection as in the console: SignalR, WebSocket only, no negotiation, JSON, requires a session and an `Origin` check,
+logout closes the connections. This is the most powerful part of the portal (a full shell), so the rules from "Security"
+in `PLAN.md` (a separate user, systemd sandbox) are especially important here.
+
+| Method | Arguments | Result |
+|---|---|---|
+| `ListTerminals` | none | `TerminalInfo[]` (`{ id, title, cwd, exited }`) |
+| `OpenTerminal` | `{ projectPath, cols, rows }` | `TerminalInfo`. `projectPath` is checked like file paths. `title` is unique, e.g. `lab-3-sieci (2)` |
+| `Attach` | `{ id, cols, rows }` | `{ snapshot, seq }`. Also sets the size |
+| `Input` | `{ id, data }` | none (called via `send`). Raw data from xterm, e.g. `\r`, `\x03` |
+| `Resize` | `{ id, cols, rows }` | none (`send`) |
+| `CloseTerminal` | `{ id }` | none. Kills the tmux session |
+
+Server events to all of the user's connections to this hub:
+
+| Method | Argument | Meaning |
+|---|---|---|
+| `TerminalOutput` | `{ id, seq, data }` | an output fragment, `seq` grows by 1 for each fragment of a given terminal |
+| `TerminalExited` | `{ id, exitCode }` | the shell exited. The terminal stays on the list with `exited: true` until it is closed |
+
 ## Backend
 
 Endpoints:
@@ -287,9 +336,8 @@ Conventions:
 - Colors and fonts only through the variables from `styles.scss`, no hard-coded colors in components
   (exceptions to be removed when the palette is refined).
 
-Planned folders: `features/terminal`.
-
-Dependencies besides Angular: `monaco-editor` (editor), `@microsoft/signalr` (console).
+Dependencies besides Angular: `monaco-editor` (editor), `@microsoft/signalr` (console, terminal),
+`@xterm/xterm` and `@xterm/addon-fit` (terminal; the xterm styles are in the global styles in `angular.json`).
 Development: `@playwright/test`, `ws` (hub mock), `@types/node`.
 
 ## Tests
@@ -299,11 +347,12 @@ Rules: `CLAUDE.md`, section "Tests" (new code: only integration and e2e tests).
 | Kind | Command | What it covers |
 |---|---|---|
 | Integration + older unit | `cd web && npm test` | Vitest (jsdom). Integration: `console.integration.spec.ts` (panel + store + editor, SignalR and HTTP stubbed), `workspaces.integration.spec.ts` (Workspace panel + router + git status + explorer + editor, HTTP stubbed). Older unit tests: auth, files API, paths, explorer, `EditorStore` |
-| E2E | `cd web && npm run e2e` | build + Playwright in Chromium on `e2e/mock-api/server.mjs`: login and sessions, explorer and Monaco, console (steps, options, permissions, interrupt, replay, multiple tabs, file changes), workspaces (opening a repo, git status, pull, push, create, clone, a conversation per repo) |
+| E2E | `cd web && npm run e2e` | build + Playwright in Chromium on `e2e/mock-api/server.mjs`: login and sessions, explorer and Monaco, console (steps, options, permissions, interrupt, replay, multiple tabs, file changes), workspaces (opening a repo, git status, pull, push, create, clone, a conversation per repo), terminal (commands, keys, reload without duplicates, multiple terminals, `exit`, Ctrl+S, resizing) |
 | Backend | none (they will come with the backend, project `tests/Claushh.Api.Tests`) | xUnit |
 
 Notes on e2e:
 - The mock has one shared state, the tests run sequentially and start with `POST /__test/reset`.
 - Git in the mock is simulated: the "committed" state is the file content from the reset, the status is the difference from it.
 - Browser: `npx playwright install chromium` or the `CHROMIUM_PATH` variable pointing to the system Chromium.
-- Monaco displays spaces as `\u00a0`. `helpers.ts` → `editorText` normalizes the text.
+- Monaco and xterm display spaces as `\u00a0`. `helpers.ts` → `editorText` and `terminalText` normalize the text.
+- `CodeEditor` (Monaco) and `TerminalView` (xterm) do not work in jsdom, so they are tested only in e2e.

@@ -8,8 +8,19 @@ export const BAZY_SQL = 'studia/bazy-danych-lab/zadanie4.sql';
 
 export interface MockState {
   files: Record<string, string | null>;
-  log: { path: string; xsrf?: boolean; hadSession?: boolean; p?: string; repo?: string; url?: string; name?: string }[];
+  log: {
+    path: string;
+    xsrf?: boolean;
+    hadSession?: boolean;
+    p?: string;
+    repo?: string;
+    url?: string;
+    name?: string;
+    cwd?: string;
+    id?: string;
+  }[];
   prompts: { conversationId: string; text: string; model: string; effort: string; mode: string }[];
+  terminals: { id: string; title: string; cwd: string; exited: boolean; inputs: string[]; sizes: [number, number][] }[];
 }
 
 export async function resetMock(request: APIRequestContext): Promise<void> {
@@ -53,6 +64,35 @@ export async function openRepo(page: Page, name: string, workspace = 'Studia'): 
   await page.locator('app-workspaces-panel .workspace', { hasText: workspace }).click();
   await repoRow(page, name).getByRole('button', { name: `Otwórz ${name}` }).click();
   await expect(repoRow(page, name).getByRole('button', { name: `Otwarte: ${name}` })).toBeVisible();
+}
+
+/** Opens the Terminal tab in the bottom panel. */
+export async function openTerminalTab(page: Page): Promise<void> {
+  await page.getByRole('tab', { name: 'TERMINAL' }).click();
+  await expect(activeTerminal(page).locator('.xterm-rows')).toBeVisible();
+}
+
+/** The visible (active) terminal. */
+export function activeTerminal(page: Page): Locator {
+  return page.locator('app-terminal-view:not(.hidden)');
+}
+
+/** Text visible in the active terminal (non-breaking spaces replaced with regular ones). */
+export async function terminalText(page: Page): Promise<string> {
+  return (await activeTerminal(page).locator('.xterm-rows').innerText()).replace(/\u00a0/g, ' ');
+}
+
+export async function expectTerminalToContain(page: Page, text: string): Promise<void> {
+  await expect.poll(() => terminalText(page)).toContain(text);
+}
+
+/** Types text into the active terminal (focus on the xterm field) and optionally Enter. */
+export async function typeInTerminal(page: Page, text: string, enter = true): Promise<void> {
+  await activeTerminal(page).locator('.xterm-screen').click();
+  await page.keyboard.type(text);
+  if (enter) {
+    await page.keyboard.press('Enter');
+  }
 }
 
 /** File explorer row with exactly this name. */

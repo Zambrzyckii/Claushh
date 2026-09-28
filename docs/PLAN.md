@@ -143,7 +143,9 @@ The order is chosen so that only already secured things reach the internet.
   - [x] Frontend: Workspace panel (workspaces, repository table, Otwórz (open) / Pull / Push, creating a
         workspace, cloning), open repo in the URL, path and branch in the top bar, branch and number of changes
         in the status bar, git markers in the explorer, a separate console conversation for each repo.
-  - [ ] Frontend: Terminal tab (xterm.js).
-  - [ ] Backend: workspaces and git API from the contract in `ARCHITECTURE.md`, terminal PTY + tmux.
+  - [x] Frontend: Terminal tab (xterm.js): multiple terminals, reattaching after a reload without losing
+        or duplicating output, size fitting, `exit`, Ctrl+S for the program in the terminal.
+  - [ ] Backend: workspaces and git API and hub `/hubs/terminal` from the contracts in `ARCHITECTURE.md`
+        (terminal: PTY + tmux).
 - [ ] **Stage 5: polish.** Colors, diff view, session list and "wyloguj wszędzie" (log out everywhere), passkeys,
       backups, a possible phone view.
