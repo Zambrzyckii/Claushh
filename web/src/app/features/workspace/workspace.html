@@ -1,11 +1,16 @@
 <header class="topbar">
   <div class="topbar__path">
     <strong>Workspace</strong>
+    @if (user(); as u) {
+      <span class="topbar__user">{{ u.userName }}</span>
+    }
   </div>
   <div class="topbar__actions">
     <button type="button" [class.is-on]="bottomOpen()" (click)="toggleBottom()">Panel dolny</button>
     <button type="button" [class.is-on]="consoleOpen()" (click)="toggleConsole()">Konsola</button>
-    <button type="button">Wyloguj</button>
+    <button type="button" [disabled]="loggingOut()" (click)="logout()">
+      {{ loggingOut() ? 'Wylogowywanie…' : 'Wyloguj' }}
+    </button>
   </div>
 </header>
 

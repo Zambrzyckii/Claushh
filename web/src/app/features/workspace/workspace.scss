@@ -29,6 +29,17 @@ button {
   background: var(--surface);
   border-bottom: 1px solid var(--border);
 
+  &__path {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  &__user {
+    color: var(--text-muted);
+    font-size: 12px;
+  }
+
   &__actions {
     display: flex;
     gap: 8px;

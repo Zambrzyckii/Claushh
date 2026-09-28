@@ -1,13 +1,27 @@
-<form class="login" (submit)="$event.preventDefault()">
+<form class="login" [formGroup]="form" (ngSubmit)="submit()" novalidate>
   <h1>Workspace</h1>
 
+  @if (notice; as n) {
+    <p class="notice" [class.notice--warning]="n.warning" role="status">{{ n.text }}</p>
+  }
+
+  <label for="userName">Login</label>
+  <input id="userName" formControlName="userName" type="text"
+         autocomplete="username" autocapitalize="none" spellcheck="false" required>
+
   <label for="password">Hasło</label>
-  <input id="password" name="password" type="password" autocomplete="current-password" required>
+  <input id="password" formControlName="password" type="password"
+         autocomplete="current-password" required>
 
-  <label for="totp">Kod z aplikacji</label>
-  <input id="totp" name="totp" type="text" inputmode="numeric" autocomplete="one-time-code"
-         pattern="[0-9]{6}" maxlength="6" required>
+  <label for="totpCode">Kod z aplikacji</label>
+  <input id="totpCode" formControlName="totpCode" type="text" inputmode="numeric"
+         autocomplete="one-time-code" maxlength="6" required>
 
-  <button type="submit" disabled>Zaloguj</button>
-  <p class="hint">Logowanie nie jest jeszcze podłączone do API.</p>
+  @if (error(); as message) {
+    <p class="error" role="alert">{{ message }}</p>
+  }
+
+  <button type="submit" [disabled]="submitting()">
+    {{ submitting() ? 'Logowanie…' : 'Zaloguj' }}
+  </button>
 </form>

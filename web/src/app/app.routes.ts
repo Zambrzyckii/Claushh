@@ -1,13 +1,16 @@
 import { Routes } from '@angular/router';
 
-// TODO(stage 1): add a guard that requires login for the root path.
+import { authGuard, guestGuard } from './core/auth/auth.guards';
+
 export const routes: Routes = [
   {
     path: 'login',
+    canActivate: [guestGuard],
     loadComponent: () => import('./features/login/login').then((m) => m.Login)
   },
   {
     path: '',
+    canActivate: [authGuard],
     loadComponent: () => import('./features/workspace/workspace').then((m) => m.Workspace)
   },
   { path: '**', redirectTo: '' }

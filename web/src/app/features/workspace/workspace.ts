@@ -1,4 +1,6 @@
-import { Component, signal } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
+
+import { AuthService } from '../../core/auth/auth.service';
 
 /**
  * Main view after login (layout as in the mockup):
@@ -13,6 +15,10 @@ import { Component, signal } from '@angular/core';
   styleUrl: './workspace.scss'
 })
 export class Workspace {
+  private readonly auth = inject(AuthService);
+
+  protected readonly user = this.auth.user;
+  protected readonly loggingOut = signal(false);
   protected readonly consoleOpen = signal(true);
   protected readonly bottomOpen = signal(true);
   protected readonly bottomTab = signal<'workspace' | 'terminal'>('workspace');
@@ -23,5 +29,14 @@ export class Workspace {
 
   protected toggleBottom(): void {
     this.bottomOpen.update((open) => !open);
+  }
+
+  protected async logout(): Promise<void> {
+    if (this.loggingOut()) {
+      return;
+    }
+    this.loggingOut.set(true);
+    // AuthService finishes with a page reload, so the component state does not need to be restored.
+    await this.auth.logout();
   }
 }

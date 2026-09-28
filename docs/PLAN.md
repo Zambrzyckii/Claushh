@@ -120,8 +120,13 @@ The order is chosen so that only already secured things reach the internet.
 
 - [x] **Stage 0: skeleton.** Repo structure, documentation, empty backend with `/api/health`,
       Angular with the layout from the mockup, Postgres in Docker Compose.
-- [ ] **Stage 1: login and access.** Identity with TOTP, a single account created by a command, sessions,
-      rate limiting, login history, notifications, ForwardedHeaders, Cloudflare Tunnel, systemd service.
+- [ ] **Stage 1: login and access.**
+  - [x] Frontend: login form (username, password, TOTP), `authGuard` / `guestGuard`, logout
+        with state cleanup, handling of an expired session, tab synchronization, protection against bfcache and open redirect.
+  - [ ] Backend: Identity with TOTP, a single account created by a command, endpoints from the contract in `ARCHITECTURE.md`,
+        antiforgery, sessions, rate limiting, login history, notifications, ForwardedHeaders.
+  - [ ] Frontend: session countdown in the top bar (requires expiry information from the API).
+  - [ ] Deployment: Cloudflare Tunnel, systemd service.
 - [ ] **Stage 2: files and editor.** Files API with path protection, file tree, Monaco with saving.
 - [ ] **Stage 3: console.** `claude` process with stream-json, Console panel, model / effort / mode,
       permission requests through MCP, resuming conversations.
