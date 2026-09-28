@@ -88,6 +88,20 @@ button {
     margin-left: auto;
     color: var(--text-faint);
   }
+
+  &__toggle {
+    border: none;
+    padding: 2px 4px;
+    color: var(--text-muted);
+
+    &[aria-pressed='true'] {
+      color: var(--accent);
+    }
+
+    &:hover {
+      color: var(--text-strong);
+    }
+  }
 }
 
 .banner {

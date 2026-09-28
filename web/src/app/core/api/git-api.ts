@@ -1,6 +1,6 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { Observable, catchError, map, throwError } from 'rxjs';
+import { Observable, catchError, map, of, throwError } from 'rxjs';
 
 import { ApiError, toApiError } from './api-error';
 import { isSafeRelativePath } from './project-path';
@@ -28,6 +28,7 @@ export interface GitPullResult {
 
 const GIT_API = {
   status: '/api/git/status',
+  show: '/api/git/show',
   pull: '/api/git/pull',
   push: '/api/git/push'
 } as const;
@@ -49,6 +50,25 @@ export class GitApi {
             .filter((f) => STATUSES.includes(f.status))
             .map((f) => ({ path: f.path, status: f.status }))
         }))
+      )
+    );
+  }
+
+  /**
+   * File content in the last commit (HEAD), for the diff view. `null` when the file is not in HEAD (new file).
+   * `path` is relative to the projects directory and must lie in `repo`.
+   */
+  show(repo: string, path: string): Observable<string | null> {
+    if (!isSafeRelativePath(path) || !path.startsWith(repo + '/')) {
+      return throwError(() => new ApiError('invalid'));
+    }
+    return this.guard(repo, () =>
+      this.http
+        .get<{ content: string }>(GIT_API.show, { params: repoParam(repo).set('path', path) })
+        .pipe(map((r) => r.content ?? ''))
+    ).pipe(
+      catchError((error: unknown) =>
+        error instanceof ApiError && error.kind === 'not-found' ? of(null) : throwError(() => error)
       )
     );
   }

@@ -35,6 +35,11 @@ export async function setFile(request: APIRequestContext, path: string, content:
   await request.put('/__test/file', { data: { path, content } });
 }
 
+/** Sets the session inactivity timeout in the mock (seconds), also for already existing sessions. */
+export async function setSessionTimeout(request: APIRequestContext, idleSeconds: number): Promise<void> {
+  await request.post(`/__test/session-timeout?idle=${idleSeconds}`);
+}
+
 /** Invalidates sessions on the server. By default it also drops console connections, like the real backend. */
 export async function killSessions(request: APIRequestContext, options: { keepSockets?: boolean } = {}): Promise<void> {
   await request.post(options.keepSockets ? '/__test/kill-sessions?keepSockets=1' : '/__test/kill-sessions');
@@ -110,9 +115,9 @@ export async function openFile(page: Page, path: string): Promise<void> {
   }
 }
 
-/** Text visible in Monaco. Monaco shows spaces as  , so we normalize them. */
+/** Text visible in Monaco. Monaco shows spaces as non-breaking spaces (\u00a0), so we normalize them. */
 export async function editorText(page: Page): Promise<string> {
-  return (await page.locator('.monaco-editor .view-lines').innerText()).replace(/ /g, ' ');
+  return (await page.locator('.monaco-editor .view-lines').innerText()).replace(/\u00a0/g, ' ');
 }
 
 export async function expectEditorToContain(page: Page, text: string): Promise<void> {

@@ -17,6 +17,16 @@ export interface SessionUser {
   userName: string;
 }
 
+/**
+ * Response of `GET /api/auth/me` and `POST /api/auth/keepalive`. Relative times (in seconds), so that a wrongly
+ * set device clock does not break the countdown: `expiresIn` until expiry due to inactivity,
+ * `absoluteExpiresIn` until the hard end of the session regardless of activity.
+ */
+interface SessionTimes {
+  expiresIn?: number | null;
+  absoluteExpiresIn?: number | null;
+}
+
 export interface LoginCredentials {
   userName: string;
   password: string;
@@ -37,12 +47,15 @@ type AuthState =
 export const AUTH_API = {
   me: '/api/auth/me',
   login: '/api/auth/login',
-  logout: '/api/auth/logout'
+  logout: '/api/auth/logout',
+  keepAlive: '/api/auth/keepalive'
 } as const;
 
 /** Channel between tabs of the same browser: a logout in one tab closes the others. */
 const AUTH_CHANNEL = 'claushh-auth';
 const LOGOUT_MESSAGE = 'logout';
+/** Another tab extended the session: `{ type: 'expiry', at }` (time in ms by this browser's clock). */
+const EXPIRY_MESSAGE = 'expiry';
 
 @Injectable({ providedIn: 'root' })
 export class AuthService implements OnDestroy {
@@ -52,18 +65,35 @@ export class AuthService implements OnDestroy {
   private readonly state = signal<AuthState>({ status: 'unknown' });
   private pendingCheck: Promise<boolean> | null = null;
   private leaving = false;
+  /**
+   * A logout is in progress. When the server ends the session, it also closes its WebSockets, which could trigger "session expired"
+   * before the logout finishes. During that time, session-expired signals are ignored.
+   */
+  private loggingOut = false;
   private readonly channel =
     typeof BroadcastChannel === 'undefined' ? null : new BroadcastChannel(AUTH_CHANNEL);
+
+  private readonly expiry = signal<number | null>(null);
 
   readonly user = computed(() => {
     const state = this.state();
     return state.status === 'authenticated' ? state.user : null;
   });
 
+  /** Moment of session expiry (ms, browser clock): the earlier of the inactivity limit and the hard limit. */
+  readonly expiresAt = this.expiry.asReadonly();
+
   constructor() {
     this.channel?.addEventListener('message', (event: MessageEvent) => {
-      if (event.data === LOGOUT_MESSAGE) {
-        this.leave('/login');
+      const data: unknown = event.data;
+      if (data === LOGOUT_MESSAGE) {
+        // Only a logged-in tab reacts. A tab that is logging out by itself finishes that with the right message,
+        // and a late signal must not reload a freshly opened login screen.
+        if (!this.loggingOut && this.state().status === 'authenticated') {
+          this.leave('/login');
+        }
+      } else if (isExpiryMessage(data)) {
+        this.expiry.set(data.at);
       }
     });
   }
@@ -81,10 +111,11 @@ export class AuthService implements OnDestroy {
     if (state.status !== 'unknown') {
       return Promise.resolve(state.status === 'authenticated');
     }
-    this.pendingCheck ??= firstValueFrom(this.http.get<SessionUser>(AUTH_API.me))
+    this.pendingCheck ??= firstValueFrom(this.http.get<SessionUser & SessionTimes>(AUTH_API.me))
       .then(
         (user) => {
           this.state.set({ status: 'authenticated', user: { userName: user.userName } });
+          this.applyTimes(user);
           return true;
         },
         () => {
@@ -104,15 +135,34 @@ export class AuthService implements OnDestroy {
    * and no connection changes nothing (the server may have been only briefly unavailable).
    */
   async verifySession(): Promise<void> {
-    if (this.leaving) {
+    if (this.leaving || this.loggingOut) {
       return;
     }
     try {
-      await firstValueFrom(this.http.get<SessionUser>(AUTH_API.me));
+      this.applyTimes(await firstValueFrom(this.http.get<SessionUser & SessionTimes>(AUTH_API.me)));
     } catch (error) {
       if (error instanceof HttpErrorResponse && error.status === 401) {
         this.handleSessionExpired();
       }
+    }
+  }
+
+  /**
+   * Extends the session after user activity. This is the only request that extends the session: regular API calls
+   * (e.g. background refresh) do not, so without activity the session will expire. The interceptor handles 401.
+   */
+  async keepAlive(): Promise<void> {
+    if (this.leaving) {
+      return;
+    }
+    try {
+      this.applyTimes(await firstValueFrom(this.http.post<SessionTimes>(AUTH_API.keepAlive, null)));
+      const at = this.expiry();
+      if (at !== null) {
+        this.channel?.postMessage({ type: EXPIRY_MESSAGE, at });
+      }
+    } catch {
+      // No connection: the countdown stays. The server verifies the expiry anyway.
     }
   }
 
@@ -135,6 +185,7 @@ export class AuthService implements OnDestroy {
    * shows a warning that the session on the server may have stayed active.
    */
   async logout(): Promise<void> {
+    this.loggingOut = true;
     let confirmed: boolean;
     try {
       await firstValueFrom(this.http.post(AUTH_API.logout, null));
@@ -149,12 +200,20 @@ export class AuthService implements OnDestroy {
 
   /** Called by the interceptor when the API responds 401 to a regular request. */
   handleSessionExpired(): void {
-    if (this.leaving) {
+    if (this.leaving || this.loggingOut) {
       return;
     }
     const returnUrl = encodeURIComponent(this.navigation.currentUrl());
     this.channel?.postMessage(LOGOUT_MESSAGE);
     this.leave(`/login?reason=expired&returnUrl=${returnUrl}`);
+  }
+
+  private applyTimes(times: SessionTimes): void {
+    const now = Date.now();
+    const deadlines = [times.expiresIn, times.absoluteExpiresIn]
+      .filter((s): s is number => typeof s === 'number' && Number.isFinite(s) && s >= 0)
+      .map((s) => now + s * 1000);
+    this.expiry.set(deadlines.length ? Math.min(...deadlines) : null);
   }
 
   private leave(url: string): void {
@@ -171,7 +230,8 @@ export class AuthService implements OnDestroy {
 /**
  * The app does not store anything sensitive in browser storage, but just in case
  * (e.g. future UI settings) we clear it on every exit from the session.
- * The session and XSRF cookies are removed by the server (Set-Cookie + Clear-Site-Data).
+ * The session and XSRF cookies are removed by the server (Set-Cookie). We deliberately do not use the Clear-Site-Data header:
+ * Chrome can then stall the logout for several seconds (docs/ARCHITECTURE.md, "Authentication").
  */
 function clearBrowserStorage(): void {
   try {
@@ -180,6 +240,15 @@ function clearBrowserStorage(): void {
   } catch {
     // Storage can be blocked (private mode, browser policy). There is nothing to clear.
   }
+}
+
+function isExpiryMessage(data: unknown): data is { type: string; at: number } {
+  return (
+    typeof data === 'object' &&
+    data !== null &&
+    (data as { type?: unknown }).type === EXPIRY_MESSAGE &&
+    typeof (data as { at?: unknown }).at === 'number'
+  );
 }
 
 function toLoginFailure(error: unknown): LoginResult {

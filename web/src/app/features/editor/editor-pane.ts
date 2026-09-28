@@ -24,6 +24,11 @@ export class EditorPane {
     return doc.status === 'ready' && doc.value !== doc.savedValue;
   }
 
+  /** Diff view for a file that is not in the last commit. */
+  protected isNewFile(doc: OpenDocument): boolean {
+    return doc.diff?.status === 'ready' && doc.diff.isNew;
+  }
+
   protected close(doc: OpenDocument, event?: Event): void {
     event?.stopPropagation();
     if (this.store.close(doc.path)) {

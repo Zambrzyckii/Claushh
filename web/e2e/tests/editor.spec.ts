@@ -65,7 +65,7 @@ test('a save conflict can be resolved by reloading or overwriting', async ({ pag
 
   await banner.getByRole('button', { name: 'Wczytaj z dysku' }).click();
   await expect(banner).toHaveCount(0);
-  expect((await editorText(page)).trim()).toBe('// changed on disk');
+  await expect.poll(async () => (await editorText(page)).trim()).toBe('// changed on disk'); // Monaco renders in the next frame
 
   await setFile(request, MAIN, '// changed again\n');
   await page.locator('.monaco-editor .view-lines').click();

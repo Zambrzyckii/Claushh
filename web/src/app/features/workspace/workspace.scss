@@ -38,9 +38,26 @@ button {
   }
 
   &__user {
+    border: none;
     color: var(--text-muted);
     font-size: 12px;
     margin-right: 8px;
+    padding: 5px 6px;
+
+    &:hover {
+      color: var(--text-strong);
+    }
+  }
+
+  &__session {
+    font-size: 12px;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+    margin-right: 8px;
+
+    &--warning {
+      color: var(--accent);
+    }
   }
 
   &__sep {

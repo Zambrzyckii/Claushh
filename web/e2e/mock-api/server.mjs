@@ -58,7 +58,10 @@ let state;
 function reset() {
   for (const socket of [...(state?.sockets ?? []), ...(state?.terminalSockets ?? [])]) socket.terminate();
   state = {
-    sessions: new Map(),
+    sessions: new Map(), // sid (secret from the cookie) -> { id (public), userName, ip, device, createdAt, lastActivityAt, expiresAt, absoluteExpiresAt }
+    idleSeconds: 30 * 60,
+    absoluteSeconds: 12 * 3600,
+    logins: [],
     loginFailures: 0,
     files: new Map(Object.entries(INITIAL_FILES)),
     workspaces: new Map(INITIAL_WORKSPACES),
@@ -87,7 +90,37 @@ snapshotCommitted();
 
 const cookies = (req) =>
   Object.fromEntries((req.headers.cookie ?? '').split(/;\s*/).filter(Boolean).map((c) => [c.slice(0, c.indexOf('=')), c.slice(c.indexOf('=') + 1)]));
-const sessionOf = (req) => state.sessions.get(cookies(req).sid);
+/** Session from the cookie. An expired one (inactivity or hard limit) is removed, as on the real server. */
+function sessionOf(req) {
+  const sid = cookies(req).sid;
+  const session = state.sessions.get(sid);
+  if (session && (Date.now() > session.expiresAt || Date.now() > session.absoluteExpiresAt)) {
+    endSession(sid);
+    return undefined;
+  }
+  return session;
+}
+
+function endSession(sid) {
+  state.sessions.delete(sid);
+  for (const ws of [...state.sockets, ...state.terminalSockets]) {
+    if (ws.sid === sid) ws.terminate();
+  }
+}
+
+const sessionTimes = (session) => ({
+  expiresIn: Math.max(0, Math.round((session.expiresAt - Date.now()) / 1000)),
+  absoluteExpiresIn: Math.max(0, Math.round((session.absoluteExpiresAt - Date.now()) / 1000))
+});
+
+function deviceOf(req) {
+  const ua = req.headers['user-agent'] ?? '';
+  const browser = /Firefox\//.test(ua) ? 'Firefox' : /Edg\//.test(ua) ? 'Edge' : /Chrom/.test(ua) ? 'Chrome' : /Safari\//.test(ua) ? 'Safari' : 'Przeglądarka';
+  const os = /Windows/.test(ua) ? 'Windows' : /Android/.test(ua) ? 'Android' : /iPhone|iPad/.test(ua) ? 'iOS' : /Mac OS/.test(ua) ? 'macOS' : /Linux/.test(ua) ? 'Linux' : 'nieznany system';
+  return `${browser} · ${os}`;
+}
+
+const ipOf = (req) => (req.socket.remoteAddress ?? '').replace(/^::ffff:/, '');
 const xsrfOk = (req) => !!cookies(req)['XSRF-TOKEN'] && req.headers['x-xsrf-token'] === cookies(req)['XSRF-TOKEN'];
 const version = (content) => crypto.createHash('sha1').update(content ?? '').digest('hex').slice(0, 12);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -101,7 +134,7 @@ function readBody(req) {
 }
 
 function json(res, status, body, headers = {}) {
-  res.writeHead(status, { 'Content-Type': 'application/json', ...headers }).end(body === undefined ? '' : JSON.stringify(body));
+  res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...headers }).end(body === undefined ? '' : JSON.stringify(body));
 }
 
 function listDir(dir) {
@@ -161,6 +194,13 @@ const server = http.createServer(async (req, res) => {
     json(res, 204);
     return;
   }
+  if (url.pathname === '/__test/session-timeout') {
+    // Shortens the inactivity timeout (also for existing sessions), so the countdown test does not wait 30 minutes.
+    state.idleSeconds = Number(url.searchParams.get('idle') ?? 1800);
+    for (const session of state.sessions.values()) session.expiresAt = Date.now() + state.idleSeconds * 1000;
+    json(res, 204);
+    return;
+  }
   if (url.pathname === '/__test/kill-sessions') {
     state.sessions.clear();
     // keepSockets=1: the session is invalidated, but open WebSockets stay (a test of the HTTP interceptor alone).
@@ -185,7 +225,7 @@ const server = http.createServer(async (req, res) => {
   // authentication
   if (url.pathname === '/api/auth/me') {
     res.setHeader('Set-Cookie', `XSRF-TOKEN=${crypto.randomUUID()}; Path=/; SameSite=Strict`);
-    session ? json(res, 200, { userName: session.userName }) : json(res, 401);
+    session ? json(res, 200, { userName: session.userName, ...sessionTimes(session) }) : json(res, 401);
     return;
   }
   if (url.pathname === '/api/auth/login' && req.method === 'POST') {
@@ -194,12 +234,25 @@ const server = http.createServer(async (req, res) => {
     state.log.push({ path: url.pathname, xsrf: ok });
     if (!ok) return json(res, 400);
     if (state.loginFailures >= 3) return json(res, 429, undefined, { 'Retry-After': '30' });
+    const attempt = { at: new Date().toISOString(), ip: ipOf(req), device: deviceOf(req) };
     if (body?.userName !== USER.userName || body?.password !== USER.password || body?.totpCode !== USER.totpCode) {
       state.loginFailures++;
+      state.logins.unshift({ ...attempt, success: false });
       return json(res, 401);
     }
+    state.logins.unshift({ ...attempt, success: true });
     const sid = crypto.randomUUID();
-    state.sessions.set(sid, { userName: USER.userName });
+    const now = Date.now();
+    state.sessions.set(sid, {
+      id: crypto.randomUUID(),
+      userName: USER.userName,
+      ip: ipOf(req),
+      device: deviceOf(req),
+      createdAt: new Date(now).toISOString(),
+      lastActivityAt: new Date(now).toISOString(),
+      expiresAt: now + state.idleSeconds * 1000,
+      absoluteExpiresAt: now + state.absoluteSeconds * 1000
+    });
     return json(res, 204, undefined, { 'Set-Cookie': `sid=${sid}; Path=/; HttpOnly; SameSite=Strict` });
   }
   if (url.pathname === '/api/auth/logout' && req.method === 'POST') {
@@ -207,11 +260,48 @@ const server = http.createServer(async (req, res) => {
     state.log.push({ path: url.pathname, xsrf: ok, hadSession: !!session });
     if (!ok) return json(res, 400);
     if (!session) return json(res, 401);
-    state.sessions.delete(cookies(req).sid);
+    endSession(cookies(req).sid);
     return json(res, 204, undefined, {
-      'Set-Cookie': ['sid=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict', 'XSRF-TOKEN=; Path=/; Max-Age=0; SameSite=Strict'],
-      'Clear-Site-Data': '"cache", "storage"'
+      // Deliberately without Clear-Site-Data: Chrome can then hold the response for several seconds
+      // (especially with a second open tab). The frontend clears storage, the API has no-store.
+      'Set-Cookie': ['sid=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict', 'XSRF-TOKEN=; Path=/; Max-Age=0; SameSite=Strict']
     });
+  }
+
+  // extending the session, session list, login history
+  if (url.pathname === '/api/auth/keepalive' && req.method === 'POST') {
+    if (!session) return json(res, 401);
+    if (!xsrfOk(req)) return json(res, 400);
+    session.expiresAt = Date.now() + state.idleSeconds * 1000;
+    session.lastActivityAt = new Date().toISOString();
+    state.log.push({ path: 'keepalive' });
+    return json(res, 200, sessionTimes(session));
+  }
+  if (url.pathname.startsWith('/api/auth/sessions') || url.pathname === '/api/auth/logins') {
+    if (!session) return json(res, 401);
+    if (req.method !== 'GET' && !xsrfOk(req)) return json(res, 400);
+    const currentSid = cookies(req).sid;
+    if (url.pathname === '/api/auth/logins' && req.method === 'GET') return json(res, 200, state.logins.slice(0, 20));
+    if (url.pathname === '/api/auth/sessions' && req.method === 'GET') {
+      return json(res, 200, [...state.sessions].map(([sid, s]) => ({
+        id: s.id, current: sid === currentSid, device: s.device, ip: s.ip, createdAt: s.createdAt, lastActivityAt: s.lastActivityAt
+      })));
+    }
+    if (url.pathname === '/api/auth/sessions/revoke-others' && req.method === 'POST') {
+      for (const sid of [...state.sessions.keys()]) if (sid !== currentSid) endSession(sid);
+      state.log.push({ path: 'revoke-others' });
+      return json(res, 204);
+    }
+    const match = url.pathname.match(/^\/api\/auth\/sessions\/([^/]+)$/);
+    if (match && req.method === 'DELETE') {
+      const entry = [...state.sessions].find(([, s]) => s.id === decodeURIComponent(match[1]));
+      if (!entry) return json(res, 404);
+      if (entry[0] === currentSid) return json(res, 400, { message: 'Własną sesję kończy się wylogowaniem.' });
+      endSession(entry[0]);
+      state.log.push({ path: 'revoke', id: entry[1].id });
+      return json(res, 204);
+    }
+    return json(res, 404);
   }
 
   // workspaces and git
@@ -269,6 +359,13 @@ const server = http.createServer(async (req, res) => {
     const repoPath = url.searchParams.get('repo') ?? '';
     const repo = state.repos.get(repoPath);
     if (!repo) return json(res, 404);
+    if (url.pathname === '/api/git/show' && req.method === 'GET') {
+      const file = url.searchParams.get('path') ?? '';
+      if (!file.startsWith(repoPath + '/') || file.split('/').includes('..')) return json(res, 400);
+      return repo.committed.has(file) && repo.committed.get(file) !== null
+        ? json(res, 200, { content: repo.committed.get(file) })
+        : json(res, 404);
+    }
     if (url.pathname === '/api/git/status' && req.method === 'GET') {
       return json(res, 200, { branch: repo.branch, ahead: repo.ahead, behind: repo.behind, files: gitFiles(repoPath) });
     }
@@ -357,7 +454,10 @@ server.on('upgrade', (req, socket, head) => {
     socket.destroy();
     return;
   }
-  wss.handleUpgrade(req, socket, head, (ws) => onConnection(ws, hub));
+  wss.handleUpgrade(req, socket, head, (ws) => {
+    ws.sid = cookies(req).sid; // so that ending the session closes its connections
+    onConnection(ws, hub);
+  });
 });
 
 function send(ws, message) {

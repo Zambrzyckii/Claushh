@@ -3,6 +3,7 @@ import { Subject } from 'rxjs';
 import { vi } from 'vitest';
 
 import { FileApiError, FileContent, FilesApi } from '../../core/api/files-api';
+import { GitApi } from '../../core/api/git-api';
 import { EditorStore } from './editor-store';
 
 describe('EditorStore', () => {
@@ -28,7 +29,7 @@ describe('EditorStore', () => {
         return subject;
       })
     };
-    TestBed.configureTestingModule({ providers: [EditorStore, { provide: FilesApi, useValue: files }] });
+    TestBed.configureTestingModule({ providers: [EditorStore, { provide: FilesApi, useValue: files }, { provide: GitApi, useValue: {} }] });
     store = TestBed.inject(EditorStore);
   });
 

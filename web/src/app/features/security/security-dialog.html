@@ -1,0 +1,80 @@
+<dialog #dialog aria-labelledby="security-title" (cancel)="close()">
+  <div class="head">
+    <h2 id="security-title">Bezpieczeństwo</h2>
+    <button type="button" class="close" aria-label="Zamknij" (click)="close()">×</button>
+  </div>
+
+  @if (timer.label(); as remaining) {
+    <p class="muted">Sesja wygaśnie za {{ remaining }} bez aktywności. Każda aktywność na stronie ją przedłuża.</p>
+  }
+
+  @if (error(); as message) {
+    <p class="error" role="alert">{{ message }}</p>
+  }
+
+  <section aria-labelledby="sessions-title">
+    <h3 id="sessions-title">Aktywne sesje</h3>
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">Urządzenie</th>
+          <th scope="col">IP</th>
+          <th scope="col">Zalogowano</th>
+          <th scope="col">Ostatnia aktywność</th>
+          <th scope="col"><span class="visually-hidden">Akcje</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (s of sessions(); track s.id) {
+          <tr class="session" [class.session--current]="s.current">
+            <td>{{ s.device }}</td>
+            <td class="mono">{{ s.ip }}</td>
+            <td>{{ date(s.createdAt) }}</td>
+            <td>{{ date(s.lastActivityAt) }}</td>
+            <td class="actions">
+              @if (s.current) {
+                <span class="muted">ta sesja</span>
+              } @else {
+                <button type="button" [disabled]="busy()" [attr.aria-label]="'Wyloguj sesję ' + s.device + ' ' + s.ip"
+                        (click)="revoke(s)">Wyloguj</button>
+              }
+            </td>
+          </tr>
+        } @empty {
+          <tr><td colspan="5" class="muted">{{ sessions() === null ? 'Wczytywanie…' : 'Brak sesji.' }}</td></tr>
+        }
+      </tbody>
+    </table>
+    <div class="buttons">
+      <button type="button" [disabled]="busy() || otherSessions() === 0" (click)="revokeOthers()">Wyloguj pozostałe sesje</button>
+      <button type="button" class="danger" [disabled]="busy()" (click)="everywhere()">Wyloguj wszędzie</button>
+    </div>
+  </section>
+
+  <section aria-labelledby="logins-title">
+    <h3 id="logins-title">Historia logowań</h3>
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">Data</th>
+          <th scope="col">IP</th>
+          <th scope="col">Urządzenie</th>
+          <th scope="col">Wynik</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (l of logins(); track $index) {
+          <tr class="login" [class.login--failed]="!l.success">
+            <td>{{ date(l.at) }}</td>
+            <td class="mono">{{ l.ip }}</td>
+            <td>{{ l.device }}</td>
+            <td>{{ l.success ? 'udane' : 'nieudane' }}</td>
+          </tr>
+        } @empty {
+          <tr><td colspan="4" class="muted">{{ logins() === null ? 'Wczytywanie…' : 'Brak wpisów.' }}</td></tr>
+        }
+      </tbody>
+    </table>
+    <p class="muted hint">Nie rozpoznajesz logowania? Wyloguj wszędzie i zmień hasło.</p>
+  </section>
+</dialog>

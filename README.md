@@ -4,7 +4,8 @@ A private web portal for working on projects from any device: code editor, conso
 terminal and git in the browser. Runs on a home computer (EndeavourOS), access through Cloudflare Tunnel,
 login with a password and a TOTP code. One user.
 
-Status: **frontend ready (login, editor, console, workspaces and git, terminal), backend not yet.** Nothing is fit to be exposed
+Status: **frontend ready (login and sessions, editor with a diff view, console, workspaces and git, terminal),
+backend not yet.** Nothing is fit to be exposed
 to the internet. Progress: [`docs/PLAN.md`](docs/PLAN.md), section "Stages".
 
 ## Documentation

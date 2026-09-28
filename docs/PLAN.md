@@ -82,7 +82,8 @@ console conversation identifiers, settings (default model, effort, mode).
 - Login attempt limit (`RateLimiter`) and lockout after several failures.
 - Phone notification on every login (ntfy or Telegram).
 - Cookies `HttpOnly`, `Secure`, `SameSite=Strict`, antiforgery.
-- Short sessions (e.g. 30 minutes of inactivity), list of active sessions, "wyloguj wszędzie" (log out everywhere).
+- Short sessions (e.g. 30 minutes of inactivity, hard limit of 12 h), extended only by user activity,
+  list of active sessions, login history, "wyloguj wszędzie" (log out everywhere).
 - `[Authorize]` on SignalR hubs and checking the `Origin` header on WebSockets.
 - `ForwardedHeaders` trusts only the local `cloudflared`, the real IP from the `CF-Connecting-IP` header.
 
@@ -125,7 +126,7 @@ The order is chosen so that only already secured things reach the internet.
         with state cleanup, handling of an expired session, tab synchronization, protection against bfcache and open redirect.
   - [ ] Backend: Identity with TOTP, a single account created by a command, endpoints from the contract in `ARCHITECTURE.md`,
         antiforgery, sessions, rate limiting, login history, notifications, ForwardedHeaders.
-  - [ ] Frontend: session countdown in the top bar (requires expiry information from the API).
+  - [x] Frontend: session countdown in the top bar (stage 5).
   - [ ] Deployment: Cloudflare Tunnel, systemd service.
 - [ ] **Stage 2: files and editor.**
   - [x] Frontend: explorer with lazy loading, Monaco with tabs, saving (Ctrl+S), detection of
@@ -147,5 +148,8 @@ The order is chosen so that only already secured things reach the internet.
         or duplicating output, size fitting, `exit`, Ctrl+S for the program in the terminal.
   - [ ] Backend: workspaces and git API and hub `/hubs/terminal` from the contracts in `ARCHITECTURE.md`
         (terminal: PTY + tmux).
-- [ ] **Stage 5: polish.** Colors, diff view, session list and "wyloguj wszędzie" (log out everywhere), passkeys,
-      backups, a possible phone view.
+- [ ] **Stage 5: polish.**
+  - [x] Frontend: session countdown with extension on activity, "Bezpieczeństwo" (security) dialog (active sessions,
+        login history, "Wyloguj pozostałe" (log out other sessions) and "Wyloguj wszędzie" (log out everywhere)), diff view against HEAD in the editor.
+  - [ ] Backend: session endpoints from the contract, passkeys, backups.
+  - [ ] Colors (the owner will refine them in later iterations), a possible phone view (low priority).

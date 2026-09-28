@@ -21,10 +21,27 @@
         <span class="breadcrumb__sep">›</span>
       }
     }
-    @if (doc.saving) {
-      <span class="breadcrumb__state">zapisywanie…</span>
+    <span class="breadcrumb__state">
+      @if (doc.saving) {
+        zapisywanie…
+      } @else if (doc.diff?.status === 'loading') {
+        wczytywanie zmian…
+      } @else if (isNewFile(doc)) {
+        nowy plik (brak w ostatnim commicie)
+      }
+    </span>
+    @if (doc.status === 'ready' && store.canDiff(doc.path)) {
+      <button type="button" class="breadcrumb__toggle" [attr.aria-pressed]="doc.diff !== null"
+              (click)="store.toggleDiff(doc.path)">{{ doc.diff ? 'Ukryj zmiany' : 'Pokaż zmiany' }}</button>
     }
   </div>
+
+  @if (doc.diff?.status === 'error') {
+    <div class="banner banner--warning" role="alert">
+      <span>Nie udało się wczytać wersji z ostatniego commita.</span>
+      <button type="button" (click)="store.toggleDiff(doc.path)">Zamknij widok zmian</button>
+    </div>
+  }
 
   @if (doc.conflict) {
     <div class="banner banner--warning" role="alert">

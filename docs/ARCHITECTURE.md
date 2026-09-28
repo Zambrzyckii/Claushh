@@ -4,8 +4,8 @@ This file describes the **current state of the code**: what lives where and how 
 Goals and decisions are in [`PLAN.md`](PLAN.md). After every change to the structure, a new module, endpoint
 or dependency, update the relevant section.
 
-Status: frontend of stages 1–4 done (login, explorer, editor, console, workspaces and git, terminal).
-What is left is polish (stage 5). The backend has only `/api/health`.
+Status: frontend done (login, session countdown and the "Bezpieczeństwo" (Security) window, explorer, editor with diff view,
+console, workspaces and git, terminal). The backend has only `/api/health`.
 The frontend is tested against a mock backend (`web/e2e/mock-api/`) that follows the contracts below.
 
 ## Flow
@@ -42,6 +42,8 @@ to the API at `http://localhost:5080` (`web/proxy.conf.json`).
 | `web/src/app/core/auth/auth.guards.ts` | `authGuard` (only with a session), `guestGuard` (only without a session) |
 | `web/src/app/core/auth/auth.interceptor.ts` | 401 from the API → end of the session and reload to `/login` |
 | `web/src/app/core/auth/return-url.ts` | `returnUrl` validation (open redirect protection) |
+| `web/src/app/core/auth/session-timer.ts` | countdown to the end of the session, extension on activity (at most once a minute) |
+| `web/src/app/core/api/sessions-api.ts` | API client for active sessions and login history |
 | `web/src/app/core/browser/hard-navigation.ts` | full page reload (clears all in-memory state) |
 | `web/src/app/core/browser/bfcache-guard.ts` | reload of a page restored from the back/forward cache |
 | `web/src/app/core/browser/dialogs.ts` | the browser's `confirm()` wrapped in a service (to swap out in tests) |
@@ -59,13 +61,14 @@ to the API at `http://localhost:5080` (`web/proxy.conf.json`).
 | `web/src/app/core/realtime/terminal-connection.ts` | connection to `/hubs/terminal` (built on `HubClient`) |
 | `web/src/app/core/api/project-path.ts` | relative path validation (no `..`, leading `/`, `\`) |
 | `web/src/app/features/explorer/` | file tree, directories loaded lazily on expand, git badges, "Odśwież" (Refresh) |
-| `web/src/app/features/editor/editor-store.ts` | state of open files: tabs, unsaved changes, save, conflicts (no dependency on Monaco) |
-| `web/src/app/features/editor/code-editor.ts` | Monaco instance, one model per open file, synchronization with EditorStore |
+| `web/src/app/features/editor/editor-store.ts` | state of open files: tabs, unsaved changes, save, conflicts, diff view (no dependency on Monaco) |
+| `web/src/app/features/editor/code-editor.ts` | Monaco: a regular editor or a diff view (diff against HEAD), one model per open file |
 | `web/src/app/features/editor/editor-pane.*` | tabs, path, error and conflict messages, the slot for the editor |
 | `web/src/app/features/editor/monaco-loader.ts` | lazy loading of Monaco, its styles (`monaco.css`), workers and theme |
 | `web/src/app/features/editor/workers/` | entry points of the Monaco web workers (editor, TS, JSON, CSS, HTML) |
 | `web/tsconfig.worker.json` | tsconfig for the workers (referenced in `angular.json` as `webWorkerTsConfig`) |
 | `web/src/app/features/login/` | login screen: username, password, TOTP code |
+| `web/src/app/features/security/` | the "Bezpieczeństwo" (Security) window: active sessions, login history, "Wyloguj pozostałe" (log out others) / "Wyloguj wszędzie" (log out everywhere) |
 | `web/src/app/features/console/console-store.ts` | conversation state built from hub events, sending, permissions, interrupt, new conversation |
 | `web/src/app/features/console/console-panel.*` | the Konsola (Console) panel: the conversation as plain text, prompt field, model / effort / mode |
 | `web/src/app/features/workspaces/workspaces-store.ts` | state of the Workspace panel: workspaces, repositories, pull / push, create, clone |
@@ -75,7 +78,7 @@ to the API at `http://localhost:5080` (`web/proxy.conf.json`).
 | `web/src/app/features/terminal/terminal-panel.*` | the "Terminal" tab: the terminal bar and their views |
 | `web/src/app/features/terminal/terminal-view.ts` | a single xterm.js: attaching with a snapshot and `seq` numbers, typing, size fitting |
 | `web/src/app/features/terminal/xterm-loader.ts` | lazy loading of xterm.js and the terminal look (theme, font) |
-| `web/src/app/features/workspace/` | main layout: path and branch in the top bar, explorer, editor, console, bottom panel (Workspace, Terminal), status bar, Ctrl+S |
+| `web/src/app/features/workspace/` | main layout: path and branch, the session countdown and the "Bezpieczeństwo" button in the top bar, explorer, editor, console, bottom panel (Workspace, Terminal), status bar, Ctrl+S |
 | `web/playwright.config.ts` | e2e configuration (build from `dist/`, mock on port 4400, Chromium) |
 | `web/e2e/mock-api/server.mjs` | mock backend: auth, files, workspaces and simulated git, console and terminal hubs (SignalR JSON over WebSocket, simulated shell), `/__test/*` |
 | `web/e2e/tests/` | e2e tests: `auth`, `editor`, `console`, `workspaces`, `terminal` + `helpers.ts` |
@@ -97,6 +100,14 @@ to the API at `http://localhost:5080` (`web/proxy.conf.json`).
   on state-changing requests.
 - **Leaving a session always ends with a full reload** (`location.replace`), so the whole app state
   disappears from memory, and no history entry with the logged-in view remains.
+- **Only user activity extends the session** (key press, click, scroll, also in the editor
+  and the terminal): `SessionTimer` calls `POST /api/auth/keepalive` at most once a minute. Regular API
+  requests (e.g. background refresh, console work) do not extend the session, so a computer left unattended logs out.
+- The server gives expiry times **relatively, in seconds** (`expiresIn`, `absoluteExpiresIn`), so a wrongly
+  set device clock does not break the countdown. The countdown shows the earlier of the two deadlines.
+- During logout, "session expired" signals (closed WebSockets, 401) are ignored, and the
+  logout signal from another tab is handled only by a logged-in tab. Otherwise races changed the message
+  "Wylogowano" (Logged out) to "Sesja wygasła" (Session expired) or reloaded a fresh login screen.
 
 ### Flows
 
@@ -110,20 +121,36 @@ to the API at `http://localhost:5080` (`web/proxy.conf.json`).
 | 401 from another API endpoint | interceptor → the same as logout, target `/login?reason=expired&returnUrl=…`. Several simultaneous 401s give one reload |
 | Logout in another tab | this tab also clears its state and reloads to `/login` |
 | "Back" after logout | the page from bfcache is reloaded, the guard sends you to `/login` |
+| Countdown in the top bar | "Sesja wygasa za m:ss" (Session expires in m:ss). The last 2 minutes in yellow with a "Przedłuż" (Extend) button |
+| Countdown reached zero | `GET /api/auth/me`: 401 → as an expired session, 200 (e.g. extended in another tab) → new countdown |
+| Extension in one tab | other tabs get the new deadline via `BroadcastChannel` |
+| "Wyloguj wszędzie" | `POST /api/auth/sessions/revoke-others`, then a regular logout of this session |
 
 ### API contract (to be implemented in the backend)
 
 | Method | Path | Response |
 |---|---|---|
-| GET | `/api/auth/me` | `200 {"userName": "..."}` or `401`. **Always sets a fresh `XSRF-TOKEN` cookie** (also on 401, because it is needed for login) |
+| GET | `/api/auth/me` | `200 {"userName","expiresIn","absoluteExpiresIn"}` (seconds until the idle expiry and until the hard limit) or `401`. **Does not extend the session.** **Always sets a fresh `XSRF-TOKEN` cookie** (also on 401, because it is needed for login) |
 | POST | `/api/auth/login` | body `{"userName","password","totpCode"}`. `204` + session cookie, `401` on wrong credentials (without saying what was wrong), `429` with `Retry-After`, `400` on a bad XSRF token |
-| POST | `/api/auth/logout` | invalidates the session **on the server** (not just the cookie), `204` with `Set-Cookie` expiring the session and XSRF cookies and `Clear-Site-Data: "cache", "storage"`. `401` when the session no longer exists |
+| POST | `/api/auth/logout` | invalidates the session **on the server** (not just the cookie) and closes its WebSockets, `204` with `Set-Cookie` expiring the session and XSRF cookies. `401` when the session no longer exists. **No `Clear-Site-Data`**: Chrome then holds the response for up to several seconds (measured in e2e tests), and the frontend clears storage anyway |
+| POST | `/api/auth/keepalive` | extends the session by the idle time (e.g. 30 min), no further than the hard limit (e.g. 12 h). `200 {"expiresIn","absoluteExpiresIn"}`. **The only request that extends the session** |
+
+#### Sessions and login history
+
+| Method | Path | Response |
+|---|---|---|
+| GET | `/api/auth/sessions` | `200 [{"id","current","device","ip","createdAt","lastActivityAt"}]`. `id` is a public ID, **never the secret from the cookie**. `device` e.g. "Chrome · Linux" from the User-Agent header, `ip` from `CF-Connecting-IP` |
+| DELETE | `/api/auth/sessions/{id}` | ends another session (including its WebSockets). `204`, `404` unknown, `400` for your own session (that is what logout is for) |
+| POST | `/api/auth/sessions/revoke-others` | ends all sessions except the current one. `204` |
+| GET | `/api/auth/logins` | `200 [{"at","ip","device","success"}]`, the last 20, newest first, including failed attempts |
 
 Backend requirements that follow from the frontend:
 - session cookie: `HttpOnly; Secure; SameSite=Strict; Path=/`,
 - `XSRF-TOKEN` cookie: **without** `HttpOnly` (Angular must read it), `Secure; SameSite=Strict; Path=/`,
 - validation of the `X-XSRF-TOKEN` header on every POST/PUT/PATCH/DELETE, including login,
 - every endpoint except `/api/health` and the three above returns `401` without a session,
+- the session expires after an idle time counted from the last `keepalive` (or login) and after the hard limit,
+- all `/api/*` responses with `Cache-Control: no-store`,
 - `index.html` with the `Cache-Control: no-store` header.
 
 ## Files and editor
@@ -152,8 +179,12 @@ Backend requirements that follow from the frontend:
   imported from lazy modules, hence this exception. The `.ttf` loader in `angular.json` is needed because the Monaco
   modules import the icon font.
 - Monaco displays spaces as `\u00a0`. Keep this in mind in tests that read text from the editor.
-- Shortcuts: Ctrl+S / Cmd+S saves the active file (also when focus is outside the editor). The middle mouse button
-  closes a tab.
+- Shortcuts: Ctrl+S / Cmd+S saves the active file (also when focus is outside the editor, but not in the terminal).
+  The middle mouse button closes a tab.
+- **Diff view:** the "Pokaż zmiany" (Show changes) button next to the file path (for files in a repository) switches to the Monaco diff:
+  on the left the version from HEAD (`GET /api/git/show`, read-only), on the right the same model as in the editor, so
+  editing and saving work normally. A file that is not in HEAD is shown as new. On a narrow screen the diff
+  switches to a single-column view. After changes from the console the HEAD version is loaded again (there may have been a commit).
 
 ### Files API contract (to be implemented in the backend)
 
@@ -257,6 +288,7 @@ Errors have a `{"message"}` body with a description (e.g. git output), which the
 | POST | `/api/workspaces` | body `{"name"}`. `201 {"name","path","repoCount":0}`. Name: letters, digits, spaces, `-`, `_`, up to 40 characters. Directory: lowercase, Polish characters replaced with Latin ones (`ł`→`l`), spaces with `-`. `400` bad name, `409` directory exists |
 | GET | `/api/repos?workspace=<katalog>` | `200 [RepoSummary]`. `404` when the workspace does not exist |
 | POST | `/api/repos/clone` | body `{"workspace","url"}`. `201 RepoSummary`. Directory name from the last URL segment without `.git`. `400` bad URL, `404` no workspace, `409` directory exists, `502` git error (e.g. no repository) |
+| GET | `/api/git/show?repo=<repo>&path=<plik>` | `200 {"content"}`: the file content in HEAD (for the diff view). `404` when the file is not in HEAD. `400` when `path` is not inside `repo` |
 | GET | `/api/git/status?repo=<repo>` | `200 {"branch","ahead","behind","files":[{"path","status"}]}`. `status`: `modified`/`added`/`deleted`/`renamed`/`untracked`/`conflicted`. Untracked files individually (`--untracked-files=all`). `404` when it is not a repository |
 | POST | `/api/git/pull?repo=<repo>` | `git pull --ff-only`. `200 {"message","changedPaths"}`. `409` when it cannot fast-forward or local changes would be overwritten. `400` no remote branch, `502` remote repository error |
 | POST | `/api/git/push?repo=<repo>` | `200 {"message"}` (without an upstream: `git push -u origin HEAD`). `409` rejected (pull first). `400` no remote repository, `502` other remote error |
@@ -346,12 +378,13 @@ Rules: `CLAUDE.md`, section "Tests" (new code: only integration and e2e tests).
 
 | Kind | Command | What it covers |
 |---|---|---|
-| Integration + older unit | `cd web && npm test` | Vitest (jsdom). Integration: `console.integration.spec.ts` (panel + store + editor, SignalR and HTTP stubbed), `workspaces.integration.spec.ts` (Workspace panel + router + git status + explorer + editor, HTTP stubbed). Older unit tests: auth, files API, paths, explorer, `EditorStore` |
-| E2E | `cd web && npm run e2e` | build + Playwright in Chromium on `e2e/mock-api/server.mjs`: login and sessions, explorer and Monaco, console (steps, options, permissions, interrupt, replay, multiple tabs, file changes), workspaces (opening a repo, git status, pull, push, create, clone, a conversation per repo), terminal (commands, keys, reload without duplicates, multiple terminals, `exit`, Ctrl+S, resizing) |
+| Integration + older unit | `cd web && npm test` | Vitest (jsdom). Integration: `console.integration.spec.ts` (panel + store + editor, SignalR and HTTP stubbed), `workspaces.integration.spec.ts` (Workspace panel + router + git status + explorer + editor, HTTP stubbed), `security.integration.spec.ts` (AuthService + interceptor + SessionTimer + the "Bezpieczeństwo" window, HTTP, reload and clock stubbed). Older unit tests: auth, files API, paths, explorer, `EditorStore` |
+| E2E | `cd web && npm run e2e` | build + Playwright in Chromium on `e2e/mock-api/server.mjs`: login and sessions, explorer and Monaco, console (steps, options, permissions, interrupt, replay, multiple tabs, file changes), workspaces (opening a repo, git status, pull, push, create, clone, a conversation per repo), terminal (commands, keys, reload without duplicates, multiple terminals, `exit`, Ctrl+S, resizing), session (countdown, "Przedłuż", activity once a minute on a fake clock, expiry), the "Bezpieczeństwo" window with a second device (a separate browser context), diff view |
 | Backend | none (they will come with the backend, project `tests/Claushh.Api.Tests`) | xUnit |
 
 Notes on e2e:
 - The mock has one shared state, the tests run sequentially and start with `POST /__test/reset`.
+- The session idle time in the mock can be shortened: `POST /__test/session-timeout?idle=<s>`.
 - Git in the mock is simulated: the "committed" state is the file content from the reset, the status is the difference from it.
 - Browser: `npx playwright install chromium` or the `CHROMIUM_PATH` variable pointing to the system Chromium.
 - Monaco and xterm display spaces as `\u00a0`. `helpers.ts` → `editorText` and `terminalText` normalize the text.

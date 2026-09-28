@@ -3,6 +3,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { firstValueFrom } from 'rxjs';
 
 import { FileApiError, FilesApi, fileErrorMessage } from '../../core/api/files-api';
+import { GitApi } from '../../core/api/git-api';
 import { baseName } from '../../core/api/project-path';
 import { ProjectContext } from '../../core/project/project-context';
 
@@ -36,7 +37,14 @@ export interface OpenDocument {
   conflict: { currentVersion: string | null } | null;
   /** The file changed on disk (console, pull) and the editor has unsaved changes (so we did not load it ourselves). */
   changedOnDisk: boolean;
+  /** Diff view against the last commit (HEAD). `null` = regular editor. */
+  diff: DiffState | null;
 }
+
+export type DiffState =
+  | { status: 'loading' }
+  | { status: 'ready'; original: string; isNew: boolean }
+  | { status: 'error'; error: string };
 
 export interface CursorPosition {
   line: number;
@@ -46,6 +54,7 @@ export interface CursorPosition {
 @Injectable()
 export class EditorStore {
   private readonly files = inject(FilesApi);
+  private readonly git = inject(GitApi);
 
   private readonly docs = signal<readonly OpenDocument[]>([]);
   private readonly activePathSignal = signal<string | null>(null);
@@ -77,11 +86,47 @@ export class EditorStore {
       if (!doc || doc.status !== 'ready') {
         continue;
       }
+      if (doc.diff) {
+        // A change from the console could have been a commit, so the version from HEAD could have changed too.
+        void this.loadOriginal(path);
+      }
       if (isDirty(doc) || doc.saving) {
         this.patch(path, (d) => ({ ...d, changedOnDisk: true }));
       } else {
         void this.reload(path);
       }
+    }
+  }
+
+  /** Whether the file lies in a repository (workspace/repo/...), so its changes can be shown. */
+  canDiff(path: string): boolean {
+    return repoOf(path) !== null;
+  }
+
+  /** Turns the diff view against HEAD on or off for a file. */
+  async toggleDiff(path: string): Promise<void> {
+    const doc = this.find(path);
+    if (!doc || doc.status !== 'ready') {
+      return;
+    }
+    if (doc.diff) {
+      this.patch(path, (d) => ({ ...d, diff: null }));
+      return;
+    }
+    await this.loadOriginal(path);
+  }
+
+  private async loadOriginal(path: string): Promise<void> {
+    const repo = repoOf(path);
+    if (!repo) {
+      return;
+    }
+    this.patch(path, (d) => ({ ...d, diff: d.diff?.status === 'ready' ? d.diff : { status: 'loading' } }));
+    try {
+      const original = await firstValueFrom(this.git.show(repo, path));
+      this.patch(path, (d) => (d.diff ? { ...d, diff: { status: 'ready', original: original ?? '', isNew: original === null } } : d));
+    } catch {
+      this.patch(path, (d) => (d.diff ? { ...d, diff: { status: 'error', error: 'Nie udało się wczytać wersji z ostatniego commita.' } } : d));
     }
   }
 
@@ -112,7 +157,8 @@ export class EditorStore {
       saving: false,
       error: null,
       conflict: null,
-      changedOnDisk: false
+      changedOnDisk: false,
+      diff: null
     };
     this.docs.update((docs) => (existing ? docs.map((d) => (d.path === path ? placeholder : d)) : [...docs, placeholder]));
 
@@ -246,6 +292,12 @@ export class EditorStore {
   private patch(path: string, change: (doc: OpenDocument) => OpenDocument): void {
     this.docs.update((docs) => docs.map((d) => (d.path === path ? change(d) : d)));
   }
+}
+
+/** Repository of a file: the first two path segments (`workspace/repo`), if the file lies deeper. */
+function repoOf(path: string): string | null {
+  const parts = path.split('/');
+  return parts.length >= 3 ? `${parts[0]}/${parts[1]}` : null;
 }
 
 function isDirty(doc: OpenDocument): boolean {

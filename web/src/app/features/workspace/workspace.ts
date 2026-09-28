@@ -1,6 +1,7 @@
-import { Component, HostListener, computed, inject, signal } from '@angular/core';
+import { Component, HostListener, computed, inject, signal, viewChild } from '@angular/core';
 
 import { AuthService } from '../../core/auth/auth.service';
+import { SessionTimer } from '../../core/auth/session-timer';
 import { Dialogs } from '../../core/browser/dialogs';
 import { ProjectContext } from '../../core/project/project-context';
 import { RepoStatusStore } from '../../core/project/repo-status';
@@ -11,6 +12,7 @@ import { ConsolePanel } from '../console/console-panel';
 import { ConsoleStore } from '../console/console-store';
 import { EditorPane } from '../editor/editor-pane';
 import { EditorStore } from '../editor/editor-store';
+import { SecurityDialog } from '../security/security-dialog';
 import { Explorer } from '../explorer/explorer';
 import { TerminalPanel } from '../terminal/terminal-panel';
 import { TerminalStore } from '../terminal/terminal-store';
@@ -30,8 +32,9 @@ import { WorkspacesStore } from '../workspaces/workspaces-store';
  */
 @Component({
   selector: 'app-workspace',
-  imports: [Explorer, EditorPane, ConsolePanel, WorkspacesPanel, TerminalPanel],
+  imports: [Explorer, EditorPane, ConsolePanel, WorkspacesPanel, TerminalPanel, SecurityDialog],
   providers: [
+    SessionTimer,
     ProjectContext,
     RepoStatusStore,
     EditorStore,
@@ -52,6 +55,8 @@ export class Workspace {
   protected readonly console = inject(ConsoleStore);
   protected readonly repoStatus = inject(RepoStatusStore);
   protected readonly workspaces = inject(WorkspacesStore);
+  protected readonly sessionTimer = inject(SessionTimer);
+  private readonly securityDialog = viewChild.required(SecurityDialog);
 
   protected readonly changesLabel = computed(() => {
     const count = this.repoStatus.changeCount();
@@ -85,6 +90,10 @@ export class Workspace {
 
   protected toggleBottom(): void {
     this.bottomOpen.update((open) => !open);
+  }
+
+  protected openSecurity(): void {
+    this.securityDialog().open();
   }
 
   protected explorerRefreshed(): void {
