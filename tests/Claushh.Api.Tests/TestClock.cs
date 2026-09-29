@@ -1,5 +1,5 @@
-// Controllable clock for session deadlines. It starts at the current real second, so TOTP codes computed from the
-// real time are valid right after ResetAsync; tests log in before moving the clock.
+// Controllable clock for session deadlines, login limits and TOTP codes (TotpVerifier reads TimeProvider too).
+// Every reset starts it at the current real second.
 namespace Claushh.Api.Tests;
 
 public sealed class TestClock : TimeProvider

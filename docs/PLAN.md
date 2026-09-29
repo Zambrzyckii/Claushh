@@ -112,6 +112,9 @@ Backend decisions (stage 1):
 - The account is created only by `create-user` on the server; TOTP is switched on only after a correct code from the app,
   in one transaction. A lost phone: `create-user --reset-totp` (a new key, all sessions ended), which needs shell access
   to the server anyway. There are no recovery codes, because the login contract has only `totpCode`.
+- TOTP codes are checked by own code (RFC 6238, the step of now ±1) that stores the last accepted step and rejects that
+  step and earlier ones, so a code works once. Rejected: Identity's validator (±2 steps, the real clock, no reuse check)
+  with a remembered last code (another, older code from the same window would still pass).
 
 ### Limiting damage
 

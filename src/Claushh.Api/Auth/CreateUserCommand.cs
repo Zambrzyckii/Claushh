@@ -14,7 +14,7 @@ public interface ITerminal
     void WriteLine(string text);
 }
 
-public sealed class CreateUserCommand(ClaushhDbContext db, UserManager<IdentityUser> users, SessionService sessions)
+public sealed class CreateUserCommand(ClaushhDbContext db, UserManager<IdentityUser> users, SessionService sessions, TotpVerifier totp)
 {
     private const int CodeAttempts = 3;
 
@@ -92,8 +92,7 @@ public sealed class CreateUserCommand(ClaushhDbContext db, UserManager<IdentityU
         {
             terminal.WriteLine("Code from the app:");
             var code = terminal.ReadLine()?.Trim();
-            if (code is { Length: 6 }
-                && await users.VerifyTwoFactorTokenAsync(user, users.Options.Tokens.AuthenticatorTokenProvider, code))
+            if (code is not null && await totp.VerifyAsync(user, code))
             {
                 await users.SetTwoFactorEnabledAsync(user, true);
                 return true;

@@ -9,7 +9,7 @@ public sealed class ApiPipelineTests(ApiFactory api) : ApiTest(api)
     {
         var health = await Client.Http.GetAsync("/api/health");
         var anonymousMe = await Client.Http.GetAsync("/api/auth/me");
-        var login = await Client.LoginAsync(ApiFactory.UserName, ApiFactory.Password, Api.CurrentTotp());
+        var login = await Client.LoginAsync(ApiFactory.UserName, ApiFactory.Password, Api.NextTotp());
         var unknown = await Client.Http.GetAsync("/api/does-not-exist");
 
         foreach (var response in new[] { health, anonymousMe, login, unknown })

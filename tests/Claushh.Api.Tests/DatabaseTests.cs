@@ -18,6 +18,9 @@ public sealed class DatabaseTests(ApiFactory api)
         Assert.NotNull(user);
         Assert.True(user.TwoFactorEnabled);
         Assert.True(await users.CheckPasswordAsync(user, ApiFactory.Password));
-        Assert.True(await users.VerifyTwoFactorTokenAsync(user, users.Options.Tokens.AuthenticatorTokenProvider, api.CurrentTotp()));
+        // Identity's validator with the real clock: an independent check that Totp.cs computes codes like an
+        // authenticator app (the API itself checks codes with TotpVerifier).
+        Assert.True(await users.VerifyTwoFactorTokenAsync(user, users.Options.Tokens.AuthenticatorTokenProvider,
+            Totp.Code(api.TotpKey, DateTimeOffset.UtcNow)));
     }
 }

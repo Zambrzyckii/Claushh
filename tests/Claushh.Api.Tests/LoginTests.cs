@@ -25,7 +25,7 @@ public sealed class LoginTests(ApiFactory api) : ApiTest(api)
     {
         Client.SendXsrf = false;
 
-        var response = await Client.LoginAsync(ApiFactory.UserName, ApiFactory.Password, Api.CurrentTotp());
+        var response = await Client.LoginAsync(ApiFactory.UserName, ApiFactory.Password, Api.NextTotp());
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
@@ -33,7 +33,7 @@ public sealed class LoginTests(ApiFactory api) : ApiTest(api)
     [Fact]
     public async Task Login_sets_a_browser_session_cookie_that_me_accepts()
     {
-        var response = await Client.LoginAsync(ApiFactory.UserName, ApiFactory.Password, Api.CurrentTotp());
+        var response = await Client.LoginAsync(ApiFactory.UserName, ApiFactory.Password, Api.NextTotp());
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         var cookie = ApiClient.SetCookie(response, ApiClient.SessionCookie);
@@ -54,7 +54,7 @@ public sealed class LoginTests(ApiFactory api) : ApiTest(api)
     [Fact]
     public async Task Login_ignores_the_case_of_the_user_name()
     {
-        var response = await Client.LoginAsync("OWNER", ApiFactory.Password, Api.CurrentTotp());
+        var response = await Client.LoginAsync("OWNER", ApiFactory.Password, Api.NextTotp());
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
     }
@@ -66,7 +66,7 @@ public sealed class LoginTests(ApiFactory api) : ApiTest(api)
     [InlineData("", ApiFactory.Password, true)]
     public async Task Wrong_login_details_all_give_the_same_empty_401(string userName, string password, bool validCode)
     {
-        var code = validCode ? Api.CurrentTotp() : WrongCode();
+        var code = validCode ? Api.NextTotp() : Api.WrongTotp();
 
         var response = await Client.LoginAsync(userName, password, code);
 
@@ -81,7 +81,7 @@ public sealed class LoginTests(ApiFactory api) : ApiTest(api)
         await Client.Http.GetAsync("/api/auth/me");
 
         var oversized = await Client.Http.PostAsJsonAsync("/api/auth/login",
-            new { userName = ApiFactory.UserName, password = new string('x', 1025), totpCode = Api.CurrentTotp() });
+            new { userName = ApiFactory.UserName, password = new string('x', 1025), totpCode = Api.NextTotp() });
         var missing = await Client.Http.PostAsJsonAsync("/api/auth/login", new { userName = ApiFactory.UserName });
 
         Assert.Equal(HttpStatusCode.Unauthorized, oversized.StatusCode);
@@ -97,7 +97,7 @@ public sealed class LoginTests(ApiFactory api) : ApiTest(api)
             await users.SetTwoFactorEnabledAsync((await users.FindByNameAsync(ApiFactory.UserName))!, false);
         }
 
-        var response = await Client.LoginAsync(ApiFactory.UserName, ApiFactory.Password, Api.CurrentTotp());
+        var response = await Client.LoginAsync(ApiFactory.UserName, ApiFactory.Password, Api.NextTotp());
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
@@ -117,12 +117,12 @@ public sealed class LoginTests(ApiFactory api) : ApiTest(api)
     [Fact]
     public async Task Anonymous_xsrf_token_is_rejected_after_login()
     {
-        var login = await Client.LoginAsync(ApiFactory.UserName, ApiFactory.Password, Api.CurrentTotp());
+        var login = await Client.LoginAsync(ApiFactory.UserName, ApiFactory.Password, Api.NextTotp());
         Assert.Equal(HttpStatusCode.NoContent, login.StatusCode);
 
         // Still the token from before the login, issued for "no session".
         var again = await Client.Http.PostAsJsonAsync("/api/auth/login",
-            new { userName = ApiFactory.UserName, password = ApiFactory.Password, totpCode = Api.CurrentTotp() });
+            new { userName = ApiFactory.UserName, password = ApiFactory.Password, totpCode = Api.NextTotp() });
 
         Assert.Equal(HttpStatusCode.BadRequest, again.StatusCode);
     }
@@ -134,15 +134,13 @@ public sealed class LoginTests(ApiFactory api) : ApiTest(api)
         var firstSessionToken = Client.Cookie("XSRF-TOKEN");
         // A second login in the same browser: the same user and the same antiforgery cookie, a new session.
         var second = await Client.Http.PostAsJsonAsync("/api/auth/login",
-            new { userName = ApiFactory.UserName, password = ApiFactory.Password, totpCode = Api.CurrentTotp() });
+            new { userName = ApiFactory.UserName, password = ApiFactory.Password, totpCode = Api.NextTotp() });
         Assert.Equal(HttpStatusCode.NoContent, second.StatusCode);
         Assert.Equal(firstSessionToken, Client.Cookie("XSRF-TOKEN"));
 
         var third = await Client.Http.PostAsJsonAsync("/api/auth/login",
-            new { userName = ApiFactory.UserName, password = ApiFactory.Password, totpCode = Api.CurrentTotp() });
+            new { userName = ApiFactory.UserName, password = ApiFactory.Password, totpCode = Api.NextTotp() });
 
         Assert.Equal(HttpStatusCode.BadRequest, third.StatusCode);
     }
-
-    private string WrongCode() => Api.CurrentTotp() == "000000" ? "111111" : "000000";
 }

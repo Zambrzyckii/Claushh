@@ -24,8 +24,23 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     public TestClock Clock { get; } = new();
     public string TotpKey { get; private set; } = "";
 
-    // Identity checks TOTP codes against the real time, not against TimeProvider.
-    public string CurrentTotp() => Totp.Code(TotpKey, DateTimeOffset.UtcNow);
+    // Codes follow the test clock, like the API (TotpVerifier). A code is accepted once, so every login takes a new step.
+    public string NextTotp()
+    {
+        Clock.Advance(TimeSpan.FromSeconds(30));
+        return CurrentTotp();
+    }
+
+    public string CurrentTotp() => TotpAt(TimeSpan.Zero);
+
+    public string TotpAt(TimeSpan offset) => Totp.Code(TotpKey, Clock.GetUtcNow() + offset);
+
+    // A code that none of the accepted steps (the one of the test clock and its neighbours) produces.
+    public string WrongTotp()
+    {
+        var valid = new[] { -30, 0, 30 }.Select(seconds => TotpAt(TimeSpan.FromSeconds(seconds))).ToHashSet();
+        return new[] { "000000", "111111", "222222", "333333" }.First(code => !valid.Contains(code));
+    }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {

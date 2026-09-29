@@ -53,12 +53,13 @@ public static class AuthEndpoints
     }
 
     private static async Task<IResult> Login(LoginRequest body, HttpContext http, UserManager<IdentityUser> users,
-        SessionService sessions, AuthCookies cookies, ILoggerFactory loggers)
+        TotpVerifier totp, SessionService sessions, AuthCookies cookies, ILoggerFactory loggers)
     {
         var log = loggers.CreateLogger("Claushh.Api.Auth.Login");
         var ip = http.Connection.RemoteIpAddress?.ToString() ?? "";
-        var user = await VerifyAsync(users, body);
-        if (user is null)
+        // CheckPasswordAsync returns a user only when TotpCode has 6 characters.
+        var user = await CheckPasswordAsync(users, body);
+        if (user is null || !await totp.VerifyAsync(user, body.TotpCode!))
         {
             // No user name: it is unvalidated input (newlines, any length, sometimes a mistyped password).
             log.LogInformation("Failed login from {Ip}", ip);
@@ -116,13 +117,13 @@ public static class AuthEndpoints
         return await sessions.RevokeAsync(id, current.UserId, http.RequestAborted) ? Results.NoContent() : Results.NotFound();
     }
 
-    // Null for every kind of failure. An unknown user still costs one password hash, so the response time
-    // does not reveal whether the name exists.
-    private static async Task<IdentityUser?> VerifyAsync(UserManager<IdentityUser> users, LoginRequest body)
+    // The user when the fields have valid lengths, the name and password are right and TOTP is on; null otherwise.
+    // An unknown user still costs one password hash, so the response time does not reveal whether the name exists.
+    private static async Task<IdentityUser?> CheckPasswordAsync(UserManager<IdentityUser> users, LoginRequest body)
     {
         if (body.UserName is not { Length: > 0 and <= 256 } userName
             || body.Password is not { Length: > 0 and <= 1024 } password
-            || body.TotpCode is not { Length: 6 } totpCode)
+            || body.TotpCode is not { Length: 6 })
         {
             return null;
         }
@@ -133,12 +134,7 @@ public static class AuthEndpoints
             users.PasswordHasher.VerifyHashedPassword(DummyUser, _dummyHash, password);
             return null;
         }
-        if (!user.TwoFactorEnabled || !await users.CheckPasswordAsync(user, password))
-        {
-            return null;
-        }
-        var codeValid = await users.VerifyTwoFactorTokenAsync(user, users.Options.Tokens.AuthenticatorTokenProvider, totpCode);
-        return codeValid ? user : null;
+        return user.TwoFactorEnabled && await users.CheckPasswordAsync(user, password) ? user : null;
     }
 
     private static Session CurrentSession(HttpContext http) =>

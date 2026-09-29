@@ -35,7 +35,7 @@ public sealed class ApiClient
     // Logs in as the seeded owner and, like the frontend, takes the XSRF token bound to the new session.
     public async Task<MeBody> LoginAsOwnerAsync()
     {
-        var login = await LoginAsync(ApiFactory.UserName, ApiFactory.Password, _api.CurrentTotp());
+        var login = await LoginAsync(ApiFactory.UserName, ApiFactory.Password, _api.NextTotp());
         Assert.Equal(HttpStatusCode.NoContent, login.StatusCode);
         return await MeAsync();
     }

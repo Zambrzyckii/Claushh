@@ -29,6 +29,7 @@ builder.Services
 
 builder.Services.AddSingleton<AuthCookies>();
 builder.Services.AddScoped<SessionService>();
+builder.Services.AddScoped<TotpVerifier>();
 builder.Services.AddScoped<CreateUserCommand>();
 builder.Services.AddAuthentication(SessionAuthenticationHandler.SchemeName)
     .AddScheme<AuthenticationSchemeOptions, SessionAuthenticationHandler>(SessionAuthenticationHandler.SchemeName, _ => { });
