@@ -34,6 +34,9 @@ to the API at `http://localhost:5080` (`web/proxy.conf.json`).
 | `src/Claushh.Api/` | ASP.NET Core backend |
 | `src/Claushh.Api/Program.cs` | app configuration and endpoint mapping |
 | `src/Claushh.Api/Properties/launchSettings.json` | development profile, port 5080 |
+| `src/Claushh.Api/Data/` | `ClaushhDbContext` (Identity tables and `Sessions`) and EF Core migrations, applied at startup |
+| `src/Claushh.Api/Auth/` | login: `Session` entity, `AuthSessionOptions` (section "Sessions") |
+| `dotnet-tools.json` | local .NET tools: `dotnet-ef` (`dotnet tool restore`) |
 | `tests/Claushh.Api.Tests/` | backend integration tests: xUnit, the API in memory (`WebApplicationFactory`), PostgreSQL 17 from Testcontainers (`ApiFactory`) |
 | `global.json` | `dotnet test` runs on Microsoft.Testing.Platform (required by xUnit v3 on the .NET 10 SDK) |
 | `web/` | Angular 21 frontend (standalone components, signals, the new `@if` syntax) |
@@ -509,6 +512,18 @@ Endpoints:
 | Method | Path | Description | Authorization |
 |---|---|---|---|
 | GET | `/api/health` | checks whether the API is running | none |
+
+Configuration:
+
+| Key | Where | Meaning |
+|---|---|---|
+| `ConnectionStrings:Claushh` | development: `dotnet user-secrets`; server: variable `ConnectionStrings__Claushh` | PostgreSQL from `deploy/docker-compose.yml` |
+| `Sessions:IdleTimeout`, `Sessions:AbsoluteTimeout` | `appsettings.json` | `00:30:00` and `12:00:00` |
+
+Migrations: `dotnet tool restore`, then
+`ASPNETCORE_ENVIRONMENT=Development dotnet ef migrations add <Name> --project src/Claushh.Api --output-dir Data/Migrations`.
+`migrations add` does not connect to the database; without a user-secret, pass any connection string in
+`ConnectionStrings__Claushh`.
 
 Planned folder layout in `src/Claushh.Api/` (created together with the code they concern):
 `Auth/` (Identity, TOTP, sessions), `Data/` (DbContext, migrations), `Files/` (files API and path protection),

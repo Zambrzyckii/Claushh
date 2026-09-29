@@ -93,6 +93,12 @@ console conversation identifiers, settings (default model, effort, mode).
   `nosniff`, `Referrer-Policy`, HSTS. Details: `ARCHITECTURE.md`, "Security headers".
 - `ForwardedHeaders` trusts only the local `cloudflared`, the real IP from the `CF-Connecting-IP` header.
 
+Backend decisions (stage 1):
+- Password: at least 12 characters, without composition rules (length matters more, and TOTP is mandatory anyway).
+- EF Core migrations are applied at startup (one instance; no separate deployment step). The connection string comes
+  from `dotnet user-secrets` in development and from an environment variable on the server, never from the repository.
+- Backend tests are integration tests over HTTP with a real PostgreSQL 17 (Testcontainers), not a database mock.
+
 ### Limiting damage
 
 - Everything runs as the `workspace` user without administrator privileges.
