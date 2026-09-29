@@ -98,6 +98,17 @@ Backend decisions (stage 1):
 - EF Core migrations are applied at startup (one instance; no separate deployment step). The connection string comes
   from `dotnet user-secrets` in development and from an environment variable on the server, never from the repository.
 - Backend tests are integration tests over HTTP with a real PostgreSQL 17 (Testcontainers), not a database mock.
+- Sessions live on the server in the `Sessions` table: the cookie holds a random secret, the database only its SHA-256.
+  Identity is used only for the user, the password hash and TOTP. Rejected: the Identity cookie with `ITicketStore`
+  (one expiry per ticket, so two deadlines, a session list and revoking need workarounds around a serialized blob)
+  and the plain Identity cookie with the security stamp (it cannot end a single session).
+- The XSRF token is bound to the session, not only to the user (`IAntiforgeryAdditionalDataProvider`), and one filter on
+  `/api` validates it for POST/PUT/PATCH/DELETE: the built-in antiforgery middleware skips DELETE and does not stop the request.
+- Closed by default: `FallbackPolicy` requires a session; anonymous are only `/api/health`, `GET /api/auth/me` and
+  `POST /api/auth/login`.
+- Development runs over plain http, where ASP.NET antiforgery refuses `Secure`-only cookies, so there the cookies have no
+  `__Host-` prefix (`Sessions:SecureCookies=false`). Behind Cloudflare Tunnel requests also reach the API as HTTP,
+  so production needs `ForwardedHeaders` (stage 1, before the deployment) first.
 
 ### Limiting damage
 

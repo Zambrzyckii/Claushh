@@ -35,7 +35,7 @@ to the API at `http://localhost:5080` (`web/proxy.conf.json`).
 | `src/Claushh.Api/Program.cs` | app configuration and endpoint mapping |
 | `src/Claushh.Api/Properties/launchSettings.json` | development profile, port 5080 |
 | `src/Claushh.Api/Data/` | `ClaushhDbContext` (Identity tables and `Sessions`) and EF Core migrations, applied at startup |
-| `src/Claushh.Api/Auth/` | login: `Session` entity, `AuthSessionOptions` (section "Sessions") |
+| `src/Claushh.Api/Auth/` | login: `Session`, `AuthSessionOptions`, `AuthCookies` (cookie names), `SessionService` (the only code with session rules), `SessionAuthenticationHandler` (cookie → user, never extends), `SessionAntiforgeryData` (XSRF token bound to the session), `AuthEndpoints` (`/api/auth/*`, XSRF filter) |
 | `dotnet-tools.json` | local .NET tools: `dotnet-ef` (`dotnet tool restore`) |
 | `tests/Claushh.Api.Tests/` | backend integration tests: xUnit, the API in memory (`WebApplicationFactory`), PostgreSQL 17 from Testcontainers (`ApiFactory`) |
 | `global.json` | `dotnet test` runs on Microsoft.Testing.Platform (required by xUnit v3 on the .NET 10 SDK) |
@@ -205,7 +205,7 @@ Backend requirements that follow from the frontend:
 - session cookie: `HttpOnly; Secure; SameSite=Strict; Path=/`,
 - `XSRF-TOKEN` cookie: **without** `HttpOnly` (Angular must read it), `Secure; SameSite=Strict; Path=/`,
 - validation of the `X-XSRF-TOKEN` header on every POST/PUT/PATCH/DELETE, including login. The token is bound
-  to the identity it was issued for (ASP.NET antiforgery does this by default): a token issued for a session will not pass
+  to the identity it was issued for (the backend adds the session ID through `IAntiforgeryAdditionalDataProvider`; ASP.NET alone binds it only to the user): a token issued for a session will not pass
   without it and vice versa (the mock does the same),
 - every endpoint except `/api/health` and the three above returns `401` without a session,
 - the session expires after an idle time counted from the last `keepalive` (or login) and after the hard limit,
@@ -512,6 +512,11 @@ Endpoints:
 | Method | Path | Description | Authorization |
 |---|---|---|---|
 | GET | `/api/health` | checks whether the API is running | none |
+| GET | `/api/auth/me` | current session, always a fresh `XSRF-TOKEN` | none (401 without a session) |
+| POST | `/api/auth/login` | password + TOTP, creates a session | none, XSRF token |
+
+Every other endpoint requires a session (`FallbackPolicy`), and every POST/PUT/PATCH/DELETE under `/api` a valid
+`X-XSRF-TOKEN` (filter `RequireXsrfToken` in `Auth/AuthEndpoints.cs`, 400 otherwise).
 
 Configuration:
 
@@ -519,6 +524,17 @@ Configuration:
 |---|---|---|
 | `ConnectionStrings:Claushh` | development: `dotnet user-secrets`; server: variable `ConnectionStrings__Claushh` | PostgreSQL from `deploy/docker-compose.yml` |
 | `Sessions:IdleTimeout`, `Sessions:AbsoluteTimeout` | `appsettings.json` | `00:30:00` and `12:00:00` |
+| `Sessions:SecureCookies` | `appsettings.json` (`true`), `appsettings.Development.json` (`false`) | `false` only for plain http in development: cookie names without `__Host-`, `Secure` only on HTTPS |
+
+Sessions (`Auth/`):
+- Table `Sessions`: public `Id` (the `sessionId` of `/me`, constant for the life of the session), `SecretHash`
+  (SHA-256 of the random 32-byte secret from the cookie, unique), `CreatedAt`, `LastActivityAt`, `IdleExpiresAt`
+  (never past `AbsoluteExpiresAt`), `AbsoluteExpiresAt`, `RevokedAt`, `Device` (User-Agent), `Ip`. Rows stay after logout.
+- A session is active when it is not revoked and both deadlines are in the future. Only `keepalive` moves `IdleExpiresAt`;
+  reading a session (`SessionAuthenticationHandler`, `/me`) never extends it. All time comes from `TimeProvider`.
+- Cookies, all `SameSite=Strict; Path=/`: `__Host-claushh-session` (the secret, `HttpOnly`, no `Expires`),
+  `__Host-claushh-af` (antiforgery cookie token, `HttpOnly`), `XSRF-TOKEN` (request token that Angular sends back in
+  `X-XSRF-TOKEN`). With `Sessions:SecureCookies=false`: `claushh-session`, `claushh-af`, and `Secure` only on HTTPS.
 
 Migrations: `dotnet tool restore`, then
 `ASPNETCORE_ENVIRONMENT=Development dotnet ef migrations add <Name> --project src/Claushh.Api --output-dir Data/Migrations`.

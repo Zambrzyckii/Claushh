@@ -1,0 +1,68 @@
+// The only place with session rules: a random secret with only its SHA-256 in the database, the idle and the absolute
+// deadline (docs/ARCHITECTURE.md, "Backend"). Endpoints, the handler and later the hubs call it.
+using System.Buffers.Text;
+using System.Security.Cryptography;
+using Claushh.Api.Data;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+
+namespace Claushh.Api.Auth;
+
+public sealed class SessionService(ClaushhDbContext db, TimeProvider clock, IOptions<AuthSessionOptions> options)
+{
+    private const int SecretBytes = 32;
+    private const int MaxDeviceLength = 256;
+
+    public async Task<(Session Session, string Secret)> CreateAsync(IdentityUser user, string device, string ip, CancellationToken ct)
+    {
+        var secret = RandomNumberGenerator.GetBytes(SecretBytes);
+        var now = clock.GetUtcNow();
+        var absolute = now + options.Value.AbsoluteTimeout;
+        var session = new Session
+        {
+            Id = Guid.NewGuid(),
+            UserId = user.Id,
+            User = user,
+            SecretHash = SHA256.HashData(secret),
+            CreatedAt = now,
+            LastActivityAt = now,
+            IdleExpiresAt = Min(now + options.Value.IdleTimeout, absolute),
+            AbsoluteExpiresAt = absolute,
+            Device = device.Length > MaxDeviceLength ? device[..MaxDeviceLength] : device,
+            Ip = ip,
+        };
+        db.Sessions.Add(session);
+        await db.SaveChangesAsync(ct);
+        return (session, Base64Url.EncodeToString(secret));
+    }
+
+    // Null for anything that is not the secret of an active session, including malformed cookie values.
+    public async Task<Session?> FindActiveAsync(string secret, CancellationToken ct)
+    {
+        // IsValid, because TryDecodeFromChars returns false only for a too small buffer and throws on invalid characters.
+        if (!Base64Url.IsValid(secret, out var length) || length != SecretBytes)
+        {
+            return null;
+        }
+        var hash = SHA256.HashData(Base64Url.DecodeFromChars(secret));
+        return await Active().Include(s => s.User).SingleOrDefaultAsync(s => s.SecretHash == hash, ct);
+    }
+
+    // Whole seconds until each deadline, as the frontend expects (relative, so a wrong device clock does not matter).
+    public (int ExpiresIn, int AbsoluteExpiresIn) SecondsLeft(Session session)
+    {
+        var now = clock.GetUtcNow();
+        return (Seconds(session.IdleExpiresAt - now), Seconds(session.AbsoluteExpiresAt - now));
+    }
+
+    private IQueryable<Session> Active()
+    {
+        var now = clock.GetUtcNow();
+        return db.Sessions.Where(s => s.RevokedAt == null && s.IdleExpiresAt > now && s.AbsoluteExpiresAt > now);
+    }
+
+    private static DateTimeOffset Min(DateTimeOffset a, DateTimeOffset b) => a < b ? a : b;
+
+    private static int Seconds(TimeSpan span) => Math.Max(0, (int)span.TotalSeconds);
+}

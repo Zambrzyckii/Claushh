@@ -1,6 +1,9 @@
 // API entry point. Stages and decisions: docs/PLAN.md; endpoints, configuration and commands: docs/ARCHITECTURE.md, "Backend".
 using Claushh.Api.Auth;
 using Claushh.Api.Data;
+using Microsoft.AspNetCore.Antiforgery;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
@@ -24,6 +27,24 @@ builder.Services
     .AddEntityFrameworkStores<ClaushhDbContext>()
     .AddTokenProvider<AuthenticatorTokenProvider<IdentityUser>>(TokenOptions.DefaultAuthenticatorProvider);
 
+builder.Services.AddSingleton<AuthCookies>();
+builder.Services.AddScoped<SessionService>();
+builder.Services.AddAuthentication(SessionAuthenticationHandler.SchemeName)
+    .AddScheme<AuthenticationSchemeOptions, SessionAuthenticationHandler>(SessionAuthenticationHandler.SchemeName, _ => { });
+// Closed by default: an endpoint without .AllowAnonymous() requires a session.
+builder.Services.AddAuthorizationBuilder()
+    .SetFallbackPolicy(new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build());
+builder.Services.AddAntiforgery();
+builder.Services.AddOptions<AntiforgeryOptions>().Configure<AuthCookies>((options, cookies) =>
+{
+    options.HeaderName = "X-XSRF-TOKEN";
+    options.Cookie.Name = cookies.Antiforgery;
+    options.Cookie.Path = "/";
+    options.Cookie.SameSite = SameSiteMode.Strict;
+    options.Cookie.SecurePolicy = cookies.SecureRequired ? CookieSecurePolicy.Always : CookieSecurePolicy.SameAsRequest;
+});
+builder.Services.AddSingleton<IAntiforgeryAdditionalDataProvider, SessionAntiforgeryData>();
+
 var app = builder.Build();
 
 await using (var scope = app.Services.CreateAsyncScope())
@@ -31,6 +52,10 @@ await using (var scope = app.Services.CreateAsyncScope())
     await scope.ServiceProvider.GetRequiredService<ClaushhDbContext>().Database.MigrateAsync();
 }
 
-app.MapGet("/api/health", () => Results.Ok(new { status = "ok" }));
+app.UseAuthentication();
+app.UseAuthorization();
+
+app.MapGet("/api/health", () => Results.Ok(new { status = "ok" })).AllowAnonymous();
+app.MapGroup("/api").RequireXsrfToken().MapAuthEndpoints();
 
 app.Run();
