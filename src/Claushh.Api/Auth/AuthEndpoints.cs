@@ -60,7 +60,8 @@ public static class AuthEndpoints
         var user = await VerifyAsync(users, body);
         if (user is null)
         {
-            log.LogInformation("Failed login for {UserName} from {Ip}", body.UserName, ip);
+            // No user name: it is unvalidated input (newlines, any length, sometimes a mistyped password).
+            log.LogInformation("Failed login from {Ip}", ip);
             return Results.Unauthorized();
         }
         var (_, secret) = await sessions.CreateAsync(user, http.Request.Headers.UserAgent.ToString(), ip, http.RequestAborted);
