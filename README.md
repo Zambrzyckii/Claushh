@@ -4,8 +4,8 @@ A private web portal for working on projects from any device: code editor, conso
 terminal and git in the browser. Runs on a home computer (EndeavourOS), access through Cloudflare Tunnel,
 login with a password and a TOTP code. One user.
 
-Status: **frontend ready (login and sessions, editor with a diff view, console, workspaces and git, terminal),
-backend not yet.** Nothing is fit to be exposed
+Status: **frontend ready (login and sessions, editor with a diff view, console, workspaces and git, terminal);
+backend: login and sessions (stage 1, part A).** Nothing is fit to be exposed
 to the internet. Progress: [`docs/PLAN.md`](docs/PLAN.md), section "Stages".
 
 ## Documentation
@@ -21,11 +21,14 @@ to the internet. Progress: [`docs/PLAN.md`](docs/PLAN.md), section "Stages".
 Requirements: .NET 10 SDK, Node.js 22.12+ (npm 11), Docker.
 
 ```bash
-# database (not used by the API yet)
+# database
 cp deploy/.env.example deploy/.env    # fill in the password
 docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d
 
 # backend: http://localhost:5080/api/health
+dotnet user-secrets set --project src/Claushh.Api ConnectionStrings:Claushh \
+  "Host=localhost;Port=5432;Database=claushh;Username=claushh;Password=<POSTGRES_PASSWORD from deploy/.env>"
+dotnet run --project src/Claushh.Api -- create-user    # once: the account and its TOTP key
 dotnet run --project src/Claushh.Api
 
 # frontend: http://localhost:4200
@@ -41,4 +44,10 @@ cd web
 npm test                          # integration (Vitest)
 npx playwright install chromium   # once, browser for e2e
 npm run e2e                       # build + e2e on the mock backend (e2e/mock-api)
+```
+
+## Backend tests
+
+```bash
+dotnet test    # integration tests; needs Docker (starts PostgreSQL 17 in a container)
 ```

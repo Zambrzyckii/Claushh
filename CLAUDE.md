@@ -41,6 +41,7 @@ every file path is checked against the projects directory, secrets never go into
 ```bash
 dotnet build Claushh.slnx               # backend
 dotnet run --project src/Claushh.Api    # API at http://localhost:5080
+dotnet test                             # backend integration tests (xUnit + Testcontainers, needs Docker)
 cd web && npm test                      # frontend integration tests (Vitest)
 cd web && npm run e2e                   # build + e2e tests (Playwright) on the mock API
 cd web && npm run build                 # frontend build

@@ -108,7 +108,7 @@ Backend decisions (stage 1):
   `POST /api/auth/login`.
 - Development runs over plain http, where ASP.NET antiforgery refuses `Secure`-only cookies, so there the cookies have no
   `__Host-` prefix (`Sessions:SecureCookies=false`). Behind Cloudflare Tunnel requests also reach the API as HTTP,
-  so production needs `ForwardedHeaders` (stage 1, before the deployment) first.
+  so production needs `ForwardedHeaders` (stage 1, part C) first.
 - The account is created only by `create-user` on the server; TOTP is switched on only after a correct code from the app,
   in one transaction. A lost phone: `create-user --reset-totp` (a new key, all sessions ended), which needs shell access
   to the server anyway. There are no recovery codes, because the login contract has only `totpCode`.
@@ -153,8 +153,10 @@ The order is chosen so that only already secured things reach the internet.
 - [ ] **Stage 1: login and access.**
   - [x] Frontend: login form (username, password, TOTP), `authGuard` / `guestGuard`, logout
         with state cleanup, handling of an expired session, tab synchronization, protection against bfcache and open redirect.
-  - [ ] Backend: Identity with TOTP, a single account created by a command, endpoints from the contract in `ARCHITECTURE.md`,
-        antiforgery, sessions, rate limiting, login history, notifications, ForwardedHeaders.
+  - [x] Backend, part A: PostgreSQL + EF Core, Identity with TOTP, a single account created by a command (`create-user`),
+        server-side sessions, `me` / `login` / `logout` / `keepalive`, ending another session, antiforgery bound to the session.
+  - [ ] Backend, part B: lockout, rate limiting, blocking reuse of a TOTP code, login history, session list, `revoke-others`.
+  - [ ] Backend, part C: security headers and serving `index.html`, ForwardedHeaders, notifications.
   - [x] Frontend: session countdown in the top bar (stage 5).
   - [ ] Deployment: Cloudflare Tunnel, systemd service.
 - [ ] **Stage 2: files and editor.**
@@ -184,5 +186,5 @@ The order is chosen so that only already secured things reach the internet.
         permission requests in the console, strict clone URL, unconfirmed logout without returning to the app,
         expiry without the server, "Wyloguj wszędzie", CSP with Trusted Types and headers, XSRF token bound to the identity,
         mock only on `127.0.0.1`), verified in several rounds of independent review, with integration and e2e tests.
-  - [ ] Backend: session endpoints from the contract, passkeys, backups.
+  - [ ] Backend: passkeys, backups.
   - [ ] Colors (the owner will refine them in later iterations), a possible phone view (low priority).
