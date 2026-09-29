@@ -129,8 +129,8 @@ Backend decisions (stage 1):
 - The limits are constants in code (10 failures per IP in 15 minutes, 5 wrong codes, lockouts from 15 minutes to
   24 hours, 90 days). Rejected: configuration (nothing to tune for one user, and a setting could weaken the protection
   by accident).
-- The User-Agent is stored as sent (cut to 256 characters) and turned into "Chrome · Linux" on read (`DeviceName`, the
-  mock's rules). Rejected: formatting on write (a fix of the rules would need a data migration).
+- The User-Agent is stored as sent (cut to at most 256 characters) and turned into "Chrome · Linux" on read
+  (`DeviceName`, the mock's rules). Rejected: formatting on write (a fix of the rules would need a data migration).
 - The account lockout counts only wrong or reused codes after a correct password (5 → 15 minutes the first time), so a
   stranger without the password cannot lock the only account. While it is locked every login gets 429 whatever the
   credentials (a 429 only after a correct password would confirm the password, and a 401 would not tell the owner why

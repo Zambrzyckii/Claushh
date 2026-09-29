@@ -554,10 +554,11 @@ Login protection (`Auth/`):
 - TOTP codes are checked by `TotpVerifier` against `TimeProvider`: the 30 s step of now, the one before and the one
   after. A code is accepted once: the last accepted step is stored in `AspNetUserTokens` (`Claushh` / `TotpLastStep`),
   and a code from that step or an earlier one is rejected. `create-user` checks its code the same way, so that code is
-  used up and the first login needs the next one.
+  used up and the first login needs the next one. `--reset-totp` first removes the stored step, so the new key's
+  current code confirms it.
 - Every attempt that reaches the check of the credentials is recorded in `LoginAttempts` (`At`, `Ip`, `Device` as the
-  User-Agent cut to 256 characters, `Success`), also for unknown names; the typed user name never. Attempts answered
-  with `429` are not recorded. Attempts are deleted after 90 days (`AuthCleanup`).
+  User-Agent cut to at most 256 characters, `Success`), also for unknown names; the typed user name never. Attempts
+  answered with `429` are not recorded. Attempts are deleted after 90 days (`AuthCleanup`).
 - 10 failures from one IP within 15 minutes give `429` with `Retry-After` (seconds until the 10th most recent failure
   leaves the window), with an empty body. The IP is the connection address; behind Cloudflare Tunnel it becomes the
   real one only with `ForwardedHeaders` (stage 1, part C).
@@ -576,7 +577,7 @@ Commands (`dotnet run --project src/Claushh.Api -- <command>`, on the server `./
 |---|---|
 | `create-user` | creates the single account: user name, password (at least 12 characters, no echo), TOTP key and `otpauth://` URI, switched on only after a correct code; refuses when an account exists |
 | `create-user --reset-totp` | a new TOTP key for the existing account (after a correct code), all its sessions ended and the lockout cleared |
-| `create-user --reset-password` | a new password for the existing account (at least 12 characters, no echo, typed twice), all its sessions ended and the lockout cleared; the TOTP key stays |
+| `create-user --reset-password` | a new password for the existing account (at least 12 characters, different from the current one, no echo, typed twice), all its sessions ended and the lockout cleared; the TOTP key stays |
 
 Migrations: `dotnet tool restore`, then
 `ASPNETCORE_ENVIRONMENT=Development dotnet ef migrations add <Name> --project src/Claushh.Api --output-dir Data/Migrations`.
