@@ -58,6 +58,16 @@ public sealed class SessionService(ClaushhDbContext db, TimeProvider clock, IOpt
         await db.SaveChangesAsync(ct);
     }
 
+    // Ends an active session of the user. False when there is none: unknown, already ended or expired.
+    public async Task<bool> RevokeAsync(Guid id, string userId, CancellationToken ct)
+    {
+        var now = clock.GetUtcNow();
+        var ended = await Active()
+            .Where(s => s.Id == id && s.UserId == userId)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.RevokedAt, now), ct);
+        return ended == 1;
+    }
+
     // Whole seconds until each deadline, as the frontend expects (relative, so a wrong device clock does not matter).
     public (int ExpiresIn, int AbsoluteExpiresIn) SecondsLeft(Session session)
     {

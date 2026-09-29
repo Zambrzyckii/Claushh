@@ -515,6 +515,8 @@ Endpoints:
 | GET | `/api/auth/me` | current session, always a fresh `XSRF-TOKEN` | none (401 without a session) |
 | POST | `/api/auth/login` | password + TOTP, creates a session | none, XSRF token |
 | POST | `/api/auth/keepalive` | the only request that extends a session (idle deadline, never past the absolute one) | session, XSRF token |
+| POST | `/api/auth/logout` | ends the session on the server (optionally only if the cookie still belongs to `{sessionId}`, otherwise 409), expires the cookies | session, XSRF token |
+| DELETE | `/api/auth/sessions/{id}` | ends another active session of the user; 404 for unknown, ended or expired, 400 for the own one | session, XSRF token |
 
 Every other endpoint requires a session (`FallbackPolicy`), and every POST/PUT/PATCH/DELETE under `/api` a valid
 `X-XSRF-TOKEN` (filter `RequireXsrfToken` in `Auth/AuthEndpoints.cs`, 400 otherwise).

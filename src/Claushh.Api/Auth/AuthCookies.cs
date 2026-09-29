@@ -19,6 +19,14 @@ public sealed class AuthCookies(IOptions<AuthSessionOptions> options)
     public void AppendXsrfToken(HttpResponse response, string token) =>
         response.Cookies.Append(XsrfToken, token, Options(response, httpOnly: false));
 
+    // The same Secure and Path as when setting: browsers ignore a __Host- deletion without them.
+    public void ExpireAll(HttpResponse response)
+    {
+        response.Cookies.Delete(Session, Options(response, httpOnly: true));
+        response.Cookies.Delete(Antiforgery, Options(response, httpOnly: true));
+        response.Cookies.Delete(XsrfToken, Options(response, httpOnly: false));
+    }
+
     private CookieOptions Options(HttpResponse response, bool httpOnly) => new()
     {
         HttpOnly = httpOnly,

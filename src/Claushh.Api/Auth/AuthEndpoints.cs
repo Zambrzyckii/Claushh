@@ -7,6 +7,8 @@ namespace Claushh.Api.Auth;
 public static class AuthEndpoints
 {
     public sealed record LoginRequest(string? UserName, string? Password, string? TotpCode);
+    // A string, not a Guid: a marker that is not a GUID must give 409 like any other foreign session, not 400.
+    public sealed record LogoutRequest(string? SessionId);
     public sealed record MeResponse(string UserName, Guid SessionId, int ExpiresIn, int AbsoluteExpiresIn);
     public sealed record KeepaliveResponse(Guid SessionId, int ExpiresIn, int AbsoluteExpiresIn);
 
@@ -19,6 +21,8 @@ public static class AuthEndpoints
         auth.MapGet("/me", Me).AllowAnonymous();
         auth.MapPost("/login", Login).AllowAnonymous();
         auth.MapPost("/keepalive", Keepalive);
+        auth.MapPost("/logout", Logout);
+        auth.MapDelete("/sessions/{id:guid}", EndSession);
         return api;
     }
 
@@ -70,6 +74,31 @@ public static class AuthEndpoints
         await sessions.ExtendAsync(session, http.RequestAborted);
         var (expiresIn, absoluteExpiresIn) = sessions.SecondsLeft(session);
         return Results.Ok(new KeepaliveResponse(session.Id, expiresIn, absoluteExpiresIn));
+    }
+
+    // Without a body the session from the cookie ends. With {sessionId} only if the cookie still belongs to it,
+    // so a late retry does not end a newer session (docs/ARCHITECTURE.md, "Rules").
+    private static async Task<IResult> Logout(LogoutRequest? body, HttpContext http, SessionService sessions, AuthCookies cookies)
+    {
+        var session = CurrentSession(http);
+        if (body?.SessionId is { } requested && (!Guid.TryParse(requested, out var id) || id != session.Id))
+        {
+            return Results.Conflict();
+        }
+        await sessions.RevokeAsync(session.Id, session.UserId, http.RequestAborted);
+        cookies.ExpireAll(http.Response);
+        return Results.NoContent();
+    }
+
+    // 404 also for ended and expired sessions: the frontend reads it as "already gone" (auth.service.ts, endSession).
+    private static async Task<IResult> EndSession(Guid id, HttpContext http, SessionService sessions)
+    {
+        var current = CurrentSession(http);
+        if (id == current.Id)
+        {
+            return Results.BadRequest();
+        }
+        return await sessions.RevokeAsync(id, current.UserId, http.RequestAborted) ? Results.NoContent() : Results.NotFound();
     }
 
     // Null for every kind of failure. An unknown user still costs one password hash, so the response time
