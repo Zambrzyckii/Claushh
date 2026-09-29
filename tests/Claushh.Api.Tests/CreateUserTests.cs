@@ -98,6 +98,38 @@ public sealed class CreateUserTests(ApiFactory api) : ApiTest(api)
             (await Client.LoginAsync(ApiFactory.UserName, ApiFactory.Password, terminal.NextCode())).StatusCode);
     }
 
+    [Fact]
+    public async Task Reset_totp_also_clears_the_count_of_wrong_codes()
+    {
+        for (var i = 0; i < 4; i++)
+        {
+            await Client.LoginAsync(ApiFactory.UserName, ApiFactory.Password, Api.WrongTotp());
+        }
+        var terminal = new ScriptedTerminal(Api, t => t.NextCode());
+        Assert.Equal(0, await RunAsync(resetTotp: true, terminal));
+
+        await Client.LoginAsync(ApiFactory.UserName, ApiFactory.Password, Api.WrongTotp());
+
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await Client.LoginAsync(ApiFactory.UserName, ApiFactory.Password, terminal.NextCode())).StatusCode);
+    }
+
+    [Fact]
+    public async Task Reset_totp_also_resets_the_growth_of_lockouts()
+    {
+        await LockAccountAsync();
+        Api.Clock.Advance(TimeSpan.FromMinutes(15));
+        await LockAccountAsync();
+        var terminal = new ScriptedTerminal(Api, t => t.NextCode());
+        Assert.Equal(0, await RunAsync(resetTotp: true, terminal));
+        Api.Clock.Advance(TimeSpan.FromMinutes(15));
+
+        await LockAccountAsync();
+        var locked = await Client.LoginAsync(ApiFactory.UserName, ApiFactory.Password, terminal.CurrentCode());
+
+        Assert.Equal(TimeSpan.FromMinutes(15), locked.Headers.RetryAfter?.Delta);
+    }
+
     private async Task<int> RunAsync(bool resetTotp, ITerminal terminal)
     {
         await using var scope = Api.Services.CreateAsyncScope();

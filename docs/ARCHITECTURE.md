@@ -558,10 +558,12 @@ Login protection (`Auth/`):
 - 10 failures from one IP within 15 minutes give `429` with `Retry-After` (seconds until the 10th most recent failure
   leaves the window), with an empty body. The IP is the connection address; behind Cloudflare Tunnel it becomes the
   real one only with `ForwardedHeaders` (stage 1, part C).
-- 5 wrong or reused codes after a correct password lock the account for 15 minutes (`AccessFailedCount` and
-  `LockoutEnd` of `AspNetUsers`, written by `LoginGuard`; Identity's own lockout methods use the real clock). While it is
-  locked every login gets `429` with `Retry-After`, whatever the name and password, so the answer reveals neither.
-  A successful login resets the counter; `create-user --reset-totp` also clears the lockout.
+- 5 wrong or reused codes after a correct password lock the account (`AccessFailedCount` and `LockoutEnd` of
+  `AspNetUsers`, written by `LoginGuard`; Identity's own lockout methods use the real clock): for 15 minutes the first
+  time, twice as long for every further lock in a row, at most 24 hours (the number of locks in a row is the token
+  `Claushh` / `LockoutsInARow` in `AspNetUserTokens`). While it is locked every login gets `429` with `Retry-After`,
+  whatever the name and password; when both limits apply, `Retry-After` is the later end. A successful login resets
+  both counts; `create-user --reset-totp` also clears the lockout.
 - Logins run one at a time (`LoginGuard.EnterAsync`), so the checks and writes of parallel attempts never interleave.
 
 Commands (`dotnet run --project src/Claushh.Api -- <command>`, on the server `./Claushh.Api <command>`):
