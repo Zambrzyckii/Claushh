@@ -71,10 +71,16 @@ public static class AuthEndpoints
         await guard.RecordAsync(success, ip, userAgent, http.RequestAborted);
         if (user is null || !success)
         {
+            if (user is not null)
+            {
+                // The password was right: only wrong or reused codes count towards the lockout.
+                await guard.CodeFailedAsync(user);
+            }
             // No user name: it is unvalidated input (newlines, any length, sometimes a mistyped password).
             log.LogInformation("Failed login from {Ip}", ip);
             return Results.Unauthorized();
         }
+        await guard.SucceededAsync(user);
         var (_, secret) = await sessions.CreateAsync(user, userAgent, ip, http.RequestAborted);
         cookies.AppendSession(http.Response, secret);
         log.LogInformation("Login of {UserName} from {Ip}", user.UserName, ip);

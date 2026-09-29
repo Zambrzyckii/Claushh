@@ -81,6 +81,23 @@ public sealed class CreateUserTests(ApiFactory api) : ApiTest(api)
             (await fresh.LoginAsync(ApiFactory.UserName, ApiFactory.Password, terminal.NextCode())).StatusCode);
     }
 
+    [Fact]
+    public async Task Reset_totp_clears_the_lockout()
+    {
+        for (var i = 0; i < 5; i++)
+        {
+            await Client.LoginAsync(ApiFactory.UserName, ApiFactory.Password, Api.WrongTotp());
+        }
+        Assert.Equal(HttpStatusCode.TooManyRequests,
+            (await Client.LoginAsync(ApiFactory.UserName, ApiFactory.Password, Api.NextTotp())).StatusCode);
+        var terminal = new ScriptedTerminal(Api, t => t.NextCode());
+
+        Assert.Equal(0, await RunAsync(resetTotp: true, terminal));
+
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await Client.LoginAsync(ApiFactory.UserName, ApiFactory.Password, terminal.NextCode())).StatusCode);
+    }
+
     private async Task<int> RunAsync(bool resetTotp, ITerminal terminal)
     {
         await using var scope = Api.Services.CreateAsyncScope();

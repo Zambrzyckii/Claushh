@@ -14,7 +14,7 @@ public interface ITerminal
     void WriteLine(string text);
 }
 
-public sealed class CreateUserCommand(ClaushhDbContext db, UserManager<IdentityUser> users, SessionService sessions, TotpVerifier totp)
+public sealed class CreateUserCommand(ClaushhDbContext db, UserManager<IdentityUser> users, SessionService sessions, TotpVerifier totp, LoginGuard guard)
 {
     private const int CodeAttempts = 3;
 
@@ -50,10 +50,11 @@ public sealed class CreateUserCommand(ClaushhDbContext db, UserManager<IdentityU
         }
         if (resetTotp)
         {
+            await guard.UnlockAsync(user);
             await sessions.RevokeAllAsync(user.Id, ct);
         }
         await transaction.CommitAsync(ct);
-        terminal.WriteLine(resetTotp ? "New TOTP key saved, all sessions ended." : $"Account '{user.UserName}' created.");
+        terminal.WriteLine(resetTotp ? "New TOTP key saved, all sessions ended, the lockout cleared." : $"Account '{user.UserName}' created.");
         return 0;
     }
 

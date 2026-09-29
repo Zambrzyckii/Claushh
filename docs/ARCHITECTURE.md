@@ -35,7 +35,7 @@ to the API at `http://localhost:5080` (`web/proxy.conf.json`).
 | `src/Claushh.Api/Program.cs` | app configuration and endpoint mapping |
 | `src/Claushh.Api/Properties/launchSettings.json` | development profile, port 5080 |
 | `src/Claushh.Api/Data/` | `ClaushhDbContext` (Identity tables, `Sessions` and `LoginAttempts`) and EF Core migrations, applied at startup |
-| `src/Claushh.Api/Auth/` | login: `Session`, `AuthSessionOptions`, `AuthCookies` (cookie names), `SessionService` (the only code with session rules), `SessionAuthenticationHandler` (cookie → user, never extends), `SessionAntiforgeryData` (XSRF token bound to the session), `TotpVerifier` (TOTP codes, each accepted once), `LoginGuard` (login protection and history), `LoginAttempt`, `DeviceName` (User-Agent for storage and display), `AuthEndpoints` (`/api/auth/*`, XSRF filter), `CreateUserCommand` (`create-user`) |
+| `src/Claushh.Api/Auth/` | login: `Session`, `AuthSessionOptions`, `AuthCookies` (cookie names), `SessionService` (the only code with session rules), `SessionAuthenticationHandler` (cookie → user, never extends), `SessionAntiforgeryData` (XSRF token bound to the session), `TotpVerifier` (TOTP codes, each accepted once), `LoginGuard` (limit per IP, account lockout, login history), `LoginAttempt`, `DeviceName` (User-Agent for storage and display), `AuthEndpoints` (`/api/auth/*`, XSRF filter), `CreateUserCommand` (`create-user`) |
 | `dotnet-tools.json` | local .NET tools: `dotnet-ef` (`dotnet tool restore`) |
 | `tests/Claushh.Api.Tests/` | backend integration tests: xUnit, the API in memory (`WebApplicationFactory`), PostgreSQL 17 from Testcontainers (`ApiFactory`) |
 | `global.json` | `dotnet test` runs on Microsoft.Testing.Platform (required by xUnit v3 on the .NET 10 SDK) |
@@ -553,6 +553,10 @@ Login protection (`Auth/`):
 - 10 failures from one IP within 15 minutes give `429` with `Retry-After` (seconds until the 10th most recent failure
   leaves the window), with an empty body. The IP is the connection address; behind Cloudflare Tunnel it becomes the
   real one only with `ForwardedHeaders` (stage 1, part C).
+- 5 wrong or reused codes after a correct password lock the account for 15 minutes (`AccessFailedCount` and
+  `LockoutEnd` of `AspNetUsers`, written by `LoginGuard`; Identity's own lockout methods use the real clock). While it is
+  locked every login gets `429` with `Retry-After`, whatever the name and password, so the answer reveals neither.
+  A successful login resets the counter; `create-user --reset-totp` also clears the lockout.
 - Logins run one at a time (`LoginGuard.EnterAsync`), so the checks and writes of parallel attempts never interleave.
 
 Commands (`dotnet run --project src/Claushh.Api -- <command>`, on the server `./Claushh.Api <command>`):
@@ -560,7 +564,7 @@ Commands (`dotnet run --project src/Claushh.Api -- <command>`, on the server `./
 | Command | What it does |
 |---|---|
 | `create-user` | creates the single account: user name, password (at least 12 characters, no echo), TOTP key and `otpauth://` URI, switched on only after a correct code; refuses when an account exists |
-| `create-user --reset-totp` | a new TOTP key for the existing account (after a correct code) and all its sessions ended |
+| `create-user --reset-totp` | a new TOTP key for the existing account (after a correct code), all its sessions ended and the lockout cleared |
 
 Migrations: `dotnet tool restore`, then
 `ASPNETCORE_ENVIRONMENT=Development dotnet ef migrations add <Name> --project src/Claushh.Api --output-dir Data/Migrations`.

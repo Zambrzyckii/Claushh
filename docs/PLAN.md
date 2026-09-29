@@ -123,6 +123,10 @@ Backend decisions (stage 1):
 - The login history records every attempt that reaches the check, also for unknown names (guessing stays visible), but
   never the typed name (it sometimes holds a mistyped password) and not attempts refused with 429 (a flood would drown
   the list).
+- The account lockout counts only wrong or reused codes after a correct password (5 → 15 minutes), so a stranger
+  without the password cannot lock the only account. While it is locked every login gets 429 whatever the credentials
+  (a 429 only after a correct password would confirm the password). The way out is `create-user --reset-totp` on the
+  server.
 
 ### Limiting damage
 

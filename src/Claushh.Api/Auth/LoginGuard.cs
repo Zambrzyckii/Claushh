@@ -1,15 +1,18 @@
 // Login protection (docs/ARCHITECTURE.md, "Backend", "Login protection"; decisions: docs/PLAN.md, "Login and sessions"):
-// the limit of failed attempts per IP and the login history. The only place with these rules; the login endpoint calls
-// it. Time comes from TimeProvider, so tests move the clock instead of waiting.
+// the limit of failed attempts per IP, the account lockout after wrong codes and the login history. The only place with
+// these rules; the login endpoint calls it. Time comes from TimeProvider, so tests move the clock instead of waiting.
 using Claushh.Api.Data;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
 namespace Claushh.Api.Auth;
 
-public sealed class LoginGuard(ClaushhDbContext db, TimeProvider clock)
+public sealed class LoginGuard(ClaushhDbContext db, UserManager<IdentityUser> users, TimeProvider clock, ILogger<LoginGuard> log)
 {
     private const int MaxFailuresPerIp = 10;
     private static readonly TimeSpan IpWindow = TimeSpan.FromMinutes(15);
+    private const int MaxCodeFailures = 5;
+    private static readonly TimeSpan LockoutDuration = TimeSpan.FromMinutes(15);
 
     // One login at a time in this process: the checks and writes of parallel attempts never interleave.
     private static readonly SemaphoreSlim Gate = new(1, 1);
@@ -31,7 +34,14 @@ public sealed class LoginGuard(ClaushhDbContext db, TimeProvider clock)
             .Take(MaxFailuresPerIp)
             .Select(a => a.At)
             .ToListAsync(ct);
-        return failures.Count == MaxFailuresPerIp ? SecondsUntil(failures[^1] + IpWindow, now) : null;
+        if (failures.Count == MaxFailuresPerIp)
+        {
+            return SecondsUntil(failures[^1] + IpWindow, now);
+        }
+        // One account: while it is locked every attempt is refused, whatever the name and password, so the answer
+        // reveals neither.
+        var lockoutEnd = await db.Users.Where(u => u.LockoutEnd > now).MaxAsync(u => u.LockoutEnd, ct);
+        return lockoutEnd is { } end ? SecondsUntil(end, now) : null;
     }
 
     public async Task RecordAsync(bool success, string ip, string userAgent, CancellationToken ct)
@@ -44,6 +54,47 @@ public sealed class LoginGuard(ClaushhDbContext db, TimeProvider clock)
             Success = success,
         });
         await db.SaveChangesAsync(ct);
+    }
+
+    // A wrong or reused code after a correct password. The fifth locks the account and starts the count again.
+    // Identity's own lockout methods use the real clock and require LockoutEnabled, so the fields are set here.
+    public async Task CodeFailedAsync(IdentityUser user)
+    {
+        user.AccessFailedCount++;
+        if (user.AccessFailedCount >= MaxCodeFailures)
+        {
+            user.AccessFailedCount = 0;
+            user.LockoutEnd = clock.GetUtcNow() + LockoutDuration;
+            log.LogWarning("Account locked for {Minutes} minutes after {Failures} wrong codes",
+                LockoutDuration.TotalMinutes, MaxCodeFailures);
+        }
+        await SaveAsync(user);
+    }
+
+    public async Task SucceededAsync(IdentityUser user)
+    {
+        if (user.AccessFailedCount > 0)
+        {
+            user.AccessFailedCount = 0;
+            await SaveAsync(user);
+        }
+    }
+
+    // `create-user --reset-totp`: shell access on the server proves more than a code.
+    public async Task UnlockAsync(IdentityUser user)
+    {
+        user.AccessFailedCount = 0;
+        user.LockoutEnd = null;
+        await SaveAsync(user);
+    }
+
+    private async Task SaveAsync(IdentityUser user)
+    {
+        var result = await users.UpdateAsync(user);
+        if (!result.Succeeded)
+        {
+            throw new InvalidOperationException(string.Join(" ", result.Errors.Select(e => e.Description)));
+        }
     }
 
     private static int SecondsUntil(DateTimeOffset end, DateTimeOffset now) =>
