@@ -46,7 +46,11 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     {
         builder.UseEnvironment("Testing");
         builder.UseSetting("ConnectionStrings:Claushh", _db.GetConnectionString());
-        builder.ConfigureTestServices(services => services.AddSingleton<TimeProvider>(Clock));
+        builder.ConfigureTestServices(services =>
+        {
+            services.AddSingleton<TimeProvider>(Clock);
+            services.AddSingleton<IStartupFilter, TestRemoteIp>();
+        });
     }
 
     public async ValueTask InitializeAsync() => await _db.StartAsync();
@@ -57,7 +61,7 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         Clock.Reset();
         await using var scope = Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<ClaushhDbContext>();
-        await db.Database.ExecuteSqlRawAsync("""TRUNCATE "Sessions", "AspNetUsers" CASCADE""");
+        await db.Database.ExecuteSqlRawAsync("""TRUNCATE "Sessions", "LoginAttempts", "AspNetUsers" CASCADE""");
         if (!withUser)
         {
             return;
@@ -68,6 +72,12 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         Check(await users.ResetAuthenticatorKeyAsync(user));
         TotpKey = await users.GetAuthenticatorKeyAsync(user) ?? throw new InvalidOperationException("No TOTP key.");
         Check(await users.SetTwoFactorEnabledAsync(user, true));
+    }
+
+    public async Task<int> LoginAttemptCountAsync()
+    {
+        await using var scope = Services.CreateAsyncScope();
+        return await scope.ServiceProvider.GetRequiredService<ClaushhDbContext>().LoginAttempts.CountAsync();
     }
 
     public override async ValueTask DisposeAsync()

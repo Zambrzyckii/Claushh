@@ -12,7 +12,6 @@ namespace Claushh.Api.Auth;
 public sealed class SessionService(ClaushhDbContext db, TimeProvider clock, IOptions<AuthSessionOptions> options)
 {
     private const int SecretBytes = 32;
-    private const int MaxDeviceLength = 256;
 
     public async Task<(Session Session, string Secret)> CreateAsync(IdentityUser user, string device, string ip, CancellationToken ct)
     {
@@ -29,7 +28,7 @@ public sealed class SessionService(ClaushhDbContext db, TimeProvider clock, IOpt
             LastActivityAt = now,
             IdleExpiresAt = Min(now + options.Value.IdleTimeout, absolute),
             AbsoluteExpiresAt = absolute,
-            Device = device.Length > MaxDeviceLength ? device[..MaxDeviceLength] : device,
+            Device = DeviceName.Stored(device),
             Ip = ip,
         };
         db.Sessions.Add(session);

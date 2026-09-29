@@ -1,4 +1,5 @@
 // Login API from docs/ARCHITECTURE.md, "Authentication" → "API contract"; sessions and cookies: "Backend".
+using System.Globalization;
 using System.Text.Json;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Identity;
@@ -53,19 +54,28 @@ public static class AuthEndpoints
     }
 
     private static async Task<IResult> Login(LoginRequest body, HttpContext http, UserManager<IdentityUser> users,
-        TotpVerifier totp, SessionService sessions, AuthCookies cookies, ILoggerFactory loggers)
+        LoginGuard guard, TotpVerifier totp, SessionService sessions, AuthCookies cookies, ILoggerFactory loggers)
     {
         var log = loggers.CreateLogger("Claushh.Api.Auth.Login");
         var ip = http.Connection.RemoteIpAddress?.ToString() ?? "";
+        var userAgent = http.Request.Headers.UserAgent.ToString();
+        using var gate = await guard.EnterAsync(http.RequestAborted);
+        if (await guard.RetryAfterAsync(ip, http.RequestAborted) is { } retryAfter)
+        {
+            http.Response.Headers.RetryAfter = retryAfter.ToString(CultureInfo.InvariantCulture);
+            return Results.StatusCode(StatusCodes.Status429TooManyRequests);
+        }
         // CheckPasswordAsync returns a user only when TotpCode has 6 characters.
         var user = await CheckPasswordAsync(users, body);
-        if (user is null || !await totp.VerifyAsync(user, body.TotpCode!))
+        var success = user is not null && await totp.VerifyAsync(user, body.TotpCode!);
+        await guard.RecordAsync(success, ip, userAgent, http.RequestAborted);
+        if (user is null || !success)
         {
             // No user name: it is unvalidated input (newlines, any length, sometimes a mistyped password).
             log.LogInformation("Failed login from {Ip}", ip);
             return Results.Unauthorized();
         }
-        var (_, secret) = await sessions.CreateAsync(user, http.Request.Headers.UserAgent.ToString(), ip, http.RequestAborted);
+        var (_, secret) = await sessions.CreateAsync(user, userAgent, ip, http.RequestAborted);
         cookies.AppendSession(http.Response, secret);
         log.LogInformation("Login of {UserName} from {Ip}", user.UserName, ip);
         return Results.NoContent();

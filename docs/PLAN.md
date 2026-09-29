@@ -115,6 +115,14 @@ Backend decisions (stage 1):
 - TOTP codes are checked by own code (RFC 6238, the step of now ±1) that stores the last accepted step and rejects that
   step and earlier ones, so a code works once. Rejected: Identity's validator (±2 steps, the real clock, no reuse check)
   with a remembered last code (another, older code from the same window would still pass).
+- Login protection has two layers in own code (`LoginGuard`, time from `TimeProvider`): a limit of failed attempts per
+  IP protects the password, the account lockout protects the code. Rejected: the `RateLimiter` middleware and Identity's
+  lockout (both use the real clock, so their windows cannot be tested without waiting; the middleware also counts
+  successful requests and forgets everything on restart). Logins run one at a time, so parallel attempts cannot slip
+  between a check and its write.
+- The login history records every attempt that reaches the check, also for unknown names (guessing stays visible), but
+  never the typed name (it sometimes holds a mistyped password) and not attempts refused with 429 (a flood would drown
+  the list).
 
 ### Limiting damage
 

@@ -1,4 +1,5 @@
-// HTTP client that behaves like the browser with Angular: keeps cookies and sends XSRF-TOKEN back in X-XSRF-TOKEN.
+// HTTP client that behaves like the browser with Angular: keeps cookies, sends XSRF-TOKEN back in X-XSRF-TOKEN, and
+// comes from the IP in Ip (TestRemoteIp).
 using System.Net;
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.Mvc.Testing.Handlers;
@@ -16,12 +17,13 @@ public sealed class ApiClient
     public ApiClient(ApiFactory api)
     {
         _api = api;
-        Http = api.CreateDefaultClient(BaseAddress, new XsrfHandler(this), new CookieContainerHandler(Cookies));
+        Http = api.CreateDefaultClient(BaseAddress, new BrowserHandler(this), new CookieContainerHandler(Cookies));
     }
 
     public HttpClient Http { get; }
     public CookieContainer Cookies { get; } = new();
     public bool SendXsrf { get; set; } = true;
+    public string Ip { get; set; } = "127.0.0.1";
 
     public string? Cookie(string name) => Cookies.GetCookies(BaseAddress)[name]?.Value;
 
@@ -52,10 +54,11 @@ public sealed class ApiClient
 
     public sealed record MeBody(string UserName, Guid SessionId, int ExpiresIn, int AbsoluteExpiresIn);
 
-    private sealed class XsrfHandler(ApiClient client) : DelegatingHandler
+    private sealed class BrowserHandler(ApiClient client) : DelegatingHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
         {
+            request.Headers.Add(TestRemoteIp.Header, client.Ip);
             if (client.SendXsrf && request.Method != HttpMethod.Get && client.Cookie("XSRF-TOKEN") is { } token)
             {
                 request.Headers.Add("X-XSRF-TOKEN", token);

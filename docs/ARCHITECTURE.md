@@ -34,8 +34,8 @@ to the API at `http://localhost:5080` (`web/proxy.conf.json`).
 | `src/Claushh.Api/` | ASP.NET Core backend |
 | `src/Claushh.Api/Program.cs` | app configuration and endpoint mapping |
 | `src/Claushh.Api/Properties/launchSettings.json` | development profile, port 5080 |
-| `src/Claushh.Api/Data/` | `ClaushhDbContext` (Identity tables and `Sessions`) and EF Core migrations, applied at startup |
-| `src/Claushh.Api/Auth/` | login: `Session`, `AuthSessionOptions`, `AuthCookies` (cookie names), `SessionService` (the only code with session rules), `SessionAuthenticationHandler` (cookie → user, never extends), `SessionAntiforgeryData` (XSRF token bound to the session), `TotpVerifier` (TOTP codes, each accepted once), `AuthEndpoints` (`/api/auth/*`, XSRF filter), `CreateUserCommand` (`create-user`) |
+| `src/Claushh.Api/Data/` | `ClaushhDbContext` (Identity tables, `Sessions` and `LoginAttempts`) and EF Core migrations, applied at startup |
+| `src/Claushh.Api/Auth/` | login: `Session`, `AuthSessionOptions`, `AuthCookies` (cookie names), `SessionService` (the only code with session rules), `SessionAuthenticationHandler` (cookie → user, never extends), `SessionAntiforgeryData` (XSRF token bound to the session), `TotpVerifier` (TOTP codes, each accepted once), `LoginGuard` (login protection and history), `LoginAttempt`, `DeviceName` (User-Agent for storage and display), `AuthEndpoints` (`/api/auth/*`, XSRF filter), `CreateUserCommand` (`create-user`) |
 | `dotnet-tools.json` | local .NET tools: `dotnet-ef` (`dotnet tool restore`) |
 | `tests/Claushh.Api.Tests/` | backend integration tests: xUnit, the API in memory (`WebApplicationFactory`), PostgreSQL 17 from Testcontainers (`ApiFactory`) |
 | `global.json` | `dotnet test` runs on Microsoft.Testing.Platform (required by xUnit v3 on the .NET 10 SDK) |
@@ -547,6 +547,13 @@ Login protection (`Auth/`):
   after. A code is accepted once: the last accepted step is stored in `AspNetUserTokens` (`Claushh` / `TotpLastStep`),
   and a code from that step or an earlier one is rejected. `create-user` checks its code the same way, so that code is
   used up and the first login needs the next one.
+- Every attempt that reaches the check of the credentials is recorded in `LoginAttempts` (`At`, `Ip`, `Device` as the
+  raw User-Agent, `Success`), also for unknown names; the typed user name never. Attempts answered with `429` are not
+  recorded.
+- 10 failures from one IP within 15 minutes give `429` with `Retry-After` (seconds until the 10th most recent failure
+  leaves the window), with an empty body. The IP is the connection address; behind Cloudflare Tunnel it becomes the
+  real one only with `ForwardedHeaders` (stage 1, part C).
+- Logins run one at a time (`LoginGuard.EnterAsync`), so the checks and writes of parallel attempts never interleave.
 
 Commands (`dotnet run --project src/Claushh.Api -- <command>`, on the server `./Claushh.Api <command>`):
 
