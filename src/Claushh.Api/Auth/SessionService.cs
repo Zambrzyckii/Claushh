@@ -73,6 +73,18 @@ public sealed class SessionService(ClaushhDbContext db, TimeProvider clock, IOpt
         await Active().Where(s => s.UserId == userId).ExecuteUpdateAsync(s => s.SetProperty(x => x.RevokedAt, now), ct);
     }
 
+    // "Wyloguj pozostałe": every other active session of the user, in one UPDATE.
+    public async Task RevokeOthersAsync(Session current, CancellationToken ct)
+    {
+        var now = clock.GetUtcNow();
+        await Active()
+            .Where(s => s.UserId == current.UserId && s.Id != current.Id)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.RevokedAt, now), ct);
+    }
+
+    public Task<List<Session>> ListActiveAsync(string userId, CancellationToken ct) =>
+        Active().Where(s => s.UserId == userId).OrderByDescending(s => s.CreatedAt).AsNoTracking().ToListAsync(ct);
+
     // Whole seconds until each deadline, as the frontend expects (relative, so a wrong device clock does not matter).
     public (int ExpiresIn, int AbsoluteExpiresIn) SecondsLeft(Session session)
     {

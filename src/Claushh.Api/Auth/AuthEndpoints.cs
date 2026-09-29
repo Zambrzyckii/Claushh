@@ -24,7 +24,6 @@ public static class AuthEndpoints
         auth.MapPost("/login", Login).AllowAnonymous();
         auth.MapPost("/keepalive", Keepalive);
         auth.MapPost("/logout", Logout);
-        auth.MapDelete("/sessions/{id:guid}", EndSession);
         return api;
     }
 
@@ -89,19 +88,19 @@ public static class AuthEndpoints
 
     private static async Task<IResult> Keepalive(HttpContext http, SessionService sessions)
     {
-        var session = CurrentSession(http);
+        var session = SessionAuthenticationHandler.Current(http);
         await sessions.ExtendAsync(session, http.RequestAborted);
         var (expiresIn, absoluteExpiresIn) = sessions.SecondsLeft(session);
         return Results.Ok(new KeepaliveResponse(session.Id, expiresIn, absoluteExpiresIn));
     }
 
     // Without a body the session from the cookie ends. With {sessionId} only if the cookie still belongs to it,
-    // so a late retry does not end a newer session (docs/ARCHITECTURE.md, "Rules").
+    // so a late retry does not end a newer session (docs/ARCHITECTURE.md, "Authentication" → "Rules").
     // The body is read by hand: an inferred JSON body makes routing skip this endpoint for a POST without Content-Type,
     // and the catch-all /api route would answer 404.
     private static async Task<IResult> Logout(HttpContext http, SessionService sessions, AuthCookies cookies)
     {
-        var session = CurrentSession(http);
+        var session = SessionAuthenticationHandler.Current(http);
         LogoutRequest? body;
         try
         {
@@ -120,17 +119,6 @@ public static class AuthEndpoints
         await sessions.RevokeAsync(session.Id, session.UserId, http.RequestAborted);
         cookies.ExpireAll(http.Response);
         return Results.NoContent();
-    }
-
-    // 404 also for ended and expired sessions: the frontend reads it as "already gone" (auth.service.ts, endSession).
-    private static async Task<IResult> EndSession(Guid id, HttpContext http, SessionService sessions)
-    {
-        var current = CurrentSession(http);
-        if (id == current.Id)
-        {
-            return Results.BadRequest();
-        }
-        return await sessions.RevokeAsync(id, current.UserId, http.RequestAborted) ? Results.NoContent() : Results.NotFound();
     }
 
     // The user when the fields have valid lengths, the name and password are right and TOTP is on; null otherwise.
@@ -152,7 +140,4 @@ public static class AuthEndpoints
         }
         return user.TwoFactorEnabled && await users.CheckPasswordAsync(user, password) ? user : null;
     }
-
-    private static Session CurrentSession(HttpContext http) =>
-        http.Features.Get<Session>() ?? throw new InvalidOperationException("The endpoint requires a session.");
 }

@@ -56,6 +56,10 @@ public sealed class LoginGuard(ClaushhDbContext db, UserManager<IdentityUser> us
         await db.SaveChangesAsync(ct);
     }
 
+    // The history for the "Bezpieczeństwo" window: the last 20, newest first (Id breaks ties of the same time).
+    public Task<List<LoginAttempt>> RecentAsync(CancellationToken ct) =>
+        db.LoginAttempts.OrderByDescending(a => a.At).ThenByDescending(a => a.Id).Take(20).AsNoTracking().ToListAsync(ct);
+
     // A wrong or reused code after a correct password. The fifth locks the account and starts the count again.
     // Identity's own lockout methods use the real clock and require LockoutEnabled, so the fields are set here.
     public async Task CodeFailedAsync(IdentityUser user)

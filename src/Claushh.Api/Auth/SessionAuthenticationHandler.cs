@@ -18,6 +18,10 @@ public sealed class SessionAuthenticationHandler(
     public const string SchemeName = "Session";
     public const string SessionIdClaim = "session_id";
 
+    // The session loaded by this handler, for endpoints that require one (the fallback policy guarantees it is there).
+    public static Session Current(HttpContext http) =>
+        http.Features.Get<Session>() ?? throw new InvalidOperationException("The endpoint requires a session.");
+
     protected override async Task<AuthenticateResult> HandleAuthenticateAsync()
     {
         if (!Request.Cookies.TryGetValue(cookies.Session, out var secret))

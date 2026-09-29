@@ -35,7 +35,7 @@ to the API at `http://localhost:5080` (`web/proxy.conf.json`).
 | `src/Claushh.Api/Program.cs` | app configuration and endpoint mapping |
 | `src/Claushh.Api/Properties/launchSettings.json` | development profile, port 5080 |
 | `src/Claushh.Api/Data/` | `ClaushhDbContext` (Identity tables, `Sessions` and `LoginAttempts`) and EF Core migrations, applied at startup |
-| `src/Claushh.Api/Auth/` | login: `Session`, `AuthSessionOptions`, `AuthCookies` (cookie names), `SessionService` (the only code with session rules), `SessionAuthenticationHandler` (cookie → user, never extends), `SessionAntiforgeryData` (XSRF token bound to the session), `TotpVerifier` (TOTP codes, each accepted once), `LoginGuard` (limit per IP, account lockout, login history), `LoginAttempt`, `DeviceName` (User-Agent for storage and display), `AuthEndpoints` (`/api/auth/*`, XSRF filter), `CreateUserCommand` (`create-user`) |
+| `src/Claushh.Api/Auth/` | login: `Session`, `AuthSessionOptions`, `AuthCookies` (cookie names), `SessionService` (the only code with session rules), `SessionAuthenticationHandler` (cookie → user, never extends), `SessionAntiforgeryData` (XSRF token bound to the session), `TotpVerifier` (TOTP codes, each accepted once), `LoginGuard` (limit per IP, account lockout, login history), `LoginAttempt`, `DeviceName` (User-Agent for storage and display), `AuthEndpoints` (`me`, `login`, `keepalive`, `logout`, XSRF filter), `SessionEndpoints` (session list, ending sessions, login history), `CreateUserCommand` (`create-user`) |
 | `dotnet-tools.json` | local .NET tools: `dotnet-ef` (`dotnet tool restore`) |
 | `tests/Claushh.Api.Tests/` | backend integration tests: xUnit, the API in memory (`WebApplicationFactory`), PostgreSQL 17 from Testcontainers (`ApiFactory`) |
 | `global.json` | `dotnet test` runs on Microsoft.Testing.Platform (required by xUnit v3 on the .NET 10 SDK) |
@@ -517,6 +517,9 @@ Endpoints:
 | POST | `/api/auth/keepalive` | the only request that extends a session (idle deadline, never past the absolute one) | session, XSRF token |
 | POST | `/api/auth/logout` | ends the session on the server (optionally only if the cookie still belongs to `{sessionId}`, otherwise 409), expires the cookies | session, XSRF token |
 | DELETE | `/api/auth/sessions/{id}` | ends another active session of the user; 404 for unknown, ended or expired, 400 for the own one | session, XSRF token |
+| GET | `/api/auth/sessions` | active sessions of the user, newest first, `current` for this one, `device` as e.g. "Chrome · Linux" | session |
+| POST | `/api/auth/sessions/revoke-others` | ends every other active session of the user | session, XSRF token |
+| GET | `/api/auth/logins` | the last 20 login attempts, newest first | session |
 
 Every other endpoint requires a session (`FallbackPolicy`), and every POST/PUT/PATCH/DELETE under `/api` a valid
 `X-XSRF-TOKEN` (filter `RequireXsrfToken` in `Auth/AuthEndpoints.cs`, 400 otherwise).

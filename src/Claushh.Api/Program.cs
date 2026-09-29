@@ -88,7 +88,7 @@ app.UseAuthorization();
 
 app.MapGet("/api/health", () => Results.Ok(new { status = "ok" })).AllowAnonymous();
 var api = app.MapGroup("/api").RequireXsrfToken();
-api.MapAuthEndpoints();
+api.MapAuthEndpoints().MapSessionEndpoints();
 // Unknown /api paths: 401 without a session (fallback policy), 404 with one, never another handler's response.
 api.Map("{**path}", () => Results.NotFound());
 
