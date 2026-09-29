@@ -85,6 +85,10 @@ public sealed class SessionService(ClaushhDbContext db, TimeProvider clock, IOpt
     public Task<List<Session>> ListActiveAsync(string userId, CancellationToken ct) =>
         Active().Where(s => s.UserId == userId).OrderByDescending(s => s.CreatedAt).AsNoTracking().ToListAsync(ct);
 
+    // A session ended at RevokedAt, or else at IdleExpiresAt, which is never later than AbsoluteExpiresAt.
+    public Task<int> DeleteEndedBeforeAsync(DateTimeOffset cutoff, CancellationToken ct) =>
+        db.Sessions.Where(s => (s.RevokedAt ?? s.IdleExpiresAt) < cutoff).ExecuteDeleteAsync(ct);
+
     // Whole seconds until each deadline, as the frontend expects (relative, so a wrong device clock does not matter).
     public (int ExpiresIn, int AbsoluteExpiresIn) SecondsLeft(Session session)
     {

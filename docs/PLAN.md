@@ -127,6 +127,8 @@ Backend decisions (stage 1):
   without the password cannot lock the only account. While it is locked every login gets 429 whatever the credentials
   (a 429 only after a correct password would confirm the password). The way out is `create-user --reset-totp` on the
   server.
+- Login attempts and ended sessions are deleted 90 days after they ended, by a background cleanup at start and every
+  hour. A cleanup error is only logged: by default a failing background service stops the whole API.
 
 ### Limiting damage
 

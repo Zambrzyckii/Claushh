@@ -35,7 +35,7 @@ to the API at `http://localhost:5080` (`web/proxy.conf.json`).
 | `src/Claushh.Api/Program.cs` | app configuration and endpoint mapping |
 | `src/Claushh.Api/Properties/launchSettings.json` | development profile, port 5080 |
 | `src/Claushh.Api/Data/` | `ClaushhDbContext` (Identity tables, `Sessions` and `LoginAttempts`) and EF Core migrations, applied at startup |
-| `src/Claushh.Api/Auth/` | login: `Session`, `AuthSessionOptions`, `AuthCookies` (cookie names), `SessionService` (the only code with session rules), `SessionAuthenticationHandler` (cookie → user, never extends), `SessionAntiforgeryData` (XSRF token bound to the session), `TotpVerifier` (TOTP codes, each accepted once), `LoginGuard` (limit per IP, account lockout, login history), `LoginAttempt`, `DeviceName` (User-Agent for storage and display), `AuthEndpoints` (`me`, `login`, `keepalive`, `logout`, XSRF filter), `SessionEndpoints` (session list, ending sessions, login history), `CreateUserCommand` (`create-user`) |
+| `src/Claushh.Api/Auth/` | login: `Session`, `AuthSessionOptions`, `AuthCookies` (cookie names), `SessionService` (the only code with session rules), `SessionAuthenticationHandler` (cookie → user, never extends), `SessionAntiforgeryData` (XSRF token bound to the session), `TotpVerifier` (TOTP codes, each accepted once), `LoginGuard` (limit per IP, account lockout, login history), `LoginAttempt`, `DeviceName` (User-Agent for storage and display), `AuthEndpoints` (`me`, `login`, `keepalive`, `logout`, XSRF filter), `SessionEndpoints` (session list, ending sessions, login history), `CreateUserCommand` (`create-user`), `AuthCleanup` (hourly deletion after 90 days) |
 | `dotnet-tools.json` | local .NET tools: `dotnet-ef` (`dotnet tool restore`) |
 | `tests/Claushh.Api.Tests/` | backend integration tests: xUnit, the API in memory (`WebApplicationFactory`), PostgreSQL 17 from Testcontainers (`ApiFactory`) |
 | `global.json` | `dotnet test` runs on Microsoft.Testing.Platform (required by xUnit v3 on the .NET 10 SDK) |
@@ -538,7 +538,9 @@ Configuration:
 Sessions (`Auth/`):
 - Table `Sessions`: public `Id` (the `sessionId` of `/me`, constant for the life of the session), `SecretHash`
   (SHA-256 of the random 32-byte secret from the cookie, unique), `CreatedAt`, `LastActivityAt`, `IdleExpiresAt`
-  (never past `AbsoluteExpiresAt`), `AbsoluteExpiresAt`, `RevokedAt`, `Device` (User-Agent), `Ip`. Rows stay after logout.
+  (never past `AbsoluteExpiresAt`), `AbsoluteExpiresAt`, `RevokedAt`, `Device` (User-Agent), `Ip`. Rows stay after logout
+  and are deleted 90 days after the session ended (`AuthCleanup`, at start and every hour), like login attempts older
+  than 90 days.
 - A session is active when it is not revoked and both deadlines are in the future. Only `keepalive` moves `IdleExpiresAt`;
   reading a session (`SessionAuthenticationHandler`, `/me`) never extends it. All time comes from `TimeProvider`.
 - Cookies, all `SameSite=Strict; Path=/`: `__Host-claushh-session` (the secret, `HttpOnly`, no `Expires`),
