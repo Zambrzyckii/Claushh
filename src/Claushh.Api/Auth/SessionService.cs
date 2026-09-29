@@ -68,6 +68,12 @@ public sealed class SessionService(ClaushhDbContext db, TimeProvider clock, IOpt
         return ended == 1;
     }
 
+    public async Task RevokeAllAsync(string userId, CancellationToken ct)
+    {
+        var now = clock.GetUtcNow();
+        await Active().Where(s => s.UserId == userId).ExecuteUpdateAsync(s => s.SetProperty(x => x.RevokedAt, now), ct);
+    }
+
     // Whole seconds until each deadline, as the frontend expects (relative, so a wrong device clock does not matter).
     public (int ExpiresIn, int AbsoluteExpiresIn) SecondsLeft(Session session)
     {

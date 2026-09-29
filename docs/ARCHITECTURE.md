@@ -35,7 +35,7 @@ to the API at `http://localhost:5080` (`web/proxy.conf.json`).
 | `src/Claushh.Api/Program.cs` | app configuration and endpoint mapping |
 | `src/Claushh.Api/Properties/launchSettings.json` | development profile, port 5080 |
 | `src/Claushh.Api/Data/` | `ClaushhDbContext` (Identity tables and `Sessions`) and EF Core migrations, applied at startup |
-| `src/Claushh.Api/Auth/` | login: `Session`, `AuthSessionOptions`, `AuthCookies` (cookie names), `SessionService` (the only code with session rules), `SessionAuthenticationHandler` (cookie → user, never extends), `SessionAntiforgeryData` (XSRF token bound to the session), `AuthEndpoints` (`/api/auth/*`, XSRF filter) |
+| `src/Claushh.Api/Auth/` | login: `Session`, `AuthSessionOptions`, `AuthCookies` (cookie names), `SessionService` (the only code with session rules), `SessionAuthenticationHandler` (cookie → user, never extends), `SessionAntiforgeryData` (XSRF token bound to the session), `AuthEndpoints` (`/api/auth/*`, XSRF filter), `CreateUserCommand` (`create-user`) |
 | `dotnet-tools.json` | local .NET tools: `dotnet-ef` (`dotnet tool restore`) |
 | `tests/Claushh.Api.Tests/` | backend integration tests: xUnit, the API in memory (`WebApplicationFactory`), PostgreSQL 17 from Testcontainers (`ApiFactory`) |
 | `global.json` | `dotnet test` runs on Microsoft.Testing.Platform (required by xUnit v3 on the .NET 10 SDK) |
@@ -541,6 +541,13 @@ Sessions (`Auth/`):
 - Cookies, all `SameSite=Strict; Path=/`: `__Host-claushh-session` (the secret, `HttpOnly`, no `Expires`),
   `__Host-claushh-af` (antiforgery cookie token, `HttpOnly`), `XSRF-TOKEN` (request token that Angular sends back in
   `X-XSRF-TOKEN`). With `Sessions:SecureCookies=false`: `claushh-session`, `claushh-af`, and `Secure` only on HTTPS.
+
+Commands (`dotnet run --project src/Claushh.Api -- <command>`, on the server `./Claushh.Api <command>`):
+
+| Command | What it does |
+|---|---|
+| `create-user` | creates the single account: user name, password (at least 12 characters, no echo), TOTP key and `otpauth://` URI, switched on only after a correct code; refuses when an account exists |
+| `create-user --reset-totp` | a new TOTP key for the existing account (after a correct code) and all its sessions ended |
 
 Migrations: `dotnet tool restore`, then
 `ASPNETCORE_ENVIRONMENT=Development dotnet ef migrations add <Name> --project src/Claushh.Api --output-dir Data/Migrations`.

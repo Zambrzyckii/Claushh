@@ -29,6 +29,7 @@ builder.Services
 
 builder.Services.AddSingleton<AuthCookies>();
 builder.Services.AddScoped<SessionService>();
+builder.Services.AddScoped<CreateUserCommand>();
 builder.Services.AddAuthentication(SessionAuthenticationHandler.SchemeName)
     .AddScheme<AuthenticationSchemeOptions, SessionAuthenticationHandler>(SessionAuthenticationHandler.SchemeName, _ => { });
 // Closed by default: an endpoint without .AllowAnonymous() requires a session.
@@ -51,6 +52,19 @@ var app = builder.Build();
 await using (var scope = app.Services.CreateAsyncScope())
 {
     await scope.ServiceProvider.GetRequiredService<ClaushhDbContext>().Database.MigrateAsync();
+}
+
+// `dotnet run -- create-user [--reset-totp]`: set up the account and exit without starting the HTTP server.
+if (args is ["create-user", .. var flags])
+{
+    if (flags is not ([] or ["--reset-totp"]))
+    {
+        Console.WriteLine("Usage: create-user [--reset-totp]");
+        return 2;
+    }
+    await using var scope = app.Services.CreateAsyncScope();
+    return await scope.ServiceProvider.GetRequiredService<CreateUserCommand>()
+        .RunAsync(flags is ["--reset-totp"], ConsoleTerminal.Instance, CancellationToken.None);
 }
 
 // First, so that also 401 from authorization and 500 from the error handler get the header.
@@ -77,3 +91,4 @@ api.MapAuthEndpoints();
 api.Map("{**path}", () => Results.NotFound());
 
 app.Run();
+return 0;

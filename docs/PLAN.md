@@ -109,6 +109,9 @@ Backend decisions (stage 1):
 - Development runs over plain http, where ASP.NET antiforgery refuses `Secure`-only cookies, so there the cookies have no
   `__Host-` prefix (`Sessions:SecureCookies=false`). Behind Cloudflare Tunnel requests also reach the API as HTTP,
   so production needs `ForwardedHeaders` (stage 1, before the deployment) first.
+- The account is created only by `create-user` on the server; TOTP is switched on only after a correct code from the app,
+  in one transaction. A lost phone: `create-user --reset-totp` (a new key, all sessions ended), which needs shell access
+  to the server anyway. There are no recovery codes, because the login contract has only `totpCode`.
 
 ### Limiting damage
 
