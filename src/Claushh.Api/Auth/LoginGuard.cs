@@ -15,8 +15,8 @@ public sealed class LoginGuard(ClaushhDbContext db, UserManager<IdentityUser> us
     private const int MaxCodeFailures = 5;
     private static readonly TimeSpan FirstLockout = TimeSpan.FromMinutes(15);
     private static readonly TimeSpan MaxLockout = TimeSpan.FromHours(24);
-    // Locks in a row without a successful login, stored next to TotpVerifier's TotpLastStep.
-    private const string TokenProvider = "Claushh";
+    private const int HistoryLength = 20;
+    // Locks in a row without a successful login, stored under TotpVerifier.LoginProvider next to TotpLastStep.
     private const string LockoutsToken = "LockoutsInARow";
 
     // One login at a time in this process: the checks and writes of parallel attempts never interleave.
@@ -25,6 +25,9 @@ public sealed class LoginGuard(ClaushhDbContext db, UserManager<IdentityUser> us
     public async Task<IDisposable> EnterAsync(CancellationToken ct)
     {
         await Gate.WaitAsync(ct);
+        // What the request loaded before the gate (the user of its session cookie) may be stale by now: forget it, so the
+        // checks read the rows as the previous login left them. Only Login calls this, and it has no unsaved changes here.
+        db.ChangeTracker.Clear();
         return new GateLease();
     }
 
@@ -60,7 +63,12 @@ public sealed class LoginGuard(ClaushhDbContext db, UserManager<IdentityUser> us
 
     // The history for the "Bezpieczeństwo" window: the last 20, newest first (Id breaks ties of the same time).
     public Task<List<LoginAttempt>> RecentAsync(CancellationToken ct) =>
-        db.LoginAttempts.OrderByDescending(a => a.At).ThenByDescending(a => a.Id).Take(20).AsNoTracking().ToListAsync(ct);
+        db.LoginAttempts
+            .OrderByDescending(a => a.At)
+            .ThenByDescending(a => a.Id)
+            .Take(HistoryLength)
+            .AsNoTracking()
+            .ToListAsync(ct);
 
     public Task<int> DeleteAttemptsBeforeAsync(DateTimeOffset cutoff, CancellationToken ct) =>
         db.LoginAttempts.Where(a => a.At < cutoff).ExecuteDeleteAsync(ct);
@@ -77,7 +85,7 @@ public sealed class LoginGuard(ClaushhDbContext db, UserManager<IdentityUser> us
             var duration = LockoutDuration(lockouts);
             user.AccessFailedCount = 0;
             user.LockoutEnd = clock.GetUtcNow() + duration;
-            ThrowIfFailed(await users.SetAuthenticationTokenAsync(user, TokenProvider, LockoutsToken,
+            ThrowIfFailed(await users.SetAuthenticationTokenAsync(user, TotpVerifier.LoginProvider, LockoutsToken,
                 lockouts.ToString(CultureInfo.InvariantCulture)));
             log.LogWarning("Account locked for {Minutes} minutes after {Failures} wrong codes, lock {Lockouts} in a row",
                 duration.TotalMinutes, MaxCodeFailures, lockouts);
@@ -89,7 +97,7 @@ public sealed class LoginGuard(ClaushhDbContext db, UserManager<IdentityUser> us
     {
         if (await LockoutsInARowAsync(user) > 0)
         {
-            ThrowIfFailed(await users.RemoveAuthenticationTokenAsync(user, TokenProvider, LockoutsToken));
+            ThrowIfFailed(await users.RemoveAuthenticationTokenAsync(user, TotpVerifier.LoginProvider, LockoutsToken));
         }
         if (user.AccessFailedCount > 0)
         {
@@ -101,19 +109,21 @@ public sealed class LoginGuard(ClaushhDbContext db, UserManager<IdentityUser> us
     // `create-user --reset-totp` and `--reset-password`: shell access on the server proves more than a code.
     public async Task UnlockAsync(IdentityUser user)
     {
-        ThrowIfFailed(await users.RemoveAuthenticationTokenAsync(user, TokenProvider, LockoutsToken));
+        ThrowIfFailed(await users.RemoveAuthenticationTokenAsync(user, TotpVerifier.LoginProvider, LockoutsToken));
         user.AccessFailedCount = 0;
         user.LockoutEnd = null;
         await SaveAsync(user);
     }
 
     private async Task<int> LockoutsInARowAsync(IdentityUser user) =>
-        int.TryParse(await users.GetAuthenticationTokenAsync(user, TokenProvider, LockoutsToken),
+        int.TryParse(await users.GetAuthenticationTokenAsync(user, TotpVerifier.LoginProvider, LockoutsToken),
             NumberStyles.None, CultureInfo.InvariantCulture, out var lockouts) ? lockouts : 0;
 
     // 15 minutes for the first lock in a row, twice as long for each further one, at most 24 hours.
     private static TimeSpan LockoutDuration(int lockouts)
     {
+        // The cap on the exponent keeps TimeSpan from overflowing after many locks in a row; from the 8th lock on the
+        // result is 24 hours anyway.
         var duration = FirstLockout * Math.Pow(2, Math.Min(lockouts - 1, 16));
         return duration < MaxLockout ? duration : MaxLockout;
     }

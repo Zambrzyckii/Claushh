@@ -5,7 +5,7 @@ Goals and decisions are in [`PLAN.md`](PLAN.md). After every change to the struc
 or dependency, update the relevant section.
 
 Status: frontend done (login, session countdown and the "Bezpieczeństwo" (Security) window, explorer, editor with diff view,
-console, workspaces and git, terminal). The backend has login and sessions (section "Backend"); the other contracts are still only in the mock.
+console, workspaces and git, terminal). The backend has login, sessions and login protection (section "Backend"); the other contracts are still only in the mock.
 The frontend is tested against a mock backend (`web/e2e/mock-api/`) that follows the contracts below.
 
 ## Flow
@@ -185,7 +185,9 @@ to the API at `http://localhost:5080` (`web/proxy.conf.json`).
 
 ### API contract
 
-Implemented in the backend (section "Backend"), except closing the WebSockets of an ended session, which comes with the hubs, and `ip` from `CF-Connecting-IP`, which needs `ForwardedHeaders` (stage 1, part C) — until then `ip` is the connection address.
+Implemented in the backend (section "Backend"), except closing the WebSockets of an ended session, which comes with the
+hubs, and `ip` from `CF-Connecting-IP`, which needs `ForwardedHeaders` (stage 1, part C) — until then `ip` is the
+connection address.
 
 | Method | Path | Response |
 |---|---|---|
@@ -198,7 +200,7 @@ Implemented in the backend (section "Backend"), except closing the WebSockets of
 
 | Method | Path | Response |
 |---|---|---|
-| GET | `/api/auth/sessions` | `200 [{"id","current","device","ip","createdAt","lastActivityAt"}]`. `id` is a public ID, **never the secret from the cookie**. `device` e.g. "Chrome · Linux" from the User-Agent header, `ip` from `CF-Connecting-IP` |
+| GET | `/api/auth/sessions` | `200 [{"id","current","device","ip","createdAt","lastActivityAt"}]`, newest first. `id` is a public ID, **never the secret from the cookie**. `device` e.g. "Chrome · Linux" from the User-Agent header, `ip` from `CF-Connecting-IP` |
 | DELETE | `/api/auth/sessions/{id}` | ends another session (including its WebSockets). `204`, `404` unknown, `400` for your own session (that is what logout is for) |
 | POST | `/api/auth/sessions/revoke-others` | ends all sessions except the current one. `204` |
 | GET | `/api/auth/logins` | `200 [{"at","ip","device","success"}]`, the last 20, newest first, including failed attempts |
@@ -541,8 +543,7 @@ Sessions (`Auth/`):
 - Table `Sessions`: public `Id` (the `sessionId` of `/me`, constant for the life of the session), `SecretHash`
   (SHA-256 of the random 32-byte secret from the cookie, unique), `CreatedAt`, `LastActivityAt`, `IdleExpiresAt`
   (never past `AbsoluteExpiresAt`), `AbsoluteExpiresAt`, `RevokedAt`, `Device` (User-Agent), `Ip`. Rows stay after logout
-  and are deleted 90 days after the session ended (`AuthCleanup`, at start and every hour), like login attempts older
-  than 90 days.
+  and are deleted 90 days after the session ended (`AuthCleanup`, at start and every hour).
 - A session is active when it is not revoked and both deadlines are in the future. Only `keepalive` moves `IdleExpiresAt`;
   reading a session (`SessionAuthenticationHandler`, `/me`) never extends it. All time comes from `TimeProvider`.
 - Cookies, all `SameSite=Strict; Path=/`: `__Host-claushh-session` (the secret, `HttpOnly`, no `Expires`),
@@ -565,8 +566,9 @@ Login protection (`Auth/`):
   time, twice as long for every further lock in a row, at most 24 hours (the number of locks in a row is the token
   `Claushh` / `LockoutsInARow` in `AspNetUserTokens`). While it is locked every login gets `429` with `Retry-After`,
   whatever the name and password; when both limits apply, `Retry-After` is the later end. A successful login resets
-  both counts; `create-user --reset-totp` and `--reset-password` also clear the lockout.
-- Logins run one at a time (`LoginGuard.EnterAsync`), so the checks and writes of parallel attempts never interleave.
+  both counts; `create-user --reset-totp` and `--reset-password` also clear the lockout and reset both counts.
+- Logins in the API process run one at a time (`LoginGuard.EnterAsync`), so the checks and writes of parallel attempts
+  never interleave.
 
 Commands (`dotnet run --project src/Claushh.Api -- <command>`, on the server `./Claushh.Api <command>`):
 

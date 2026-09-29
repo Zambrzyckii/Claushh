@@ -64,14 +64,34 @@ public sealed class LoginLimitTests(ApiFactory api) : ApiTest(api)
     public async Task Parallel_logins_with_the_same_code_let_only_one_in()
     {
         var code = Api.NextTotp();
-        var second = new ApiClient(Api);
+        var clients = Enumerable.Range(0, 8).Select(_ => new ApiClient(Api)).ToList();
 
-        var responses = await Task.WhenAll(
-            Client.LoginAsync(ApiFactory.UserName, ApiFactory.Password, code),
-            second.LoginAsync(ApiFactory.UserName, ApiFactory.Password, code));
+        var responses = await Task.WhenAll(clients.Select(client =>
+            client.LoginAsync(ApiFactory.UserName, ApiFactory.Password, code)));
 
-        Assert.Single(responses, r => r.StatusCode == HttpStatusCode.NoContent);
-        Assert.Single(responses, r => r.StatusCode == HttpStatusCode.Unauthorized);
+        var statuses = responses.Select(r => r.StatusCode).ToList();
+        Assert.DoesNotContain(HttpStatusCode.InternalServerError, statuses);
+        Assert.Single(statuses, s => s == HttpStatusCode.NoContent);
+        Assert.Equal(5, statuses.Count(s => s == HttpStatusCode.Unauthorized));
+        Assert.Equal(2, statuses.Count(s => s == HttpStatusCode.TooManyRequests));
+        Assert.Equal(6, await Api.LoginAttemptCountAsync());
+    }
+
+    [Fact]
+    public async Task A_long_user_agent_with_an_emoji_is_recorded_and_counted()
+    {
+        var client = new ApiClient(Api);
+        client.Http.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", new string('a', 255) + "😀");
+
+        for (var i = 0; i < 5; i++)
+        {
+            Assert.Equal(HttpStatusCode.Unauthorized,
+                (await client.LoginAsync(ApiFactory.UserName, ApiFactory.Password, Api.WrongTotp())).StatusCode);
+        }
+
+        Assert.Equal(5, await Api.LoginAttemptCountAsync());
+        Assert.Equal(HttpStatusCode.TooManyRequests,
+            (await client.LoginAsync(ApiFactory.UserName, ApiFactory.Password, Api.WrongTotp())).StatusCode);
     }
 
     // Wrong passwords: they count for the IP limit, never for the account lockout.

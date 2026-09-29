@@ -37,7 +37,8 @@ npm install
 npm start
 ```
 
-Lost phone or leaked password: `create-user --reset-totp` gives the account a new TOTP key, `create-user --reset-password` a new password; both end all sessions (commands in `docs/ARCHITECTURE.md`).
+Lost phone or leaked password: `create-user --reset-totp` gives the account a new TOTP key,
+`create-user --reset-password` a new password; both end all sessions (commands in `docs/ARCHITECTURE.md`).
 
 ## Frontend tests
 

@@ -24,8 +24,7 @@ builder.Services
         options.Password.RequireUppercase = false;
         options.Password.RequireNonAlphanumeric = false;
     })
-    .AddEntityFrameworkStores<ClaushhDbContext>()
-    .AddTokenProvider<AuthenticatorTokenProvider<IdentityUser>>(TokenOptions.DefaultAuthenticatorProvider);
+    .AddEntityFrameworkStores<ClaushhDbContext>();
 
 builder.Services.AddSingleton<AuthCookies>();
 builder.Services.AddScoped<SessionService>();

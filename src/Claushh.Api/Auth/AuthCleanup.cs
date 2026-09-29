@@ -28,7 +28,7 @@ public sealed class AuthCleanup(IServiceScopeFactory scopes, TimeProvider clock,
             {
                 await RunOnceAsync(stoppingToken);
             }
-            catch (Exception e) when (e is not OperationCanceledException)
+            catch (Exception e) when (!stoppingToken.IsCancellationRequested)
             {
                 // By default an exception in a background service stops the whole API; a failed cleanup is not worth that.
                 log.LogError(e, "Cleanup failed; the next attempt is in an hour");

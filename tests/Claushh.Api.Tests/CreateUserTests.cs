@@ -1,5 +1,6 @@
 using System.Net;
 using Claushh.Api.Auth;
+using Claushh.Api.Data;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -103,13 +104,15 @@ public sealed class CreateUserTests(ApiFactory api) : ApiTest(api)
     {
         for (var i = 0; i < 4; i++)
         {
-            await Client.LoginAsync(ApiFactory.UserName, ApiFactory.Password, Api.WrongTotp());
+            Assert.Equal(HttpStatusCode.Unauthorized,
+                (await Client.LoginAsync(ApiFactory.UserName, ApiFactory.Password, Api.WrongTotp())).StatusCode);
         }
         var terminal = new ScriptedTerminal(Api, t => t.NextCode());
         Assert.Equal(0, await RunAsync(resetTotp: true, terminal));
 
-        await Client.LoginAsync(ApiFactory.UserName, ApiFactory.Password, Api.WrongTotp());
+        var wrong = await Client.LoginAsync(ApiFactory.UserName, ApiFactory.Password, Api.WrongTotp());
 
+        Assert.Equal(HttpStatusCode.Unauthorized, wrong.StatusCode);
         Assert.Equal(HttpStatusCode.NoContent,
             (await Client.LoginAsync(ApiFactory.UserName, ApiFactory.Password, terminal.NextCode())).StatusCode);
     }
@@ -131,6 +134,14 @@ public sealed class CreateUserTests(ApiFactory api) : ApiTest(api)
     }
 
     [Fact]
+    public async Task Reset_totp_right_after_a_login_accepts_the_current_code()
+    {
+        await Client.LoginAsOwnerAsync();
+
+        Assert.Equal(0, await RunAsync(resetTotp: true, new ScriptedTerminal(Api, t => t.CurrentCode())));
+    }
+
+    [Fact]
     public async Task Reset_password_replaces_the_password_and_ends_all_sessions()
     {
         await Client.LoginAsOwnerAsync();
@@ -138,6 +149,8 @@ public sealed class CreateUserTests(ApiFactory api) : ApiTest(api)
 
         Assert.Equal(0, await ResetPasswordAsync(terminal));
 
+        Assert.Contains("New password saved, all sessions ended, the lockout cleared.", terminal.Output);
+        Assert.DoesNotContain(terminal.Output, line => line.Contains(NewPassword, StringComparison.Ordinal));
         Assert.Equal(HttpStatusCode.Unauthorized, (await Client.Http.GetAsync("/api/auth/me")).StatusCode);
         var fresh = new ApiClient(Api);
         Assert.Equal(HttpStatusCode.Unauthorized,
@@ -173,6 +186,18 @@ public sealed class CreateUserTests(ApiFactory api) : ApiTest(api)
     }
 
     [Fact]
+    public async Task An_empty_new_password_changes_nothing()
+    {
+        var terminal = new ScriptedTerminal(Api, _ => "", _ => "");
+
+        Assert.Equal(1, await ResetPasswordAsync(terminal));
+
+        var fresh = new ApiClient(Api);
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await fresh.LoginAsync(ApiFactory.UserName, ApiFactory.Password, Api.NextTotp())).StatusCode);
+    }
+
+    [Fact]
     public async Task Different_new_passwords_change_nothing()
     {
         var terminal = new ScriptedTerminal(Api, _ => NewPassword, _ => "another long password");
@@ -181,6 +206,40 @@ public sealed class CreateUserTests(ApiFactory api) : ApiTest(api)
 
         Assert.Equal(HttpStatusCode.NoContent,
             (await Client.LoginAsync(ApiFactory.UserName, ApiFactory.Password, Api.NextTotp())).StatusCode);
+    }
+
+    [Fact]
+    public async Task Reset_password_refuses_when_the_account_changed_while_typing()
+    {
+        var terminal = new ScriptedTerminal(Api,
+            _ =>
+            {
+                using var scope = Api.Services.CreateScope();
+                var db = scope.ServiceProvider.GetRequiredService<ClaushhDbContext>();
+                db.Users.Single().ConcurrencyStamp = Guid.NewGuid().ToString();
+                db.SaveChanges();
+                return NewPassword;
+            },
+            _ => NewPassword);
+
+        Assert.Equal(1, await ResetPasswordAsync(terminal));
+
+        Assert.Contains(terminal.Output, line => line.Contains("changed while you typed", StringComparison.Ordinal));
+        var fresh = new ApiClient(Api);
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await fresh.LoginAsync(ApiFactory.UserName, ApiFactory.Password, Api.NextTotp())).StatusCode);
+    }
+
+    [Fact]
+    public async Task Reset_password_refuses_the_old_password()
+    {
+        await Client.LoginAsOwnerAsync();
+        var terminal = new ScriptedTerminal(Api, _ => ApiFactory.Password, _ => ApiFactory.Password);
+
+        Assert.Equal(1, await ResetPasswordAsync(terminal));
+
+        Assert.Contains(terminal.Output, line => line.Contains("same as the old one", StringComparison.Ordinal));
+        Assert.Equal(HttpStatusCode.OK, (await Client.Http.GetAsync("/api/auth/me")).StatusCode);
     }
 
     [Fact]

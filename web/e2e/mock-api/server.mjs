@@ -382,7 +382,7 @@ async function handle(req, res) {
     const currentSid = cookies(req).sid;
     if (url.pathname === '/api/auth/logins' && req.method === 'GET') return json(res, 200, state.logins.slice(0, 20));
     if (url.pathname === '/api/auth/sessions' && req.method === 'GET') {
-      return json(res, 200, [...state.sessions].map(([sid, s]) => ({
+      return json(res, 200, [...state.sessions].reverse().map(([sid, s]) => ({
         id: s.id, current: sid === currentSid, device: s.device, ip: s.ip, createdAt: s.createdAt, lastActivityAt: s.lastActivityAt
       })));
     }

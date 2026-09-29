@@ -97,6 +97,8 @@ public sealed class LockoutTests(ApiFactory api) : ApiTest(api)
     {
         await LockAccountAsync();
         Api.Clock.Advance(TimeSpan.FromMinutes(15));
+        await LockAccountAsync();
+        Api.Clock.Advance(TimeSpan.FromMinutes(30));
         Assert.Equal(HttpStatusCode.NoContent, (await LoginWithCodeAsync(Api.NextTotp())).StatusCode);
         await LockAccountAsync();
 
@@ -143,6 +145,26 @@ public sealed class LockoutTests(ApiFactory api) : ApiTest(api)
         Assert.Equal(HttpStatusCode.Unauthorized, (await LoginWithCodeAsync(Api.WrongTotp())).StatusCode);
 
         Assert.Equal(HttpStatusCode.NoContent, (await LoginWithCodeAsync(Api.NextTotp())).StatusCode);
+    }
+
+    [Fact]
+    public async Task Parallel_wrong_codes_from_logged_in_browsers_lock_without_errors()
+    {
+        var clients = new List<ApiClient>();
+        for (var i = 0; i < 8; i++)
+        {
+            var client = new ApiClient(Api);
+            await client.LoginAsOwnerAsync();
+            clients.Add(client);
+        }
+
+        var responses = await Task.WhenAll(clients.Select(client =>
+            client.LoginAsync(ApiFactory.UserName, ApiFactory.Password, Api.WrongTotp())));
+
+        var statuses = responses.Select(r => r.StatusCode).ToList();
+        Assert.DoesNotContain(HttpStatusCode.InternalServerError, statuses);
+        Assert.Equal(5, statuses.Count(s => s == HttpStatusCode.Unauthorized));
+        Assert.Equal(3, statuses.Count(s => s == HttpStatusCode.TooManyRequests));
     }
 
     private Task<HttpResponseMessage> LoginWithCodeAsync(string code) =>

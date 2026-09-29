@@ -7,8 +7,17 @@ public static class DeviceName
 {
     private const int MaxStoredLength = 256;
 
-    public static string Stored(string userAgent) =>
-        userAgent.Length > MaxStoredLength ? userAgent[..MaxStoredLength] : userAgent;
+    // At most 256 UTF-16 units, never ending between the two halves of a surrogate pair (e.g. an emoji): a lone half
+    // cannot be stored.
+    public static string Stored(string userAgent)
+    {
+        if (userAgent.Length <= MaxStoredLength)
+        {
+            return userAgent;
+        }
+        var length = char.IsHighSurrogate(userAgent[MaxStoredLength - 1]) ? MaxStoredLength - 1 : MaxStoredLength;
+        return userAgent[..length];
+    }
 
     public static string From(string userAgent)
     {

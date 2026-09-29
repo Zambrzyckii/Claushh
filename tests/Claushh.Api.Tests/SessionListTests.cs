@@ -62,12 +62,19 @@ public sealed class SessionListTests(ApiFactory api) : ApiTest(api)
     [Fact]
     public async Task Revoke_others_needs_an_xsrf_token()
     {
+        var other = new ApiClient(Api);
+        await other.LoginAsOwnerAsync();
         await Client.LoginAsOwnerAsync();
         Client.SendXsrf = false;
 
-        var response = await Client.Http.PostAsync("/api/auth/sessions/revoke-others", null);
+        var refused = await Client.Http.PostAsync("/api/auth/sessions/revoke-others", null);
 
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await other.Http.GetAsync("/api/auth/me")).StatusCode);
+        Client.SendXsrf = true;
+        var accepted = await Client.Http.PostAsync("/api/auth/sessions/revoke-others", null);
+        Assert.Equal(HttpStatusCode.NoContent, accepted.StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await other.Http.GetAsync("/api/auth/me")).StatusCode);
     }
 
     [Fact]

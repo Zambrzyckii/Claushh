@@ -32,14 +32,15 @@ public sealed class CleanupTests(ApiFactory api) : ApiTest(api)
     {
         await Client.LoginAsOwnerAsync();
         await Client.Http.PostAsync("/api/auth/logout", null);
+        await new ApiClient(Api).LoginAsOwnerAsync();
         Api.Clock.Advance(TimeSpan.FromDays(89));
 
         await CleanupAsync();
 
         await using var scope = Api.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<ClaushhDbContext>();
-        Assert.Equal(1, await db.Sessions.CountAsync());
-        Assert.Equal(1, await db.LoginAttempts.CountAsync());
+        Assert.Equal(2, await db.Sessions.CountAsync());
+        Assert.Equal(2, await db.LoginAttempts.CountAsync());
     }
 
     private Task CleanupAsync() => Api.Services.GetRequiredService<AuthCleanup>().RunOnceAsync(CancellationToken.None);

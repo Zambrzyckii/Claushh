@@ -67,7 +67,8 @@ public static class AuthEndpoints
         // CheckPasswordAsync returns a user only when TotpCode has 6 characters.
         var user = await CheckPasswordAsync(users, body);
         var success = user is not null && await totp.VerifyAsync(user, body.TotpCode!);
-        await guard.RecordAsync(success, ip, userAgent, http.RequestAborted);
+        // Not the request's token: an attempt whose client went away is still recorded and counted.
+        await guard.RecordAsync(success, ip, userAgent, CancellationToken.None);
         if (user is null || !success)
         {
             if (user is not null)

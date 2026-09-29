@@ -121,15 +121,22 @@ Backend decisions (stage 1):
 - Login protection has two layers in own code (`LoginGuard`, time from `TimeProvider`): a limit of failed attempts per
   IP protects the password, the account lockout protects the code. Rejected: the `RateLimiter` middleware and Identity's
   lockout (both use the real clock, so their windows cannot be tested without waiting; the middleware also counts
-  successful requests and forgets everything on restart). Logins run one at a time, so parallel attempts cannot slip
-  between a check and its write.
+  successful requests and forgets everything on restart). Logins run one at a time in the API process, so parallel
+  attempts cannot slip between a check and its write.
 - The login history records every attempt that reaches the check, also for unknown names (guessing stays visible), but
   never the typed name (it sometimes holds a mistyped password) and not attempts refused with 429 (a flood would drown
   the list).
+- The limits are constants in code (10 failures per IP in 15 minutes, 5 wrong codes, lockouts from 15 minutes to
+  24 hours, 90 days). Rejected: configuration (nothing to tune for one user, and a setting could weaken the protection
+  by accident).
+- The User-Agent is stored as sent (cut to 256 characters) and turned into "Chrome · Linux" on read (`DeviceName`, the
+  mock's rules). Rejected: formatting on write (a fix of the rules would need a data migration).
 - The account lockout counts only wrong or reused codes after a correct password (5 → 15 minutes the first time), so a
   stranger without the password cannot lock the only account. While it is locked every login gets 429 whatever the
-  credentials (a 429 only after a correct password would confirm the password). The way out is
-  `create-user --reset-totp` or `--reset-password` on the server.
+  credentials (a 429 only after a correct password would confirm the password, and a 401 would not tell the owner why
+  login fails). The way out is `create-user --reset-totp` or `--reset-password` on the server, which also clear the
+  lockout. Rejected: a separate unlock command (one more command for the same situation; shell access proves more than
+  a code).
 - Repeated lockouts grow: every lock in a row without a successful login lasts twice as long (15 minutes up to
   24 hours), so someone who knows the password gets about 35 code guesses on the first day and 5 a day after that,
   instead of 480 a day. Rejected: a lock that lasts until `create-user` (SSH works only from the home network, so the
@@ -179,7 +186,8 @@ The order is chosen so that only already secured things reach the internet.
         with state cleanup, handling of an expired session, tab synchronization, protection against bfcache and open redirect.
   - [x] Backend, part A: PostgreSQL + EF Core, Identity with TOTP, a single account created by a command (`create-user`),
         server-side sessions, `me` / `login` / `logout` / `keepalive`, ending another session, antiforgery bound to the session.
-  - [x] Backend, part B: lockout, rate limiting, blocking reuse of a TOTP code, login history, session list, `revoke-others`, cleanup of old rows, growing lockouts, password reset.
+  - [x] Backend, part B: lockout, rate limiting, blocking reuse of a TOTP code, login history, session list,
+        `revoke-others`, cleanup of old rows, growing lockouts, password reset.
   - [ ] Backend, part C: security headers and serving `index.html`, ForwardedHeaders, notifications.
   - [x] Frontend: session countdown in the top bar (stage 5).
   - [ ] Deployment: Cloudflare Tunnel, systemd service.

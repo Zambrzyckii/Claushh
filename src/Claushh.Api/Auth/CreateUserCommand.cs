@@ -76,13 +76,19 @@ public sealed class CreateUserCommand(ClaushhDbContext db, UserManager<IdentityU
         {
             return Fail(terminal, "Empty password, or the passwords differ. Nothing was changed.");
         }
+        if (await users.CheckPasswordAsync(user, password))
+        {
+            return Fail(terminal, "The new password is the same as the old one. Nothing was changed.");
+        }
         // Remove, then add: the reset-token providers are not registered. When Identity refuses the new password, the
         // transaction is not committed, so the removal is undone too.
         var removed = await users.RemovePasswordAsync(user);
         var result = removed.Succeeded ? await users.AddPasswordAsync(user, password) : removed;
         if (!result.Succeeded)
         {
-            return Fail(terminal, $"{string.Join(" ", result.Errors.Select(e => e.Description))} Nothing was changed.");
+            return Fail(terminal, result.Errors.Any(e => e.Code == nameof(IdentityErrorDescriber.ConcurrencyFailure))
+                ? "The account changed while you typed. Nothing was changed; run the command again."
+                : $"{string.Join(" ", result.Errors.Select(e => e.Description))} Nothing was changed.");
         }
         await guard.UnlockAsync(user);
         await sessions.RevokeAllAsync(user.Id, ct);
@@ -117,6 +123,7 @@ public sealed class CreateUserCommand(ClaushhDbContext db, UserManager<IdentityU
     private async Task<bool> EnrollTotpAsync(IdentityUser user, ITerminal terminal)
     {
         await users.ResetAuthenticatorKeyAsync(user);
+        await totp.ForgetLastStepAsync(user);
         var key = await users.GetAuthenticatorKeyAsync(user) ?? throw new InvalidOperationException("No TOTP key.");
         var uri = $"otpauth://totp/Claushh:{Uri.EscapeDataString(user.UserName!)}?secret={key}&issuer=Claushh&digits=6";
         terminal.WriteLine($"TOTP key: {string.Join(' ', key.Chunk(4).Select(part => new string(part)))}");

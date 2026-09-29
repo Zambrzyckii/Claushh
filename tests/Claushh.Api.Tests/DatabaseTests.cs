@@ -20,7 +20,7 @@ public sealed class DatabaseTests(ApiFactory api)
         Assert.True(await users.CheckPasswordAsync(user, ApiFactory.Password));
         // Identity's validator with the real clock: an independent check that Totp.cs computes codes like an
         // authenticator app (the API itself checks codes with TotpVerifier).
-        Assert.True(await users.VerifyTwoFactorTokenAsync(user, users.Options.Tokens.AuthenticatorTokenProvider,
-            Totp.Code(api.TotpKey, DateTimeOffset.UtcNow)));
+        Assert.True(await new AuthenticatorTokenProvider<IdentityUser>().ValidateAsync("TOTP",
+            Totp.Code(api.TotpKey, DateTimeOffset.UtcNow), users, user));
     }
 }

@@ -11,12 +11,13 @@ namespace Claushh.Api.Auth;
 
 public sealed class TotpVerifier(UserManager<IdentityUser> users, TimeProvider clock)
 {
-    private const string TokenProvider = "Claushh";
+    internal const string LoginProvider = "Claushh";
     private const string LastStepToken = "TotpLastStep";
     private const long StepSeconds = 30;
 
     // True for a code of the step before, of or after now that is newer than the last accepted code. That step is then
     // stored, so neither this code nor an older one works again (RFC 6238, section 5.2).
+    // Newest step first: if two steps share a code, the newer one is stored.
     public async Task<bool> VerifyAsync(IdentityUser user, string code)
     {
         if (code.Length != 6 || !code.All(char.IsAsciiDigit) || await users.GetAuthenticatorKeyAsync(user) is not { } key)
@@ -24,25 +25,33 @@ public sealed class TotpVerifier(UserManager<IdentityUser> users, TimeProvider c
             return false;
         }
         var secret = FromBase32(key);
-        var lastStep = await users.GetAuthenticationTokenAsync(user, TokenProvider, LastStepToken) is { } stored
+        var lastStep = await users.GetAuthenticationTokenAsync(user, LoginProvider, LastStepToken) is { } stored
             ? long.Parse(stored, CultureInfo.InvariantCulture)
             : long.MinValue;
         var now = clock.GetUtcNow().ToUnixTimeSeconds() / StepSeconds;
-        for (var step = now - 1; step <= now + 1; step++)
+        for (var step = now + 1; step >= now - 1; step--)
         {
             if (step > lastStep && CryptographicOperations.FixedTimeEquals(
                     Encoding.ASCII.GetBytes(Code(secret, step)), Encoding.ASCII.GetBytes(code)))
             {
-                var result = await users.SetAuthenticationTokenAsync(user, TokenProvider, LastStepToken,
-                    step.ToString(CultureInfo.InvariantCulture));
-                if (!result.Succeeded)
-                {
-                    throw new InvalidOperationException(string.Join(" ", result.Errors.Select(e => e.Description)));
-                }
+                ThrowIfFailed(await users.SetAuthenticationTokenAsync(user, LoginProvider, LastStepToken,
+                    step.ToString(CultureInfo.InvariantCulture)));
                 return true;
             }
         }
         return false;
+    }
+
+    // A new key starts without a used step, so its current code can confirm it (`create-user --reset-totp`).
+    public async Task ForgetLastStepAsync(IdentityUser user) =>
+        ThrowIfFailed(await users.RemoveAuthenticationTokenAsync(user, LoginProvider, LastStepToken));
+
+    private static void ThrowIfFailed(IdentityResult result)
+    {
+        if (!result.Succeeded)
+        {
+            throw new InvalidOperationException(string.Join(" ", result.Errors.Select(e => e.Description)));
+        }
     }
 
     private static string Code(byte[] secret, long step)
