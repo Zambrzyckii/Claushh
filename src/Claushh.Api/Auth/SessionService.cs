@@ -49,6 +49,15 @@ public sealed class SessionService(ClaushhDbContext db, TimeProvider clock, IOpt
         return await Active().Include(s => s.User).SingleOrDefaultAsync(s => s.SecretHash == hash, ct);
     }
 
+    // The only way a session gets longer: idle deadline from now, never past the absolute one.
+    public async Task ExtendAsync(Session session, CancellationToken ct)
+    {
+        var now = clock.GetUtcNow();
+        session.LastActivityAt = now;
+        session.IdleExpiresAt = Min(now + options.Value.IdleTimeout, session.AbsoluteExpiresAt);
+        await db.SaveChangesAsync(ct);
+    }
+
     // Whole seconds until each deadline, as the frontend expects (relative, so a wrong device clock does not matter).
     public (int ExpiresIn, int AbsoluteExpiresIn) SecondsLeft(Session session)
     {

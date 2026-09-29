@@ -514,6 +514,7 @@ Endpoints:
 | GET | `/api/health` | checks whether the API is running | none |
 | GET | `/api/auth/me` | current session, always a fresh `XSRF-TOKEN` | none (401 without a session) |
 | POST | `/api/auth/login` | password + TOTP, creates a session | none, XSRF token |
+| POST | `/api/auth/keepalive` | the only request that extends a session (idle deadline, never past the absolute one) | session, XSRF token |
 
 Every other endpoint requires a session (`FallbackPolicy`), and every POST/PUT/PATCH/DELETE under `/api` a valid
 `X-XSRF-TOKEN` (filter `RequireXsrfToken` in `Auth/AuthEndpoints.cs`, 400 otherwise).

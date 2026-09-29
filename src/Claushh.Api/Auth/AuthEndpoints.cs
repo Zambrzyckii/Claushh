@@ -8,6 +8,7 @@ public static class AuthEndpoints
 {
     public sealed record LoginRequest(string? UserName, string? Password, string? TotpCode);
     public sealed record MeResponse(string UserName, Guid SessionId, int ExpiresIn, int AbsoluteExpiresIn);
+    public sealed record KeepaliveResponse(Guid SessionId, int ExpiresIn, int AbsoluteExpiresIn);
 
     private static readonly IdentityUser DummyUser = new();
     private static string? _dummyHash;
@@ -17,6 +18,7 @@ public static class AuthEndpoints
         var auth = api.MapGroup("/auth");
         auth.MapGet("/me", Me).AllowAnonymous();
         auth.MapPost("/login", Login).AllowAnonymous();
+        auth.MapPost("/keepalive", Keepalive);
         return api;
     }
 
@@ -62,6 +64,14 @@ public static class AuthEndpoints
         return Results.NoContent();
     }
 
+    private static async Task<IResult> Keepalive(HttpContext http, SessionService sessions)
+    {
+        var session = CurrentSession(http);
+        await sessions.ExtendAsync(session, http.RequestAborted);
+        var (expiresIn, absoluteExpiresIn) = sessions.SecondsLeft(session);
+        return Results.Ok(new KeepaliveResponse(session.Id, expiresIn, absoluteExpiresIn));
+    }
+
     // Null for every kind of failure. An unknown user still costs one password hash, so the response time
     // does not reveal whether the name exists.
     private static async Task<IdentityUser?> VerifyAsync(UserManager<IdentityUser> users, LoginRequest body)
@@ -86,4 +96,7 @@ public static class AuthEndpoints
         var codeValid = await users.VerifyTwoFactorTokenAsync(user, users.Options.Tokens.AuthenticatorTokenProvider, totpCode);
         return codeValid ? user : null;
     }
+
+    private static Session CurrentSession(HttpContext http) =>
+        http.Features.Get<Session>() ?? throw new InvalidOperationException("The endpoint requires a session.");
 }
