@@ -98,7 +98,7 @@ public sealed class LoginGuard(ClaushhDbContext db, UserManager<IdentityUser> us
         }
     }
 
-    // `create-user --reset-totp`: shell access on the server proves more than a code.
+    // `create-user --reset-totp` and `--reset-password`: shell access on the server proves more than a code.
     public async Task UnlockAsync(IdentityUser user)
     {
         ThrowIfFailed(await users.RemoveAuthenticationTokenAsync(user, TokenProvider, LockoutsToken));

@@ -183,7 +183,9 @@ to the API at `http://localhost:5080` (`web/proxy.conf.json`).
 | Extension in one tab | other tabs get the new deadline via `BroadcastChannel` |
 | "Wyloguj wszędzie" | one question (with the number of unsaved files) before anything else, then `POST /api/auth/sessions/revoke-others` and logout of this session without further questions |
 
-### API contract (to be implemented in the backend)
+### API contract
+
+Implemented in the backend (section "Backend"), except closing the WebSockets of an ended session, which comes with the hubs, and `ip` from `CF-Connecting-IP`, which needs `ForwardedHeaders` (stage 1, part C) — until then `ip` is the connection address.
 
 | Method | Path | Response |
 |---|---|---|
@@ -553,8 +555,8 @@ Login protection (`Auth/`):
   and a code from that step or an earlier one is rejected. `create-user` checks its code the same way, so that code is
   used up and the first login needs the next one.
 - Every attempt that reaches the check of the credentials is recorded in `LoginAttempts` (`At`, `Ip`, `Device` as the
-  raw User-Agent, `Success`), also for unknown names; the typed user name never. Attempts answered with `429` are not
-  recorded.
+  User-Agent cut to 256 characters, `Success`), also for unknown names; the typed user name never. Attempts answered
+  with `429` are not recorded. Attempts are deleted after 90 days (`AuthCleanup`).
 - 10 failures from one IP within 15 minutes give `429` with `Retry-After` (seconds until the 10th most recent failure
   leaves the window), with an empty body. The IP is the connection address; behind Cloudflare Tunnel it becomes the
   real one only with `ForwardedHeaders` (stage 1, part C).
@@ -605,7 +607,7 @@ Rules: `CLAUDE.md`, section "Tests" (new code: only integration and e2e tests).
 |---|---|---|
 | Integration + older unit | `cd web && npm test` | Vitest (jsdom). Integration: `console.integration.spec.ts` (panel + store + editor, SignalR and HTTP stubbed; also permission requests: hidden characters, button delay, "tak, zawsze", and a double Enter), `workspaces.integration.spec.ts` (Workspace panel + router + git status + explorer + editor, HTTP stubbed; also the strict clone URL validation), `security.integration.spec.ts` (AuthService + interceptor + SessionTimer + the "Bezpieczeństwo" window, HTTP, reload and clock stubbed; also expiry without a server response), `logout-confirmation.integration.spec.ts` (routes with guards + AuthService + login screen after an unconfirmed logout, also with a newer session from another tab). Older unit tests: auth, files API, paths, explorer, `EditorStore` |
 | E2E | `cd web && npm run e2e` | build + Playwright in Chromium on `e2e/mock-api/server.mjs`: login and sessions (including unconfirmed logout with "Back", a new tab and logging in again, embedding in a frame, Trusted Types), explorer and Monaco, console (steps, options, permissions, "tak, zawsze", interrupt, replay, multiple tabs, file changes), workspaces (opening a repo, git status, pull, push, create, clone, a conversation per repo), terminal (commands, keys, reload without duplicates, multiple terminals, `exit`, Ctrl+S, resizing, pasting with the decision panel, characters on a dropped connection without loss or duplication, also after closing the tab, queue limit, focus, OSC 8 links), session (countdown, "Przedłuż", activity once a minute on a fake clock, expiry, also without a server response and hubs closed by the server), the "Bezpieczeństwo" window with a second device (a separate browser context), diff view, Monaco worker startup, mock robustness and the contract rules that the frontend does not let through (clone URL, XSRF token bound to the identity). **Every test** (`fixtures.ts`) fails when the page reports a CSP or Trusted Types violation, an unhandled exception (including one caught by Angular's ErrorHandler, `console.error('ERROR', …)`) or Monaco does not create a worker |
-| Backend | `dotnet test` (needs Docker) | xUnit integration tests over HTTP (`WebApplicationFactory`, PostgreSQL 17 from Testcontainers, a test clock): login and its failures, `me`, `keepalive` and both deadlines, logout and 409, ending another session, XSRF token bound to the session, `no-store`, closed `/api/*`, `create-user` |
+| Backend | `dotnet test` (needs Docker) | xUnit integration tests over HTTP (`WebApplicationFactory`, PostgreSQL 17 from Testcontainers, a test clock): login and its failures, `me`, `keepalive` and both deadlines, logout and 409, ending another session, XSRF token bound to the session, `no-store`, closed `/api/*`, `create-user`, TOTP codes used once, the limit per IP, the account lockout and its growth, session list, `revoke-others`, login history, cleanup, the password reset |
 
 Notes on e2e:
 - The mock has one shared state, the tests run sequentially and start with `POST /__test/reset`. It listens only on

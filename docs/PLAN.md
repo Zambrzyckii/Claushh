@@ -79,7 +79,7 @@ console conversation identifiers, settings (default model, effort, mode).
 
 - Password (hash from ASP.NET Core Identity) + **mandatory TOTP**, optionally a passkey.
 - No registration endpoint. The account is created by an installation command (e.g. `dotnet run -- create-user`).
-- Login attempt limit (`RateLimiter`) and lockout after several failures.
+- Login attempt limit per IP and an account lockout after several wrong codes (own code, see "Backend decisions (stage 1)").
 - Phone notification on every login (ntfy or Telegram).
 - Cookies `HttpOnly`, `Secure`, `SameSite=Strict`, antiforgery.
 - Short sessions (e.g. 30 minutes of inactivity, hard limit of 12 h), extended only by user activity,
@@ -99,9 +99,10 @@ Backend decisions (stage 1):
   from `dotnet user-secrets` in development and from an environment variable on the server, never from the repository.
 - Backend tests are integration tests over HTTP with a real PostgreSQL 17 (Testcontainers), not a database mock.
 - Sessions live on the server in the `Sessions` table: the cookie holds a random secret, the database only its SHA-256.
-  Identity is used only for the user, the password hash and TOTP. Rejected: the Identity cookie with `ITicketStore`
-  (one expiry per ticket, so two deadlines, a session list and revoking need workarounds around a serialized blob)
-  and the plain Identity cookie with the security stamp (it cannot end a single session).
+  Identity is used only for the user, the password hash and the TOTP key (the codes are checked by own code, below).
+  Rejected: the Identity cookie with `ITicketStore` (one expiry per ticket, so two deadlines, a session list and
+  revoking need workarounds around a serialized blob) and the plain Identity cookie with the security stamp (it cannot
+  end a single session).
 - The XSRF token is bound to the session, not only to the user (`IAntiforgeryAdditionalDataProvider`), and one filter on
   `/api` validates it for POST/PUT/PATCH/DELETE: the built-in antiforgery middleware skips DELETE and does not stop the request.
 - Closed by default: `FallbackPolicy` requires a session; anonymous are only `/api/health`, `GET /api/auth/me` and
@@ -125,10 +126,10 @@ Backend decisions (stage 1):
 - The login history records every attempt that reaches the check, also for unknown names (guessing stays visible), but
   never the typed name (it sometimes holds a mistyped password) and not attempts refused with 429 (a flood would drown
   the list).
-- The account lockout counts only wrong or reused codes after a correct password (5 → 15 minutes), so a stranger
-  without the password cannot lock the only account. While it is locked every login gets 429 whatever the credentials
-  (a 429 only after a correct password would confirm the password). The way out is `create-user --reset-totp` or
-  `--reset-password` on the server.
+- The account lockout counts only wrong or reused codes after a correct password (5 → 15 minutes the first time), so a
+  stranger without the password cannot lock the only account. While it is locked every login gets 429 whatever the
+  credentials (a 429 only after a correct password would confirm the password). The way out is
+  `create-user --reset-totp` or `--reset-password` on the server.
 - Repeated lockouts grow: every lock in a row without a successful login lasts twice as long (15 minutes up to
   24 hours), so someone who knows the password gets about 35 code guesses on the first day and 5 a day after that,
   instead of 480 a day. Rejected: a lock that lasts until `create-user` (SSH works only from the home network, so the
@@ -178,7 +179,7 @@ The order is chosen so that only already secured things reach the internet.
         with state cleanup, handling of an expired session, tab synchronization, protection against bfcache and open redirect.
   - [x] Backend, part A: PostgreSQL + EF Core, Identity with TOTP, a single account created by a command (`create-user`),
         server-side sessions, `me` / `login` / `logout` / `keepalive`, ending another session, antiforgery bound to the session.
-  - [ ] Backend, part B: lockout, rate limiting, blocking reuse of a TOTP code, login history, session list, `revoke-others`.
+  - [x] Backend, part B: lockout, rate limiting, blocking reuse of a TOTP code, login history, session list, `revoke-others`, cleanup of old rows, growing lockouts, password reset.
   - [ ] Backend, part C: security headers and serving `index.html`, ForwardedHeaders, notifications.
   - [x] Frontend: session countdown in the top bar (stage 5).
   - [ ] Deployment: Cloudflare Tunnel, systemd service.

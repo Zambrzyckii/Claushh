@@ -5,7 +5,7 @@ terminal and git in the browser. Runs on a home computer (EndeavourOS), access t
 login with a password and a TOTP code. One user.
 
 Status: **frontend ready (login and sessions, editor with a diff view, console, workspaces and git, terminal);
-backend: login and sessions (stage 1, part A).** Nothing is fit to be exposed
+backend: login, sessions and login protection (stage 1, parts A and B).** Nothing is fit to be exposed
 to the internet. Progress: [`docs/PLAN.md`](docs/PLAN.md), section "Stages".
 
 ## Documentation
@@ -36,6 +36,8 @@ cd web
 npm install
 npm start
 ```
+
+Lost phone or leaked password: `create-user --reset-totp` gives the account a new TOTP key, `create-user --reset-password` a new password; both end all sessions (commands in `docs/ARCHITECTURE.md`).
 
 ## Frontend tests
 
