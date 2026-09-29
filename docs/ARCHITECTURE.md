@@ -563,7 +563,7 @@ Login protection (`Auth/`):
   time, twice as long for every further lock in a row, at most 24 hours (the number of locks in a row is the token
   `Claushh` / `LockoutsInARow` in `AspNetUserTokens`). While it is locked every login gets `429` with `Retry-After`,
   whatever the name and password; when both limits apply, `Retry-After` is the later end. A successful login resets
-  both counts; `create-user --reset-totp` also clears the lockout.
+  both counts; `create-user --reset-totp` and `--reset-password` also clear the lockout.
 - Logins run one at a time (`LoginGuard.EnterAsync`), so the checks and writes of parallel attempts never interleave.
 
 Commands (`dotnet run --project src/Claushh.Api -- <command>`, on the server `./Claushh.Api <command>`):
@@ -572,6 +572,7 @@ Commands (`dotnet run --project src/Claushh.Api -- <command>`, on the server `./
 |---|---|
 | `create-user` | creates the single account: user name, password (at least 12 characters, no echo), TOTP key and `otpauth://` URI, switched on only after a correct code; refuses when an account exists |
 | `create-user --reset-totp` | a new TOTP key for the existing account (after a correct code), all its sessions ended and the lockout cleared |
+| `create-user --reset-password` | a new password for the existing account (at least 12 characters, no echo, typed twice), all its sessions ended and the lockout cleared; the TOTP key stays |
 
 Migrations: `dotnet tool restore`, then
 `ASPNETCORE_ENVIRONMENT=Development dotnet ef migrations add <Name> --project src/Claushh.Api --output-dir Data/Migrations`.

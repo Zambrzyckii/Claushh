@@ -1,4 +1,5 @@
-// `create-user` and `create-user --reset-totp`: the only way to create the single account or replace its TOTP key.
+// `create-user`, `create-user --reset-totp` and `create-user --reset-password`: the only way to create the single
+// account or replace its TOTP key or its password.
 // There is no registration endpoint (docs/ARCHITECTURE.md, "Backend", commands).
 using System.Text;
 using Claushh.Api.Data;
@@ -36,7 +37,7 @@ public sealed class CreateUserCommand(ClaushhDbContext db, UserManager<IdentityU
         {
             if (existing is not null)
             {
-                return Fail(terminal, $"The account '{existing.UserName}' already exists. Use --reset-totp to replace its TOTP key.");
+                return Fail(terminal, $"The account '{existing.UserName}' already exists. Use --reset-totp or --reset-password to replace its TOTP key or its password.");
             }
             user = await CreateAccountAsync(terminal);
             if (user is null)
@@ -55,6 +56,38 @@ public sealed class CreateUserCommand(ClaushhDbContext db, UserManager<IdentityU
         }
         await transaction.CommitAsync(ct);
         terminal.WriteLine(resetTotp ? "New TOTP key saved, all sessions ended, the lockout cleared." : $"Account '{user.UserName}' created.");
+        return 0;
+    }
+
+    // `create-user --reset-password`: a leaked password. Shell access on the server proves more than the old password,
+    // so only the new one is asked for. One transaction, like RunAsync.
+    public async Task<int> ResetPasswordAsync(ITerminal terminal, CancellationToken ct)
+    {
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        var user = await users.Users.FirstOrDefaultAsync(ct);
+        if (user is null)
+        {
+            return Fail(terminal, "There is no account yet. Run create-user without --reset-password.");
+        }
+        terminal.WriteLine("New password (at least 12 characters):");
+        var password = terminal.ReadSecret();
+        terminal.WriteLine("Repeat the password:");
+        if (string.IsNullOrEmpty(password) || password != terminal.ReadSecret())
+        {
+            return Fail(terminal, "Empty password, or the passwords differ. Nothing was changed.");
+        }
+        // Remove, then add: the reset-token providers are not registered. When Identity refuses the new password, the
+        // transaction is not committed, so the removal is undone too.
+        var removed = await users.RemovePasswordAsync(user);
+        var result = removed.Succeeded ? await users.AddPasswordAsync(user, password) : removed;
+        if (!result.Succeeded)
+        {
+            return Fail(terminal, $"{string.Join(" ", result.Errors.Select(e => e.Description))} Nothing was changed.");
+        }
+        await guard.UnlockAsync(user);
+        await sessions.RevokeAllAsync(user.Id, ct);
+        await transaction.CommitAsync(ct);
+        terminal.WriteLine("New password saved, all sessions ended, the lockout cleared.");
         return 0;
     }
 

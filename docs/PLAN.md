@@ -110,8 +110,10 @@ Backend decisions (stage 1):
   `__Host-` prefix (`Sessions:SecureCookies=false`). Behind Cloudflare Tunnel requests also reach the API as HTTP,
   so production needs `ForwardedHeaders` (stage 1, part C) first.
 - The account is created only by `create-user` on the server; TOTP is switched on only after a correct code from the app,
-  in one transaction. A lost phone: `create-user --reset-totp` (a new key, all sessions ended), which needs shell access
-  to the server anyway. There are no recovery codes, because the login contract has only `totpCode`.
+  in one transaction. A lost phone: `create-user --reset-totp` (a new key, all sessions ended, the lockout cleared),
+  which needs shell access to the server anyway. A leaked password: `create-user --reset-password` (a new password,
+  all sessions ended, the lockout cleared), which asks only for the new password, because shell access proves more
+  than the old one. There are no recovery codes, because the login contract has only `totpCode`.
 - TOTP codes are checked by own code (RFC 6238, the step of now ±1) that stores the last accepted step and rejects that
   step and earlier ones, so a code works once. Rejected: Identity's validator (±2 steps, the real clock, no reuse check)
   with a remembered last code (another, older code from the same window would still pass).
@@ -125,8 +127,8 @@ Backend decisions (stage 1):
   the list).
 - The account lockout counts only wrong or reused codes after a correct password (5 → 15 minutes), so a stranger
   without the password cannot lock the only account. While it is locked every login gets 429 whatever the credentials
-  (a 429 only after a correct password would confirm the password). The way out is `create-user --reset-totp` on the
-  server.
+  (a 429 only after a correct password would confirm the password). The way out is `create-user --reset-totp` or
+  `--reset-password` on the server.
 - Repeated lockouts grow: every lock in a row without a successful login lasts twice as long (15 minutes up to
   24 hours), so someone who knows the password gets about 35 code guesses on the first day and 5 a day after that,
   instead of 480 a day. Rejected: a lock that lasts until `create-user` (SSH works only from the home network, so the

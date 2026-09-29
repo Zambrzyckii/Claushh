@@ -130,10 +130,80 @@ public sealed class CreateUserTests(ApiFactory api) : ApiTest(api)
         Assert.Equal(TimeSpan.FromMinutes(15), locked.Headers.RetryAfter?.Delta);
     }
 
+    [Fact]
+    public async Task Reset_password_replaces_the_password_and_ends_all_sessions()
+    {
+        await Client.LoginAsOwnerAsync();
+        var terminal = new ScriptedTerminal(Api, _ => NewPassword, _ => NewPassword);
+
+        Assert.Equal(0, await ResetPasswordAsync(terminal));
+
+        Assert.Equal(HttpStatusCode.Unauthorized, (await Client.Http.GetAsync("/api/auth/me")).StatusCode);
+        var fresh = new ApiClient(Api);
+        Assert.Equal(HttpStatusCode.Unauthorized,
+            (await fresh.LoginAsync(ApiFactory.UserName, ApiFactory.Password, Api.NextTotp())).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await fresh.LoginAsync(ApiFactory.UserName, NewPassword, Api.NextTotp())).StatusCode);
+    }
+
+    [Fact]
+    public async Task Reset_password_clears_the_lockout()
+    {
+        await LockAccountAsync();
+        var terminal = new ScriptedTerminal(Api, _ => NewPassword, _ => NewPassword);
+
+        Assert.Equal(0, await ResetPasswordAsync(terminal));
+
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await Client.LoginAsync(ApiFactory.UserName, NewPassword, Api.NextTotp())).StatusCode);
+    }
+
+    [Fact]
+    public async Task A_too_short_new_password_changes_nothing()
+    {
+        await Client.LoginAsOwnerAsync();
+        var terminal = new ScriptedTerminal(Api, _ => "too short", _ => "too short");
+
+        Assert.Equal(1, await ResetPasswordAsync(terminal));
+
+        Assert.Equal(HttpStatusCode.OK, (await Client.Http.GetAsync("/api/auth/me")).StatusCode);
+        var fresh = new ApiClient(Api);
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await fresh.LoginAsync(ApiFactory.UserName, ApiFactory.Password, Api.NextTotp())).StatusCode);
+    }
+
+    [Fact]
+    public async Task Different_new_passwords_change_nothing()
+    {
+        var terminal = new ScriptedTerminal(Api, _ => NewPassword, _ => "another long password");
+
+        Assert.Equal(1, await ResetPasswordAsync(terminal));
+
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await Client.LoginAsync(ApiFactory.UserName, ApiFactory.Password, Api.NextTotp())).StatusCode);
+    }
+
+    [Fact]
+    public async Task Reset_password_needs_an_account()
+    {
+        await Api.ResetAsync(withUser: false);
+        var terminal = new ScriptedTerminal(Api);
+
+        Assert.Equal(1, await ResetPasswordAsync(terminal));
+        Assert.Contains(terminal.Output, line => line.Contains("no account", StringComparison.Ordinal));
+    }
+
     private async Task<int> RunAsync(bool resetTotp, ITerminal terminal)
     {
         await using var scope = Api.Services.CreateAsyncScope();
         return await scope.ServiceProvider.GetRequiredService<CreateUserCommand>()
             .RunAsync(resetTotp, terminal, CancellationToken.None);
+    }
+
+    private async Task<int> ResetPasswordAsync(ITerminal terminal)
+    {
+        await using var scope = Api.Services.CreateAsyncScope();
+        return await scope.ServiceProvider.GetRequiredService<CreateUserCommand>()
+            .ResetPasswordAsync(terminal, CancellationToken.None);
     }
 }

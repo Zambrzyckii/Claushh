@@ -58,17 +58,20 @@ await using (var scope = app.Services.CreateAsyncScope())
     await scope.ServiceProvider.GetRequiredService<ClaushhDbContext>().Database.MigrateAsync();
 }
 
-// `dotnet run -- create-user [--reset-totp]`: set up the account and exit without starting the HTTP server.
+// `dotnet run -- create-user [--reset-totp | --reset-password]`: set up the account and exit without starting the
+// HTTP server.
 if (args is ["create-user", .. var flags])
 {
-    if (flags is not ([] or ["--reset-totp"]))
+    if (flags is not ([] or ["--reset-totp"] or ["--reset-password"]))
     {
-        Console.WriteLine("Usage: create-user [--reset-totp]");
+        Console.WriteLine("Usage: create-user [--reset-totp | --reset-password]");
         return 2;
     }
     await using var scope = app.Services.CreateAsyncScope();
-    return await scope.ServiceProvider.GetRequiredService<CreateUserCommand>()
-        .RunAsync(flags is ["--reset-totp"], ConsoleTerminal.Instance, CancellationToken.None);
+    var command = scope.ServiceProvider.GetRequiredService<CreateUserCommand>();
+    return flags is ["--reset-password"]
+        ? await command.ResetPasswordAsync(ConsoleTerminal.Instance, CancellationToken.None)
+        : await command.RunAsync(flags is ["--reset-totp"], ConsoleTerminal.Instance, CancellationToken.None);
 }
 
 // First, so that also 401 from authorization and 500 from the error handler get the header.
