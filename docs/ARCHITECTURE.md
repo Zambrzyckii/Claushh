@@ -521,6 +521,9 @@ Endpoints:
 Every other endpoint requires a session (`FallbackPolicy`), and every POST/PUT/PATCH/DELETE under `/api` a valid
 `X-XSRF-TOKEN` (filter `RequireXsrfToken` in `Auth/AuthEndpoints.cs`, 400 otherwise).
 
+All `/api/*` responses have `Cache-Control: no-store`. An unknown `/api/*` path gives 401 without a session and 404
+with one. Unhandled errors give 500 as `application/problem+json`, without details outside Development.
+
 Configuration:
 
 | Key | Where | Meaning |

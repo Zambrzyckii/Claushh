@@ -44,6 +44,7 @@ builder.Services.AddOptions<AntiforgeryOptions>().Configure<AuthCookies>((option
     options.Cookie.SecurePolicy = cookies.SecureRequired ? CookieSecurePolicy.Always : CookieSecurePolicy.SameAsRequest;
 });
 builder.Services.AddSingleton<IAntiforgeryAdditionalDataProvider, SessionAntiforgeryData>();
+builder.Services.AddProblemDetails();
 
 var app = builder.Build();
 
@@ -52,10 +53,27 @@ await using (var scope = app.Services.CreateAsyncScope())
     await scope.ServiceProvider.GetRequiredService<ClaushhDbContext>().Database.MigrateAsync();
 }
 
+// First, so that also 401 from authorization and 500 from the error handler get the header.
+app.Use((context, next) =>
+{
+    if (context.Request.Path.StartsWithSegments("/api"))
+    {
+        context.Response.OnStarting(() =>
+        {
+            context.Response.Headers.CacheControl = "no-store";
+            return Task.CompletedTask;
+        });
+    }
+    return next(context);
+});
+app.UseExceptionHandler();
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapGet("/api/health", () => Results.Ok(new { status = "ok" })).AllowAnonymous();
-app.MapGroup("/api").RequireXsrfToken().MapAuthEndpoints();
+var api = app.MapGroup("/api").RequireXsrfToken();
+api.MapAuthEndpoints();
+// Unknown /api paths: 401 without a session (fallback policy), 404 with one, never another handler's response.
+api.Map("{**path}", () => Results.NotFound());
 
 app.Run();

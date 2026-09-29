@@ -1,4 +1,5 @@
 // Login API from docs/ARCHITECTURE.md, "Authentication" → "API contract"; sessions and cookies: "Backend".
+using System.Text.Json;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Identity;
 
@@ -78,9 +79,22 @@ public static class AuthEndpoints
 
     // Without a body the session from the cookie ends. With {sessionId} only if the cookie still belongs to it,
     // so a late retry does not end a newer session (docs/ARCHITECTURE.md, "Rules").
-    private static async Task<IResult> Logout(LogoutRequest? body, HttpContext http, SessionService sessions, AuthCookies cookies)
+    // The body is read by hand: an inferred JSON body makes routing skip this endpoint for a POST without Content-Type,
+    // and the catch-all /api route would answer 404.
+    private static async Task<IResult> Logout(HttpContext http, SessionService sessions, AuthCookies cookies)
     {
         var session = CurrentSession(http);
+        LogoutRequest? body;
+        try
+        {
+            body = http.Request.HasJsonContentType()
+                ? await http.Request.ReadFromJsonAsync<LogoutRequest>(http.RequestAborted)
+                : null;
+        }
+        catch (JsonException)
+        {
+            return Results.BadRequest();
+        }
         if (body?.SessionId is { } requested && (!Guid.TryParse(requested, out var id) || id != session.Id))
         {
             return Results.Conflict();
