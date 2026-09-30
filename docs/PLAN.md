@@ -151,23 +151,26 @@ Backend decisions (stage 1):
 Backend decisions (stage 2):
 - The projects directory is the configuration key `Projects:Root` (`/srv/projects` in `appsettings.json`, a user-secret
   in development, a temporary directory in tests), checked when the API starts: an absolute path to an existing
-  directory, otherwise the API refuses to start, with a message naming the key. The directory may itself be a symlink:
-  `ProjectPaths` resolves it once to its real path (and refuses `/`). Rejected: a constant `/srv/projects` (development
-  and tests need other directories) and a check on first use (a misconfigured server would start and fail on every
-  request).
+  directory whose real path is not `/`, otherwise the API refuses to start, with a message naming the key. The
+  directory may itself be a symlink: `ProjectPaths` resolves it once to its real path. Rejected: a constant
+  `/srv/projects` (development and tests need other directories) and a check on first use (a misconfigured server
+  would start and fail on every request).
 - A path in the API is `""` (the projects directory itself) or non-empty segments joined by `/`, none of them `.`, `..`
   or `.git`, with no leading `/`, no `\` and no NUL: the rules of the frontend's `isSafeRelativePath`, plus no `.git`
   segment. Anything else is `400`. Rejected: normalising bad input (e.g. dropping a doubled `/`), because the API would
   accept paths the frontend never sends.
 - The joined path is resolved like `realpath(3)`: every component, relative targets, `..` inside targets, loops. The
   result must be the projects directory or lie under it, so a link in the middle of a path cannot lead out either. A
-  path whose last component is a dangling symlink, or whose resolution loops, is `400`; any other path that does not
-  exist is `404`. Rejected: lexical checks (`Path.GetFullPath`), which do not see symlinks, and a managed walk over
-  `LinkTarget`, which would re-implement the kernel's path resolution with its corner cases.
+  path whose last component is a dangling symlink, or whose resolution loops, is `400`, and so is a name longer than the
+  file system allows; any other path that does not exist, or that lies under a directory that cannot be searched, is
+  `404`. Any other error from the file system is a `500`. Rejected: lexical checks (`Path.GetFullPath`), which do not
+  see symlinks, and a managed walk over `LinkTarget`, which would re-implement the kernel's path resolution with its
+  corner cases.
 - Listings include dotfiles (`.gitignore`, `.env`): .NET's directory enumeration skips hidden entries by default (on
-  Linux, names starting with `.`), so the listing asks for all of them. They leave out `.git`, symlinks that lead
-  outside, nowhere or in a loop, and special files. A symlink that stays inside is listed with its target's kind and
-  keeps its own path. Rejected: the default (dotfiles would vanish from the explorer).
+  Linux, names starting with `.`), so the listing asks for all of them. They leave out `.git`, names that are not valid
+  paths (a `\` in the name), symlinks that lead outside, nowhere or in a loop, and special files. A symlink that stays
+  inside is listed with its target's kind and keeps its own path. Rejected: the default (dotfiles would vanish from the
+  explorer).
 - `.git` (a directory or a file) is left out of listings, and a path with a `.git` segment, before or after resolution,
   is `400`. Rejected: only hiding it in the listing (the contract's minimum), because the editor could still read
   `.git/config` or corrupt git's files with a direct request.
@@ -182,8 +185,8 @@ Backend decisions (stage 2):
 - Everything runs as the `workspace` user without administrator privileges.
 - systemd: `ProtectSystem=strict`, `ProtectHome=true` (except the `workspace` home),
   `ReadWritePaths=/srv/projects`, `NoNewPrivileges=true`.
-- Every file API checks whether the path after `Path.GetFullPath` (and resolving symlinks) lies
-  inside the projects folder.
+- Every file API checks whether the path, resolved like `realpath(3)` (every symlink followed), lies inside the
+  projects directory.
 - GitHub token with access only to selected repositories.
 - Secrets in an environment file with `600` permissions or through `LoadCredential=`, never in the repo.
 - By default the console asks for permission before edits and commands such as `git push`. The request shows the command with all

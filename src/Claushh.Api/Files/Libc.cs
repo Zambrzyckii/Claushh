@@ -8,7 +8,9 @@ namespace Claushh.Api.Files;
 internal static class Libc
 {
     public const int ENOENT = 2;
+    public const int EACCES = 13;
     public const int ENOTDIR = 20;
+    public const int ENAMETOOLONG = 36;
     public const int ELOOP = 40;
 
     public const int S_IFMT = 0xF000;

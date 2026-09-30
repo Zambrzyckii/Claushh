@@ -14,4 +14,14 @@ public sealed class ProjectsRootTests(ApiFactory api)
 
         Assert.Contains("Projects:Root", error.ToString(), StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void The_api_refuses_to_start_with_the_file_system_root_as_the_projects_directory()
+    {
+        using var broken = api.WithWebHostBuilder(builder => builder.UseSetting("Projects:Root", "/"));
+
+        var error = Assert.ThrowsAny<Exception>(() => broken.CreateClient());
+
+        Assert.Contains("Projects:Root", error.ToString(), StringComparison.Ordinal);
+    }
 }

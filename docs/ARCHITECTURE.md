@@ -300,10 +300,11 @@ All endpoints require a session (otherwise `401`). `PUT` requires the XSRF heade
 | PUT | `/api/files/content?path=<plik>` | body `{"content","baseVersion"}`. `200 {"version"}` or `409 {"currentVersion"}` when the version on disk differs from `baseVersion` |
 
 Implemented in the backend (section "Backend"): `GET /api/files/list`; reading and saving are still only in the mock.
-The listing includes dotfiles such as `.gitignore`. It leaves out `.git` (a directory or a file), symlinks that lead
-outside the projects directory, nowhere or in a loop (a direct request for one is `400`), and special files (FIFOs,
-sockets, devices). A symlink that stays inside is listed with its target's kind and keeps its own path. `404` also
-when the path is a file.
+The listing includes dotfiles such as `.gitignore`. It leaves out `.git` (a directory or a file), names that are not
+valid API paths (a name containing `\`), symlinks that lead outside the projects directory, nowhere or in a loop (a
+direct request for one is `400`), and special files (FIFOs, sockets, devices). A symlink that stays inside is listed
+with its target's kind and keeps its own path. `404` also when the path is a file. A directory that cannot be read
+lists as empty, and a path under a directory that cannot be searched is `404`.
 
 Common to all: `400` when the path is invalid or, after resolution (including symlinks), goes outside
 the projects directory. The `index.html` and `monaco.css` files are served with `Cache-Control: no-cache`
@@ -532,7 +533,7 @@ Endpoints:
 | GET | `/api/auth/sessions` | active sessions of the user, newest first, `current` for this one, `device` as e.g. "Chrome · Linux" | session |
 | POST | `/api/auth/sessions/revoke-others` | ends every other active session of the user | session, XSRF token |
 | GET | `/api/auth/logins` | the last 20 login attempts, newest first | session |
-| GET | `/api/files/list?path=<dir>` | the directories and files in a directory of the projects directory; 400 for a bad path, one that leads outside it or into `.git`, or one that ends in a dangling or looping symlink; 404 for a missing directory or a file | session |
+| GET | `/api/files/list?path=<dir>` | the directories and files in a directory of the projects directory; 400 for a bad path (also a name longer than the file system allows), one that leads outside it or into `.git`, or one that ends in a dangling or looping symlink; 404 for a missing directory, a file, or a path under a directory that cannot be searched | session |
 
 Every other endpoint requires a session (`FallbackPolicy`), and every POST/PUT/PATCH/DELETE under `/api` a valid
 `X-XSRF-TOKEN` (filter `RequireXsrfToken` in `Auth/AuthEndpoints.cs`, 400 otherwise).
@@ -547,7 +548,7 @@ Configuration:
 | `ConnectionStrings:Claushh` | development: `dotnet user-secrets`; server: variable `ConnectionStrings__Claushh` | PostgreSQL from `deploy/docker-compose.yml` |
 | `Sessions:IdleTimeout`, `Sessions:AbsoluteTimeout` | `appsettings.json` | `00:30:00` and `12:00:00` |
 | `Sessions:SecureCookies` | `appsettings.json` (`true`), `appsettings.Development.json` (`false`) | `false` only for plain http in development: cookie names without `__Host-`, `Secure` only on HTTPS |
-| `Projects:Root` | `appsettings.json` (`/srv/projects`); development: `dotnet user-secrets`; server: variable `Projects__Root` | the projects directory: an absolute path to an existing directory, checked at start (the API does not start without it) |
+| `Projects:Root` | `appsettings.json` (`/srv/projects`); development: `dotnet user-secrets`; server: variable `Projects__Root` | the projects directory: an absolute path to an existing directory whose real path is not `/`, checked at start (the API does not start otherwise) |
 
 Sessions (`Auth/`):
 - Table `Sessions`: public `Id` (the `sessionId` of `/me`, constant for the life of the session), `SecretHash`

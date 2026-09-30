@@ -23,7 +23,9 @@ public static class FileEndpoints
         {
             return Results.NotFound();
         }
-        return Results.Ok(paths.List(directory).Select(entry => new EntryResponse(
-            Path.GetFileName(entry.Relative), entry.Relative, entry.Kind == PathKind.Directory ? "directory" : "file")));
+        var entries = paths.List(directory).Select(entry => new EntryResponse(
+            Path.GetFileName(entry.Relative), entry.Relative, entry.Kind == PathKind.Directory ? "directory" : "file"));
+        // Read the whole directory here, so that an IOException gives a 500 and not a response cut off half way.
+        return Results.Ok(entries.ToList());
     }
 }

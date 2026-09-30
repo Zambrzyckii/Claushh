@@ -14,7 +14,8 @@ builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.Configure<AuthSessionOptions>(builder.Configuration.GetSection("Sessions"));
 builder.Services.AddOptions<ProjectsOptions>()
     .Bind(builder.Configuration.GetSection("Projects"))
-    .Validate(options => Path.IsPathFullyQualified(options.Root) && Directory.Exists(options.Root),
+    .Validate(options => Path.IsPathFullyQualified(options.Root) && Directory.Exists(options.Root)
+            && Libc.RealPath(options.Root, out _) is not (null or "/"),
         "Projects:Root must be the absolute path of an existing directory (README.md, \"Running in development\").")
     .ValidateOnStart();
 builder.Services.AddDbContext<ClaushhDbContext>((services, options) => options.UseNpgsql(

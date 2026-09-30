@@ -43,6 +43,16 @@ public sealed class ProjectPaths(IOptions<ProjectsOptions> options)
         {
             return null;
         }
+        // Caused by the client, not by the server: a name longer than the file system allows is a bad path, and a
+        // directory on the way that cannot be searched means the path does not exist for the API.
+        if (errno == Libc.ENAMETOOLONG)
+        {
+            return null;
+        }
+        if (errno == Libc.EACCES)
+        {
+            return new ProjectPath(relative, "", PathKind.NotFound);
+        }
         if (errno is not (Libc.ENOENT or Libc.ENOTDIR))
         {
             throw new IOException($"realpath failed with errno {errno}.");
@@ -76,8 +86,9 @@ public sealed class ProjectPaths(IOptions<ProjectsOptions> options)
         }
     }
 
-    // What the frontend sends (web/src/app/core/api/project-path.ts) and nothing else: "" or non-empty segments joined
-    // by "/", none of them ".", ".." or ".git", no "\" and no NUL.
+    // The rules of the frontend's isSafeRelativePath (web/src/app/core/api/project-path.ts) plus no ".git" segment: ""
+    // or non-empty segments joined by "/", none of them ".", ".." or ".git", no "\" and no NUL. The frontend has no
+    // ".git" rule; the explorer just never receives ".git".
     private static bool IsWellFormed(string relative) =>
         relative.Length == 0 || relative.Split('/').All(segment =>
             segment.Length > 0 && segment is not ("." or ".." or Git) && !segment.Contains('\\') && !segment.Contains('\0'));
