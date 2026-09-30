@@ -1,5 +1,7 @@
 // One PostgreSQL 17 container and one API instance for the whole test run
 // (docs/ARCHITECTURE.md, "Tests"). Tests run one at a time because they share the database.
+using System.Diagnostics;
+using System.Text;
 using Claushh.Api.Data;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Identity;
@@ -42,10 +44,40 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         return new[] { "000000", "111111", "222222", "333333" }.First(code => !valid.Contains(code));
     }
 
+    // The projects directory of the test run (Projects:Root), emptied before every test.
+    public string ProjectsRoot { get; } = Directory.CreateTempSubdirectory("claushh-projects-").FullName;
+
+    public string ProjectPath(string relative) => Path.Join(ProjectsRoot, relative);
+
+    public string WriteProjectFile(string relative, string text) => WriteProjectFile(relative, Encoding.UTF8.GetBytes(text));
+
+    public string WriteProjectFile(string relative, byte[] bytes)
+    {
+        var path = ProjectPath(relative);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllBytes(path, bytes);
+        return path;
+    }
+
+    public void Link(string relative, string target)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(ProjectPath(relative))!);
+        File.CreateSymbolicLink(ProjectPath(relative), target);
+    }
+
+    public void MakeFifo(string relative)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(ProjectPath(relative))!);
+        using var mkfifo = Process.Start("mkfifo", ProjectPath(relative));
+        mkfifo.WaitForExit();
+        Assert.Equal(0, mkfifo.ExitCode);
+    }
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
         builder.UseSetting("ConnectionStrings:Claushh", _db.GetConnectionString());
+        builder.UseSetting("Projects:Root", ProjectsRoot);
         builder.ConfigureTestServices(services =>
         {
             services.AddSingleton<TimeProvider>(Clock);
@@ -55,9 +87,13 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
 
     public async ValueTask InitializeAsync() => await _db.StartAsync();
 
-    // Before every test: empty tables, the clock at the current second, and (by default) the owner with TOTP enabled.
+    // Before every test: empty tables and projects directory, the clock at the current second, and (by default) the
+    // owner with TOTP enabled.
     public async Task ResetAsync(bool withUser = true)
     {
+        // Directory.Delete removes symlinks without following them, so link targets outside stay untouched.
+        Directory.Delete(ProjectsRoot, recursive: true);
+        Directory.CreateDirectory(ProjectsRoot);
         Clock.Reset();
         await using var scope = Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<ClaushhDbContext>();
@@ -84,6 +120,7 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     {
         await base.DisposeAsync();
         await _db.DisposeAsync();
+        Directory.Delete(ProjectsRoot, recursive: true);
     }
 
     private static void Check(IdentityResult result)

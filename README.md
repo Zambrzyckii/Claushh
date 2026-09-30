@@ -28,6 +28,7 @@ docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d
 # backend: http://localhost:5080/api/health
 dotnet user-secrets set --project src/Claushh.Api ConnectionStrings:Claushh \
   "Host=localhost;Port=5432;Database=claushh;Username=claushh;Password=<POSTGRES_PASSWORD from deploy/.env>"
+dotnet user-secrets set --project src/Claushh.Api Projects:Root <directory>    # the projects directory of the portal
 dotnet run --project src/Claushh.Api -- create-user    # once: the account and its TOTP key
 dotnet run --project src/Claushh.Api
 

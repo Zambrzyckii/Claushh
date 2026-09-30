@@ -5,7 +5,7 @@ Goals and decisions are in [`PLAN.md`](PLAN.md). After every change to the struc
 or dependency, update the relevant section.
 
 Status: frontend done (login, session countdown and the "Bezpieczeństwo" (Security) window, explorer, editor with diff view,
-console, workspaces and git, terminal). The backend has login, sessions and login protection (section "Backend"); the other contracts are still only in the mock.
+console, workspaces and git, terminal). The backend has login, sessions, login protection and the listing of the projects directory (section "Backend"); the other contracts are still only in the mock.
 The frontend is tested against a mock backend (`web/e2e/mock-api/`) that follows the contracts below.
 
 ## Flow
@@ -36,6 +36,7 @@ to the API at `http://localhost:5080` (`web/proxy.conf.json`).
 | `src/Claushh.Api/Properties/launchSettings.json` | development profile, port 5080 |
 | `src/Claushh.Api/Data/` | `ClaushhDbContext` (Identity tables, `Sessions` and `LoginAttempts`) and EF Core migrations, applied at startup |
 | `src/Claushh.Api/Auth/` | login: `Session`, `AuthSessionOptions`, `AuthCookies` (cookie names), `SessionService` (the only code with session rules), `SessionAuthenticationHandler` (cookie → user, never extends), `SessionAntiforgeryData` (XSRF token bound to the session), `TotpVerifier` (TOTP codes, each accepted once), `LoginGuard` (limit per IP, account lockout, login history), `LoginAttempt`, `DeviceName` (User-Agent for storage and display), `AuthEndpoints` (`me`, `login`, `keepalive`, `logout`, XSRF filter), `SessionEndpoints` (session list, ending sessions, login history), `CreateUserCommand` (`create-user`), `AuthCleanup` (hourly deletion after 90 days) |
+| `src/Claushh.Api/Files/` | files: `ProjectsOptions` (`Projects:Root`), `ProjectPaths` (the only code that turns an API path into a path on disk: syntax, symlinks resolved with `realpath`, `.git` refused, file types from `statx`), `Libc` (the two libc calls, `realpath` and `statx`), `FileEndpoints` (`/api/files/*`) |
 | `dotnet-tools.json` | local .NET tools: `dotnet-ef` (`dotnet tool restore`) |
 | `tests/Claushh.Api.Tests/` | backend integration tests: xUnit, the API in memory (`WebApplicationFactory`), PostgreSQL 17 from Testcontainers (`ApiFactory`) |
 | `global.json` | `dotnet test` runs on Microsoft.Testing.Platform (required by xUnit v3 on the .NET 10 SDK) |
@@ -298,6 +299,12 @@ All endpoints require a session (otherwise `401`). `PUT` requires the XSRF heade
 | GET | `/api/files/content?path=<plik>` | `200 {"path","content","version"}`. `404` no file, `413` too large, `415` binary file |
 | PUT | `/api/files/content?path=<plik>` | body `{"content","baseVersion"}`. `200 {"version"}` or `409 {"currentVersion"}` when the version on disk differs from `baseVersion` |
 
+Implemented in the backend (section "Backend"): `GET /api/files/list`; reading and saving are still only in the mock.
+The listing includes dotfiles such as `.gitignore`. It leaves out `.git` (a directory or a file), symlinks that lead
+outside the projects directory, nowhere or in a loop (a direct request for one is `400`), and special files (FIFOs,
+sockets, devices). A symlink that stays inside is listed with its target's kind and keeps its own path. `404` also
+when the path is a file.
+
 Common to all: `400` when the path is invalid or, after resolution (including symlinks), goes outside
 the projects directory. The `index.html` and `monaco.css` files are served with `Cache-Control: no-cache`
 (the name `monaco.css` has no hash, so after a Monaco update the browser must download the new version).
@@ -525,6 +532,7 @@ Endpoints:
 | GET | `/api/auth/sessions` | active sessions of the user, newest first, `current` for this one, `device` as e.g. "Chrome · Linux" | session |
 | POST | `/api/auth/sessions/revoke-others` | ends every other active session of the user | session, XSRF token |
 | GET | `/api/auth/logins` | the last 20 login attempts, newest first | session |
+| GET | `/api/files/list?path=<dir>` | the directories and files in a directory of the projects directory; 400 for a bad path, one that leads outside it or into `.git`, or one that ends in a dangling or looping symlink; 404 for a missing directory or a file | session |
 
 Every other endpoint requires a session (`FallbackPolicy`), and every POST/PUT/PATCH/DELETE under `/api` a valid
 `X-XSRF-TOKEN` (filter `RequireXsrfToken` in `Auth/AuthEndpoints.cs`, 400 otherwise).
@@ -539,6 +547,7 @@ Configuration:
 | `ConnectionStrings:Claushh` | development: `dotnet user-secrets`; server: variable `ConnectionStrings__Claushh` | PostgreSQL from `deploy/docker-compose.yml` |
 | `Sessions:IdleTimeout`, `Sessions:AbsoluteTimeout` | `appsettings.json` | `00:30:00` and `12:00:00` |
 | `Sessions:SecureCookies` | `appsettings.json` (`true`), `appsettings.Development.json` (`false`) | `false` only for plain http in development: cookie names without `__Host-`, `Secure` only on HTTPS |
+| `Projects:Root` | `appsettings.json` (`/srv/projects`); development: `dotnet user-secrets`; server: variable `Projects__Root` | the projects directory: an absolute path to an existing directory, checked at start (the API does not start without it) |
 
 Sessions (`Auth/`):
 - Table `Sessions`: public `Id` (the `sessionId` of `/me`, constant for the life of the session), `SecretHash`
@@ -585,9 +594,9 @@ Migrations: `dotnet tool restore`, then
 `migrations add` does not connect to the database; without a user-secret, pass any connection string in
 `ConnectionStrings__Claushh`.
 
-Planned folder layout in `src/Claushh.Api/` (created together with the code they concern):
-`Auth/` (Identity, TOTP, sessions), `Data/` (DbContext, migrations), `Files/` (files API and path protection),
-`Console/` (the `claude` process, MCP for permissions), `Terminal/` (PTY, tmux), `Git/`, `Hubs/` (SignalR).
+Folders in `src/Claushh.Api/` (each is created together with the code it concerns). Existing: `Auth/` (Identity, TOTP,
+sessions), `Data/` (DbContext, migrations), `Files/` (files API and path protection). Planned: `Console/` (the `claude`
+process, MCP for permissions), `Terminal/` (PTY, tmux), `Git/`, `Hubs/` (SignalR).
 
 ## Frontend
 

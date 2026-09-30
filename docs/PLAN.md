@@ -148,6 +148,35 @@ Backend decisions (stage 1):
 - Login attempts and ended sessions are deleted 90 days after they ended, by a background cleanup at start and every
   hour. A cleanup error is only logged: by default a failing background service stops the whole API.
 
+Backend decisions (stage 2):
+- The projects directory is the configuration key `Projects:Root` (`/srv/projects` in `appsettings.json`, a user-secret
+  in development, a temporary directory in tests), checked when the API starts: an absolute path to an existing
+  directory, otherwise the API refuses to start, with a message naming the key. The directory may itself be a symlink:
+  `ProjectPaths` resolves it once to its real path (and refuses `/`). Rejected: a constant `/srv/projects` (development
+  and tests need other directories) and a check on first use (a misconfigured server would start and fail on every
+  request).
+- A path in the API is `""` (the projects directory itself) or non-empty segments joined by `/`, none of them `.`, `..`
+  or `.git`, with no leading `/`, no `\` and no NUL: the rules of the frontend's `isSafeRelativePath`, plus no `.git`
+  segment. Anything else is `400`. Rejected: normalising bad input (e.g. dropping a doubled `/`), because the API would
+  accept paths the frontend never sends.
+- The joined path is resolved like `realpath(3)`: every component, relative targets, `..` inside targets, loops. The
+  result must be the projects directory or lie under it, so a link in the middle of a path cannot lead out either. A
+  path whose last component is a dangling symlink, or whose resolution loops, is `400`; any other path that does not
+  exist is `404`. Rejected: lexical checks (`Path.GetFullPath`), which do not see symlinks, and a managed walk over
+  `LinkTarget`, which would re-implement the kernel's path resolution with its corner cases.
+- Listings include dotfiles (`.gitignore`, `.env`): .NET's directory enumeration skips hidden entries by default (on
+  Linux, names starting with `.`), so the listing asks for all of them. They leave out `.git`, symlinks that lead
+  outside, nowhere or in a loop, and special files. A symlink that stays inside is listed with its target's kind and
+  keeps its own path. Rejected: the default (dotfiles would vanish from the explorer).
+- `.git` (a directory or a file) is left out of listings, and a path with a `.git` segment, before or after resolution,
+  is `400`. Rejected: only hiding it in the listing (the contract's minimum), because the editor could still read
+  `.git/config` or corrupt git's files with a direct request.
+- Only directories and regular files are treated as such; FIFOs, sockets and devices are left out of listings. The file
+  type comes from `statx(2)` without following a final symlink. Rejected: treating them as files, because opening a
+  FIFO blocks the request forever and .NET has no public API that tells a FIFO from a regular file.
+- `realpath` and `statx` are called through P/Invoke (`Files/Libc.cs`), so the backend runs only on Linux, like the
+  deployment.
+
 ### Limiting damage
 
 - Everything runs as the `workspace` user without administrator privileges.

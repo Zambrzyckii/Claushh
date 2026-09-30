@@ -1,6 +1,7 @@
 // API entry point. Stages and decisions: docs/PLAN.md; endpoints, configuration and commands: docs/ARCHITECTURE.md, "Backend".
 using Claushh.Api.Auth;
 using Claushh.Api.Data;
+using Claushh.Api.Files;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
@@ -11,6 +12,11 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.Configure<AuthSessionOptions>(builder.Configuration.GetSection("Sessions"));
+builder.Services.AddOptions<ProjectsOptions>()
+    .Bind(builder.Configuration.GetSection("Projects"))
+    .Validate(options => Path.IsPathFullyQualified(options.Root) && Directory.Exists(options.Root),
+        "Projects:Root must be the absolute path of an existing directory (README.md, \"Running in development\").")
+    .ValidateOnStart();
 builder.Services.AddDbContext<ClaushhDbContext>((services, options) => options.UseNpgsql(
     services.GetRequiredService<IConfiguration>().GetConnectionString("Claushh")
     ?? throw new InvalidOperationException("ConnectionStrings:Claushh is not set (README.md, \"Running in development\").")));
@@ -33,6 +39,7 @@ builder.Services.AddScoped<LoginGuard>();
 builder.Services.AddSingleton<AuthCleanup>();
 builder.Services.AddHostedService(services => services.GetRequiredService<AuthCleanup>());
 builder.Services.AddScoped<CreateUserCommand>();
+builder.Services.AddSingleton<ProjectPaths>();
 builder.Services.AddAuthentication(SessionAuthenticationHandler.SchemeName)
     .AddScheme<AuthenticationSchemeOptions, SessionAuthenticationHandler>(SessionAuthenticationHandler.SchemeName, _ => { });
 // Closed by default: an endpoint without .AllowAnonymous() requires a session.
@@ -92,7 +99,7 @@ app.UseAuthorization();
 
 app.MapGet("/api/health", () => Results.Ok(new { status = "ok" })).AllowAnonymous();
 var api = app.MapGroup("/api").RequireXsrfToken();
-api.MapAuthEndpoints().MapSessionEndpoints();
+api.MapAuthEndpoints().MapSessionEndpoints().MapFileEndpoints();
 // Unknown /api paths: 401 without a session (fallback policy), 404 with one, never another handler's response.
 api.Map("{**path}", () => Results.NotFound());
 
