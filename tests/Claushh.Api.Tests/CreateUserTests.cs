@@ -2,6 +2,7 @@ using System.Net;
 using Claushh.Api.Auth;
 using Claushh.Api.Data;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Claushh.Api.Tests;
@@ -141,6 +142,29 @@ public sealed class CreateUserTests(ApiFactory api) : ApiTest(api)
         Assert.Equal(0, await RunAsync(resetTotp: true, new ScriptedTerminal(Api, t => t.CurrentCode())));
     }
 
+    [Fact(Timeout = 60_000)]
+    public async Task Reset_totp_refuses_when_the_account_changes_before_the_new_key_is_saved()
+    {
+        // Another writer changes the account and holds its row: the command reads the old row, then its first write
+        // waits for the lock and, once the change is committed, finds a different ConcurrencyStamp.
+        await using var scope = Api.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ClaushhDbContext>();
+        await using var change = await db.Database.BeginTransactionAsync();
+        await db.Database.ExecuteSqlRawAsync("""UPDATE "AspNetUsers" SET "ConcurrencyStamp" = 'changed meanwhile'""");
+        var terminal = new ScriptedTerminal(Api, t => t.CurrentCode());
+
+        var command = RunAsync(resetTotp: true, terminal); // not awaited yet: its first write waits for the row lock
+        await WaitForARowLockAsync();
+        await change.CommitAsync();
+
+        Assert.Equal(1, await command.WaitAsync(TestContext.Current.CancellationToken));
+        Assert.Contains(terminal.Output, line => line.Contains("changed while the command ran", StringComparison.Ordinal));
+        Assert.DoesNotContain(terminal.Output, line => line.StartsWith("TOTP key: ", StringComparison.Ordinal));
+        var fresh = new ApiClient(Api);
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await fresh.LoginAsync(ApiFactory.UserName, ApiFactory.Password, Api.NextTotp())).StatusCode);
+    }
+
     [Fact]
     public async Task Reset_password_replaces_the_password_and_ends_all_sessions()
     {
@@ -264,5 +288,22 @@ public sealed class CreateUserTests(ApiFactory api) : ApiTest(api)
         await using var scope = Api.Services.CreateAsyncScope();
         return await scope.ServiceProvider.GetRequiredService<CreateUserCommand>()
             .ResetPasswordAsync(terminal, CancellationToken.None);
+    }
+
+    // Until another connection waits for a row lock (the command's first write), at most 10 s.
+    private async Task WaitForARowLockAsync()
+    {
+        await using var scope = Api.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ClaushhDbContext>();
+        for (var attempt = 0; attempt < 100; attempt++)
+        {
+            if (await db.Database.SqlQueryRaw<int>(
+                    """SELECT count(*)::int AS "Value" FROM pg_stat_activity WHERE wait_event_type = 'Lock'""").SingleAsync() > 0)
+            {
+                return;
+            }
+            await Task.Delay(100);
+        }
+        Assert.Fail("The command never waited for the account's row.");
     }
 }

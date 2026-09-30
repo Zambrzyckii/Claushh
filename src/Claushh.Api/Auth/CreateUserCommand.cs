@@ -45,9 +45,9 @@ public sealed class CreateUserCommand(ClaushhDbContext db, UserManager<IdentityU
                 return 1;
             }
         }
-        if (!await EnrollTotpAsync(user, terminal))
+        if (await EnrollTotpAsync(user, terminal) is { } refusal)
         {
-            return Fail(terminal, "Wrong code. Nothing was changed.");
+            return Fail(terminal, refusal);
         }
         if (resetTotp)
         {
@@ -120,9 +120,14 @@ public sealed class CreateUserCommand(ClaushhDbContext db, UserManager<IdentityU
     }
 
     // TOTP is switched on only after a code from the app matches, so a mistyped key cannot lock the owner out.
-    private async Task<bool> EnrollTotpAsync(IdentityUser user, ITerminal terminal)
+    // Null when it is on, otherwise the message to print; the caller then commits nothing.
+    private async Task<string?> EnrollTotpAsync(IdentityUser user, ITerminal terminal)
     {
-        await users.ResetAuthenticatorKeyAsync(user);
+        var reset = await users.ResetAuthenticatorKeyAsync(user);
+        if (!reset.Succeeded)
+        {
+            return SaveFailure(reset);
+        }
         await totp.ForgetLastStepAsync(user);
         var key = await users.GetAuthenticatorKeyAsync(user) ?? throw new InvalidOperationException("No TOTP key.");
         var uri = $"otpauth://totp/Claushh:{Uri.EscapeDataString(user.UserName!)}?secret={key}&issuer=Claushh&digits=6";
@@ -135,12 +140,18 @@ public sealed class CreateUserCommand(ClaushhDbContext db, UserManager<IdentityU
             var code = terminal.ReadLine()?.Trim();
             if (code is not null && await totp.VerifyAsync(user, code))
             {
-                await users.SetTwoFactorEnabledAsync(user, true);
-                return true;
+                var enabled = await users.SetTwoFactorEnabledAsync(user, true);
+                return enabled.Succeeded ? null : SaveFailure(enabled);
             }
         }
-        return false;
+        return "Wrong code. Nothing was changed.";
     }
+
+    // A write of the account that Identity refused. ConcurrencyFailure: the account changed after this command read it.
+    private static string SaveFailure(IdentityResult result) =>
+        result.Errors.Any(e => e.Code == nameof(IdentityErrorDescriber.ConcurrencyFailure))
+            ? "The account changed while the command ran. Nothing was changed; run the command again."
+            : $"{string.Join(" ", result.Errors.Select(e => e.Description))} Nothing was changed.";
 
     private static int Fail(ITerminal terminal, string message)
     {
