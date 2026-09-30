@@ -8,6 +8,9 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
+// The backend runs only on Linux (docs/PLAN.md, "Backend decisions (stage 2)"): libc calls and Unix file modes.
+[assembly: System.Runtime.Versioning.SupportedOSPlatform("linux")]
+
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddSingleton(TimeProvider.System);
@@ -43,6 +46,7 @@ builder.Services.AddSingleton<AuthCleanup>();
 builder.Services.AddHostedService(services => services.GetRequiredService<AuthCleanup>());
 builder.Services.AddScoped<CreateUserCommand>();
 builder.Services.AddSingleton<ProjectPaths>();
+builder.Services.AddSingleton<FileStore>();
 builder.Services.AddAuthentication(SessionAuthenticationHandler.SchemeName)
     .AddScheme<AuthenticationSchemeOptions, SessionAuthenticationHandler>(SessionAuthenticationHandler.SchemeName, _ => { });
 // Closed by default: an endpoint without .AllowAnonymous() requires a session.

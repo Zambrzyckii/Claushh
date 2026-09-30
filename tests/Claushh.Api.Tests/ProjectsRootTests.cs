@@ -1,10 +1,7 @@
-using System.Runtime.Versioning;
 using Microsoft.AspNetCore.Hosting;
 
 namespace Claushh.Api.Tests;
 
-// Linux only, like the backend (docs/PLAN.md, "Backend decisions (stage 2)"): symlinks and Unix file modes.
-[SupportedOSPlatform("linux")]
 public sealed class ProjectsRootTests(ApiFactory api)
 {
     [Fact]

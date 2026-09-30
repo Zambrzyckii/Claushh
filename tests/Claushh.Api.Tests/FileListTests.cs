@@ -1,12 +1,9 @@
 using System.Net;
 using System.Net.Http.Json;
-using System.Runtime.Versioning;
 using Microsoft.AspNetCore.Mvc.Testing.Handlers;
 
 namespace Claushh.Api.Tests;
 
-// Linux only, like the backend (docs/PLAN.md, "Backend decisions (stage 2)"): symlinks, FIFOs and Unix file modes.
-[SupportedOSPlatform("linux")]
 public sealed class FileListTests(ApiFactory api) : ApiTest(api)
 {
     public sealed record Entry(string Name, string Path, string Kind);

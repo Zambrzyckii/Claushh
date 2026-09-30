@@ -181,11 +181,38 @@ Backend decisions (stage 2):
 - `.git` (a directory or a file) is left out of listings, and a path with a `.git` segment, before or after resolution,
   is `400`. Rejected: only hiding it in the listing (the contract's minimum), because the editor could still read
   `.git/config` or corrupt git's files with a direct request.
-- Only directories and regular files are treated as such; FIFOs, sockets and devices are left out of listings. The file
-  type comes from `statx(2)` without following a final symlink. Rejected: treating them as files, because opening a
-  FIFO blocks the request forever and .NET has no public API that tells a FIFO from a regular file.
+- Only directories and regular files are treated as such; FIFOs, sockets and devices are left out of listings, reading
+  one is `404`, and saving onto one (or onto a directory) is `400`. The file type comes from `statx(2)` without
+  following a final symlink. Rejected: treating them as files, because opening a FIFO blocks the request forever and
+  .NET has no public API that tells a FIFO from a regular file.
+- A file's version is the lower-case hex SHA-256 of its bytes on disk, and a file that does not exist has the version
+  `absent`. Rejected: the mock's shortened SHA-1 (fine for a mock, but the version guards overwrites) and the
+  modification time (too coarse, and editors keep it).
+- Text is strict UTF-8: a NUL byte anywhere, or invalid UTF-8, is `415`, so Windows-1250 and other encodings count as
+  binary. A UTF-8 BOM is left out of `content` on read and written back on save when the file on disk had one; line
+  endings are never changed. Rejected: guessing other encodings, and normalising line endings (every save of a Windows
+  file would rewrite all its lines).
+- The size limit is 5 MB (5 × 1024 × 1024 bytes): `413` when the file on disk is larger (read), or when the content to
+  write is larger as UTF-8 plus the kept BOM (save).
+- A save runs under a lock per file (a fixed array of semaphores picked by the hash of the resolved path): read the
+  current bytes, compare the version, write a temporary file in the same directory, flush it to disk, give it the old
+  file's Unix mode and rename it over the file (atomic). A save through a symlink writes the target and the link stays.
+  The temporary file (`.<name>.claushh-<id>.tmp`) is removed when a step fails. Responses never contain resolved paths
+  or exception texts, and file contents are never logged. Rejected: writing in place (a crash or a concurrent reader
+  would see half a file). Accepted limit: the lock covers saves through this API only. The console and the terminal
+  write without it, and the version check still catches their changes, except within a window of milliseconds (a file
+  deleted from outside in that window makes the save a `500`).
+- Saving a file that disappeared: a save with another `baseVersion` is `409 {"currentVersion":"absent"}`, and a save
+  with `baseVersion` `absent` creates the file when the name does not exist at all (not even as a dangling symlink,
+  which could lead anywhere) and its directory exists inside the projects directory (`404` when it is missing). When
+  the file exists after all, `absent` is a `409` with its real version. So "Nadpisz moją wersją" (Overwrite with my
+  version) re-creates a deleted file with the editor's content. Rejected: `404` for a deleted file (the editor could
+  not save its text again) and creating through a dangling symlink (the new file would appear wherever the link
+  points).
 - `realpath`, `statx` and `access` are called through P/Invoke (`Files/Libc.cs`), so the backend runs only on Linux,
-  like the deployment.
+  like the deployment. The API and test assemblies are marked `[SupportedOSPlatform("linux")]` (`Program.cs`,
+  `ApiFactory.cs`), so the platform analyzer accepts the Unix-only calls such as `File.SetUnixFileMode`. Rejected: the
+  attribute on `FileStore` alone (every caller would get the warning).
 
 ### Limiting damage
 
@@ -234,10 +261,10 @@ The order is chosen so that only already secured things reach the internet.
   - [ ] Backend, part C: security headers and serving `index.html`, ForwardedHeaders, notifications.
   - [x] Frontend: session countdown in the top bar (stage 5).
   - [ ] Deployment: Cloudflare Tunnel, systemd service.
-- [ ] **Stage 2: files and editor.**
+- [x] **Stage 2: files and editor.**
   - [x] Frontend: explorer with lazy loading, Monaco with tabs, saving (Ctrl+S), detection of
         conflicts with changes on disk, status bar (cursor, language, unsaved).
-  - [ ] Backend: files API from the contract in `ARCHITECTURE.md`, path protection (including symlinks), file versions,
+  - [x] Backend: files API from the contract in `ARCHITECTURE.md`, path protection (including symlinks), file versions,
         size limits, binary file detection.
   - [x] Marking of changed files (`M`, `U`, …) in the explorer (frontend, based on the git status from stage 4).
 - [ ] **Stage 3: console.**

@@ -5,8 +5,8 @@ terminal and git in the browser. Runs on a home computer (EndeavourOS), access t
 login with a password and a TOTP code. One user.
 
 Status: **frontend ready (login and sessions, editor with a diff view, console, workspaces and git, terminal);
-backend: login, sessions and login protection (stage 1, parts A and B).** Nothing is fit to be exposed
-to the internet. Progress: [`docs/PLAN.md`](docs/PLAN.md), section "Stages".
+backend: login, sessions and login protection (stage 1, parts A and B), the files API (stage 2).** Nothing is fit
+to be exposed to the internet. Progress: [`docs/PLAN.md`](docs/PLAN.md), section "Stages".
 
 ## Documentation
 

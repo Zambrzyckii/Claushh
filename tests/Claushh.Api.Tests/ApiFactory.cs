@@ -13,6 +13,8 @@ using Testcontainers.PostgreSql;
 
 [assembly: AssemblyFixture(typeof(Claushh.Api.Tests.ApiFactory))]
 [assembly: Xunit.v3.Parallelization(Mode = Xunit.Sdk.ParallelMode.None)]
+// The backend runs only on Linux (docs/PLAN.md, "Backend decisions (stage 2)"); the tests use symlinks, FIFOs and Unix file modes.
+[assembly: System.Runtime.Versioning.SupportedOSPlatform("linux")]
 
 namespace Claushh.Api.Tests;
 
