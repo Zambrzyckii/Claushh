@@ -112,5 +112,6 @@ public sealed class LogoutTests(ApiFactory api) : ApiTest(api)
         var response = await Client.Http.DeleteAsync($"/api/auth/sessions/{otherMe.SessionId}");
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await other.Http.GetAsync("/api/auth/me")).StatusCode);
     }
 }
