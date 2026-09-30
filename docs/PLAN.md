@@ -30,8 +30,9 @@ Layout modeled on VS Code:
 | Bottom | collapsible panel with the tabs **Workspace** (list of workspaces and their repositories: branch, status, last commit, Otwórz (open) / Pull / Push) and **Terminal** |
 | Status bar | branch, number of changes, console status, cursor position |
 
-The mockup also shows a tunnel status in the status bar. It was dropped: through the tunnel the page does not load at
-all while the tunnel is down, so the status could never show a failure.
+The mockup also shows a tunnel status in the status bar. It was dropped as it would add nothing: through the tunnel
+the page does not load at all while the tunnel is down, and a tunnel that fails while the page is open already shows
+in the status bar as "Konsola: brak połączenia" (console status).
 
 Colors: dark theme with a single amber accent, to be refined in later iterations.
 Fonts: IBM Plex Sans (interface), JetBrains Mono (code, console). In the terminal the Nerd Font version,
