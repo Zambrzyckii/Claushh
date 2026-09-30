@@ -49,6 +49,9 @@ npx playwright install chromium   # once, browser for e2e
 npm run e2e                       # build + e2e on the mock backend (e2e/mock-api)
 ```
 
+Run the tests through npm: `web/.npmrc` starts Node with `--no-experimental-webstorage`, because from Node 25 on
+Node's own `localStorage` hides the one of the test environment (jsdom).
+
 ## Backend tests
 
 ```bash

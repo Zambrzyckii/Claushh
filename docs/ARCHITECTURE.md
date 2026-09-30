@@ -95,6 +95,7 @@ to the API at `http://localhost:5080` (`web/proxy.conf.json`).
 | `web/e2e/mock-api/server.mjs` | mock backend: auth, files, workspaces and simulated git, console and terminal hubs (SignalR JSON over WebSocket, simulated shell), security headers, `/__test/*`. Listens only on `127.0.0.1` |
 | `web/e2e/tests/` | e2e tests: `auth`, `editor`, `diff`, `console`, `workspaces`, `terminal`, `security`, `mock-api` + `helpers.ts` and `fixtures.ts` (CSP check in every test, `newDevice` for a second browser) |
 | `web/proxy.conf.json` | dev server proxy to the API |
+| `web/.npmrc` | every npm script runs Node with `--no-experimental-webstorage`: from Node 25 on, Node's own global `localStorage` (undefined without `--localstorage-file`) hides jsdom's in the Vitest tests |
 | `deploy/docker-compose.yml` | PostgreSQL 17 on `127.0.0.1:5432` |
 | `deploy/.env.example` | template of variables for Compose (copy to `deploy/.env`) |
 | `docs/` | project documentation |
