@@ -28,7 +28,10 @@ Layout modeled on VS Code:
 | Center | editor (Monaco) with tabs, syntax highlighting and manual editing |
 | Right | collapsible **"Konsola"** (console) panel: conversation with Claude as plain monospace text, without icons, colors or the name "Claude"; under the prompt field a choice of **model**, **effort** and **mode** (ask before edits / accept edits / plan); permission requests (tak / tak, zawsze / nie) |
 | Bottom | collapsible panel with the tabs **Workspace** (list of workspaces and their repositories: branch, status, last commit, Otwórz (open) / Pull / Push) and **Terminal** |
-| Status bar | branch, number of changes, console status, cursor position, tunnel status |
+| Status bar | branch, number of changes, console status, cursor position |
+
+The mockup also shows a tunnel status in the status bar. It was dropped: through the tunnel the page does not load at
+all while the tunnel is down, so the status could never show a failure.
 
 Colors: dark theme with a single amber accent, to be refined in later iterations.
 Fonts: IBM Plex Sans (interface), JetBrains Mono (code, console). In the terminal the Nerd Font version,
@@ -213,7 +216,8 @@ The order is chosen so that only already secured things reach the internet.
         (terminal: PTY + tmux).
 - [ ] **Stage 5: polish.**
   - [x] Frontend: session countdown with extension on activity, "Bezpieczeństwo" (security) dialog (active sessions,
-        login history, "Wyloguj pozostałe" (log out other sessions) and "Wyloguj wszędzie" (log out everywhere)), diff view against HEAD in the editor.
+        login history, "Wyloguj pozostałe sesje" (log out other sessions) and "Wyloguj wszędzie" (log out
+        everywhere)), diff view against HEAD in the editor.
   - [x] Frontend: fixes from the security review (pasting and typing in the terminal, OSC 8 links, focus,
         permission requests in the console, strict clone URL, unconfirmed logout without returning to the app,
         expiry without the server, "Wyloguj wszędzie", CSP with Trusted Types and headers, XSRF token bound to the identity,

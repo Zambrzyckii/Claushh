@@ -73,7 +73,7 @@ public sealed class SessionService(ClaushhDbContext db, TimeProvider clock, IOpt
         await Active().Where(s => s.UserId == userId).ExecuteUpdateAsync(s => s.SetProperty(x => x.RevokedAt, now), ct);
     }
 
-    // "Wyloguj pozostałe": every other active session of the user, in one UPDATE.
+    // "Wyloguj pozostałe sesje": every other active session of the user, in one UPDATE.
     public async Task RevokeOthersAsync(Session current, CancellationToken ct)
     {
         var now = clock.GetUtcNow();

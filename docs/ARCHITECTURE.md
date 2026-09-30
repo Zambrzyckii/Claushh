@@ -79,7 +79,7 @@ to the API at `http://localhost:5080` (`web/proxy.conf.json`).
 | `web/src/app/features/editor/workers/` | entry points of the Monaco web workers (editor, TS, JSON, CSS, HTML) |
 | `web/tsconfig.worker.json` | tsconfig for the workers (referenced in `angular.json` as `webWorkerTsConfig`) |
 | `web/src/app/features/login/` | login screen: username, password, TOTP code, retrying an unconfirmed logout |
-| `web/src/app/features/security/` | the "Bezpieczeństwo" (Security) window: active sessions, login history, "Wyloguj pozostałe" (log out others) / "Wyloguj wszędzie" (log out everywhere) |
+| `web/src/app/features/security/` | the "Bezpieczeństwo" (Security) window: active sessions, login history, "Wyloguj pozostałe sesje" (log out other sessions) / "Wyloguj wszędzie" (log out everywhere) |
 | `web/src/app/features/console/console-store.ts` | conversation state built from hub events, sending, permissions, interrupt, new conversation |
 | `web/src/app/features/console/console-panel.*` | the Konsola (Console) panel: the conversation as plain text, prompt field, model / effort / mode |
 | `web/src/app/features/workspaces/workspaces-store.ts` | state of the Workspace panel: workspaces, repositories, pull / push, create, clone |
