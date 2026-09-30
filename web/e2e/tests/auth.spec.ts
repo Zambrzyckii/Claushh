@@ -67,6 +67,8 @@ test('too many attempts show the waiting time', async ({ page }) => {
   await page.goto('/login');
   for (let i = 0; i < 4; i++) {
     await fillLogin(page, { password: 'bad' });
+    // After a failed attempt the form empties the password; filling in the next attempt before that would be undone.
+    await expect(page.locator('#password')).toHaveValue('');
     await expect(page.getByRole('alert')).toBeVisible();
   }
   await expect(page.getByRole('alert')).toContainText('30 s');
