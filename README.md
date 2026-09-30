@@ -50,7 +50,8 @@ npm run e2e                       # build + e2e on the mock backend (e2e/mock-ap
 ```
 
 Run the tests through npm: `web/.npmrc` starts Node with `--no-experimental-webstorage`, because from Node 25 on
-Node's own `localStorage` hides the one of the test environment (jsdom).
+Node's own `localStorage` hides jsdom's (the test environment's). For npm scripts in `web/` this setting replaces a
+`NODE_OPTIONS` set in your shell.
 
 ## Backend tests
 
