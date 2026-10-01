@@ -6,8 +6,7 @@ or dependency, update the relevant section.
 
 Status: frontend done (login, session countdown and the "Bezpieczeństwo" (Security) window, explorer, editor with diff view,
 console, workspaces and git, terminal). The backend has login, sessions, login protection, the files API (listing,
-reading and saving) and, of workspaces and git, the workspaces, the repository list, cloning, the git status and the HEAD
-content (section "Backend"); the other contracts are still only in the mock.
+reading and saving) and the workspaces and git API (section "Backend"); the console and terminal hubs are still only in the mock.
 The frontend is tested against a mock backend (`web/e2e/mock-api/`) that follows the contracts below.
 
 ## Flow
@@ -40,7 +39,7 @@ to the API at `http://localhost:5080` (`web/proxy.conf.json`).
 | `src/Claushh.Api/Auth/` | login: `Session`, `AuthSessionOptions`, `AuthCookies` (cookie names), `SessionService` (the only code with session rules), `SessionAuthenticationHandler` (cookie → user, never extends), `SessionAntiforgeryData` (XSRF token bound to the session), `TotpVerifier` (TOTP codes, each accepted once), `LoginGuard` (limit per IP, account lockout, login history), `LoginAttempt`, `DeviceName` (User-Agent for storage and display), `AuthEndpoints` (`me`, `login`, `keepalive`, `logout`, XSRF filter), `SessionEndpoints` (session list, ending sessions, login history), `CreateUserCommand` (`create-user`), `AuthCleanup` (hourly deletion after 90 days) |
 | `src/Claushh.Api/Files/` | files: `ProjectsOptions` (`Projects:Root`), `ProjectPaths` (the only code that turns an API path into a path on disk: syntax, symlinks resolved with `realpath`, `.git` refused, file types from `statx`), `Libc` (the three libc calls: `realpath`, `statx` and `access`), `FileStore` (reading and saving: versions, the 5 MB limit, the text rule `DecodeText`, atomic saves under a per-file lock), `FileEndpoints` (`/api/files/*`) |
 | `src/Claushh.Api/Workspaces/` | workspaces: `Workspace` (entity: display name and creation time), `WorkspaceNames` (the name rule and the directory made from a name), `CloneUrl` (the frontend's clone URL rule in .NET terms), `WorkspaceStore` (what a workspace is, the list in display order, creating one), `WorkspaceEndpoints` (`/api/workspaces`, `/api/repos`, `/api/repos/clone`) |
-| `src/Claushh.Api/Git/` | git: `Repositories` (what a repository is and its state, read with LibGit2Sharp: the repository list, the status, HEAD content), `GitOptions` (`Git:NetworkTimeout`), `GitRunner` (the git CLI: safety options, environment, output, time limits, killing the process tree), `RepoLocks` (one lock per repository), `GitEndpoints` (`/api/git/status`, `/api/git/show`) |
+| `src/Claushh.Api/Git/` | git: `Repositories` (what a repository is and its state, read with LibGit2Sharp: the repository list, the status, HEAD content), `GitOptions` (`Git:NetworkTimeout`), `GitRunner` (the git CLI: safety options, environment, output, time limits, killing the process tree), `RepoLocks` (one lock per repository), `GitEndpoints` (`/api/git/*`: status, show, pull, push) |
 | `dotnet-tools.json` | local .NET tools: `dotnet-ef` (`dotnet tool restore`) |
 | `tests/Claushh.Api.Tests/` | backend integration tests: xUnit, the API in memory (`WebApplicationFactory`), PostgreSQL 17 from Testcontainers (`ApiFactory`) |
 | `global.json` | `dotnet test` runs on Microsoft.Testing.Platform (required by xUnit v3 on the .NET 10 SDK) |
@@ -446,10 +445,9 @@ Events sent by the server with the `ConsoleEvent` method to all of the user's co
   valid punycode).
 - Git messages from the server (`message`) are displayed only as text.
 
-### API contract (to be implemented in the backend)
+### API contract
 
-Implemented in the backend (section "Backend"): GET and POST /api/workspaces, GET /api/repos, POST /api/repos/clone,
-GET /api/git/status and GET /api/git/show; the others are still only in the mock.
+Implemented in the backend (section "Backend").
 
 All endpoints require a session (otherwise `401`). `POST` requires the XSRF header.
 Errors have a `{"message"}` body with a description (e.g. git output), which the frontend shows under its own message.
@@ -462,8 +460,8 @@ Errors have a `{"message"}` body with a description (e.g. git output), which the
 | POST | `/api/repos/clone` | body `{"workspace","url"}`. `201 RepoSummary`. Directory name from the last URL segment without `.git`, it must match `^[A-Za-z0-9_][A-Za-z0-9._-]{0,99}$` (so not `.`, `..`, `.git` or `-…`). `400` bad URL or name (`{"message":"Nieprawidłowy adres."}` or `{"message":"Nieprawidłowa nazwa katalogu."}`), `404` no workspace, `409 {"message":"Katalog już istnieje."}` when anything has that name, `502` with git's message, or `"Git nie skończył w ciągu N s i został przerwany."` at the time limit; a failed or stopped clone leaves no directory |
 | GET | `/api/git/show?repo=<repo>&path=<plik>` | `200 {"content"}`: the file content in HEAD (for the diff view). `404` when the file is not in HEAD (also a directory, a symlink, a submodule, or no commit yet). The content is what a checkout writes (line endings and ident from .gitattributes); 413 over 5 MB, 415 for a NUL byte or invalid UTF-8, a UTF-8 BOM is dropped (the files API's rules). `400` when `path` is not inside `repo` |
 | GET | `/api/git/status?repo=<repo>` | `200 {"branch","ahead","behind","files":[{"path","status"}]}`. `status`: `modified`/`added`/`deleted`/`renamed`/`untracked`/`conflicted`. Untracked files individually (`--untracked-files=all`). `404` when it is not a repository |
-| POST | `/api/git/pull?repo=<repo>` | `git pull --ff-only`. `200 {"message","changedPaths"}`. `409` when it cannot fast-forward or local changes would be overwritten. `400` no remote branch, `502` remote repository error |
-| POST | `/api/git/push?repo=<repo>` | `200 {"message"}` (without an upstream: `git push -u origin HEAD`). `409` rejected (pull first). `400` no remote repository, `502` other remote error |
+| POST | `/api/git/pull?repo=<repo>` | `git pull --ff-only`, run as a fetch and a fast-forward merge. `200 {"message","changedPaths"}`: `"Pobrano N commit/commity/commitów."` with the files that differ between the old and the new HEAD (a rename gives both paths), or `"Już aktualne."` with `[]`. `400 {"message":"Gałąź nie ma gałęzi zdalnej."}` without an upstream (also on a detached HEAD). `409` with git's message when the merge cannot fast-forward or would overwrite local changes. `502` with git's message when the fetch fails, or the time-limit message |
+| POST | `/api/git/push?repo=<repo>` | `200 {"message"}`: `"Wypchnięto N commit/commity/commitów do <upstream>."`, `"Wypchnięto gałąź <branch> do origin/<branch>."` for a new upstream (`git push -u origin HEAD`), or `"Nic do wypchnięcia."` without the network when nothing is ahead. `400` `"Odłączony HEAD: przełącz się na gałąź, żeby zrobić push."` or `"Brak zdalnego repozytorium 'origin'."`. `409` with git's output when a ref is `[rejected]` (pull first). `502` for any other failure (network, authentication, `[remote rejected]` by a hook or a protection rule) or the time limit |
 
 `RepoSummary`: `{"name","path","branch" | null,"changes","upstream" | null,"ahead","behind","lastCommit": {"message","date"} | null}`.
 Paths (`path`, `files[].path`, `changedPaths`) are always relative to the projects directory.
@@ -472,6 +470,8 @@ Paths (`path`, `files[].path`, `changedPaths`) are always relative to the projec
 projects directory, is `400` with an empty body; a valid path that is not a workspace or a repository is `404` with an
 empty body. `lastCommit` is the subject line of HEAD's commit and its committer date (ISO 8601, UTC). `ahead` and
 `behind` are counted against the local remote-tracking branch, so they are as fresh as its last fetch.
+
+The backend's own messages are Polish (as the mock's); git's messages pass through in English (`LC_ALL=C.UTF-8`).
 
 Security requirements for the backend:
 - `workspace` and `repo` are checked like file paths (inside the projects directory, also after resolving symlinks).
@@ -582,6 +582,8 @@ Endpoints:
 | POST | `/api/repos/clone` | git clone of `{"workspace","url"}` into the workspace, within `Git:NetworkTimeout`; 400 bad body, workspace, URL or directory name; 404 no such workspace; 409 the name is taken; 502 git failed or ran out of time | session, XSRF token |
 | GET | `/api/git/status?repo=<repo>` | branch, ahead and behind, and the changed files of a repository; 400 when repo is not two valid path segments; 404 when it is not a repository | session |
 | GET | `/api/git/show?repo=<repo>&path=<file>` | a file as HEAD has it; 400 as for the status, or when path is not a valid path inside repo; 404 when HEAD has no such file; 413 over 5 MB; 415 for a NUL byte or invalid UTF-8 | session |
+| POST | `/api/git/pull?repo=<repo>` | fetch and fast-forward merge under the repository's lock; 400 no upstream; 404 not a repository; 409 the merge failed; 502 the fetch failed or ran out of time | session, XSRF token |
+| POST | `/api/git/push?repo=<repo>` | push to the upstream (or -u origin HEAD) under the repository's lock; 400 detached HEAD or no origin; 404 not a repository; 409 [rejected]; 502 any other failure or the time limit | session, XSRF token |
 
 Every other endpoint requires a session (`FallbackPolicy`), and every POST/PUT/PATCH/DELETE under `/api` a valid
 `X-XSRF-TOKEN` (filter `RequireXsrfToken` in `Auth/AuthEndpoints.cs`, 400 otherwise).
@@ -690,6 +692,14 @@ Workspaces and git (`Workspaces/`, `Git/`):
   the destination given by name (not the resolved path), so git's own "Cloning into '…'" message never puts a
   resolved path in a `502` response. A failure or a timeout removes the target directory if it exists and answers
   `502`; a clone that is not a repository the portal can read is a `500`.
+- Pull: no upstream (also a detached HEAD) → `400`; `git fetch <remote>` (a failure → `502`); nothing new → "Już
+  aktualne."; `git merge --ff-only @{upstream}` (a failure → `409` with git's message); then `changedPaths` from `git diff
+  --name-only --no-renames -z <old HEAD> HEAD` (on a branch that had no commits, `git ls-tree -r --name-only -z HEAD`).
+- Push: a detached HEAD → `400`; an upstream with nothing ahead → "Nic do wypchnięcia." without the network; with an
+  upstream `git push --porcelain <remote> HEAD:<its branch>` (explicit, so `push.default` does not matter); without one
+  but with `origin`, `git push --porcelain -u origin HEAD`; neither → `400`. A porcelain line `!…[rejected]` → `409`; any
+  other failure → `502`. A message that repeats the repository's resolved path (e.g. a stale lock file) has it replaced
+  with the API path, as clone's destination name does for its own message.
 
 Commands (`dotnet run --project src/Claushh.Api -- <command>`, on the server `./Claushh.Api <command>`):
 
@@ -732,7 +742,7 @@ Rules: `CLAUDE.md`, section "Tests" (new code: only integration and e2e tests).
 |---|---|---|
 | Integration + older unit | `cd web && npm test` | Vitest (jsdom). Integration: `console.integration.spec.ts` (panel + store + editor, SignalR and HTTP stubbed; also permission requests: hidden characters, button delay, "tak, zawsze", and a double Enter), `workspaces.integration.spec.ts` (Workspace panel + router + git status + explorer + editor, HTTP stubbed; also the strict clone URL validation), `security.integration.spec.ts` (AuthService + interceptor + SessionTimer + the "Bezpieczeństwo" window, HTTP, reload and clock stubbed; also expiry without a server response), `logout-confirmation.integration.spec.ts` (routes with guards + AuthService + login screen after an unconfirmed logout, also with a newer session from another tab). Older unit tests: auth, files API, paths, explorer, `EditorStore` |
 | E2E | `cd web && npm run e2e` | build + Playwright in Chromium on `e2e/mock-api/server.mjs`: login and sessions (including unconfirmed logout with "Back", a new tab and logging in again, embedding in a frame, Trusted Types), explorer and Monaco, console (steps, options, permissions, "tak, zawsze", interrupt, replay, multiple tabs, file changes), workspaces (opening a repo, git status, pull, push, create, clone, a conversation per repo), terminal (commands, keys, reload without duplicates, multiple terminals, `exit`, Ctrl+S, resizing, pasting with the decision panel, characters on a dropped connection without loss or duplication, also after closing the tab, queue limit, focus, OSC 8 links), session (countdown, "Przedłuż", activity once a minute on a fake clock, expiry, also without a server response and hubs closed by the server), the "Bezpieczeństwo" window with a second device (a separate browser context), diff view, Monaco worker startup, mock robustness and the contract rules that the frontend does not let through (clone URL, XSRF token bound to the identity, saving like the files API: `absent`, 5 MB, a NUL character, workspace, repo and path parameters). **Every test** (`fixtures.ts`) fails when the page reports a CSP or Trusted Types violation, an unhandled exception (including one caught by Angular's ErrorHandler, `console.error('ERROR', …)`) or Monaco does not create a worker |
-| Backend | `dotnet test` (needs Docker) | xUnit integration tests over HTTP (`WebApplicationFactory`, PostgreSQL 17 from Testcontainers, a test clock): login and its failures, `me`, `keepalive` and both deadlines, logout and 409, ending another session, XSRF token bound to the session, `no-store`, closed `/api/*`, `create-user`, TOTP codes used once, the limit per IP, the account lockout and its growth, session list, `revoke-others`, login history, cleanup, the password reset, the files API (listing, symlinks, `.git`, reading, saving, conflicts, re-creating a deleted file, limits, text rules, file modes, long names, two saves at once, empty error bodies), workspaces and git (the repository list and its order, what is and is not a repository, every git status, ahead and behind, HEAD content with a checkout's line endings and the files API's limits), workspaces (the list and its order, names and directories, creating, a stale row), cloning (every refused URL, git's own errors, the time limit against a server that never answers, only https) |
+| Backend | `dotnet test` (needs Docker) | xUnit integration tests over HTTP (`WebApplicationFactory`, PostgreSQL 17 from Testcontainers, a test clock): login and its failures, `me`, `keepalive` and both deadlines, logout and 409, ending another session, XSRF token bound to the session, `no-store`, closed `/api/*`, `create-user`, TOTP codes used once, the limit per IP, the account lockout and its growth, session list, `revoke-others`, login history, cleanup, the password reset, the files API (listing, symlinks, `.git`, reading, saving, conflicts, re-creating a deleted file, limits, text rules, file modes, long names, two saves at once, empty error bodies), workspaces and git (the repository list and its order, what is and is not a repository, every git status, ahead and behind, HEAD content with a checkout's line endings and the files API's limits), workspaces (the list and its order, names and directories, creating, a stale row), cloning (every refused URL, git's own errors, the time limit against a server that never answers, only https), pull and push (every answer, both paths of a rename, a branch without commits, two pulls at once, a hook that refuses, only https) |
 
 Backend tests make repositories with the git CLI (tests/Claushh.Api.Tests/TestGit.cs): a fixed identity and date, HOME
 set to a temporary directory so the machine's ~/.gitconfig stays out (libgit2's configuration search paths point there

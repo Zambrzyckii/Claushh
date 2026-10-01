@@ -283,6 +283,20 @@ Backend decisions (stage 4):
   deadline. Rejected: striped locks as in the files API (a pull could wait behind an operation on an unrelated
   repository that shares its stripe) and refusing a second pull with `409` (the panel already disables its buttons
   while a request is pending).
+- Pull is the contract's `git pull --ff-only` run as its two steps, so that the status follows the step that failed: no
+  upstream `400`, the fetch `502`, nothing new "Już aktualne.", the fast-forward merge `409` (diverged branches, local
+  changes that would be overwritten, a lock file), success "Pobrano N commit/commity/commitów." with `changedPaths` from
+  `git diff --name-only --no-renames -z` (a rename gives both paths). Rejected: one `git pull` call (its exit code does
+  not say whether the network or the merge failed).
+- Push: a detached HEAD `400`; an upstream with nothing ahead "Nic do wypchnięcia." without the network (as the mock);
+  with an upstream `git push --porcelain <remote> HEAD:<upstream branch>`; without one but with `origin` the contract's
+  `git push --porcelain -u origin HEAD`; neither `400`. `[rejected]` in the porcelain output is `409`, any other failure
+  (network, authentication, `[remote rejected]` by a hook or protection rule) `502`. Rejected: plain `git push` (with an
+  upstream named differently from the branch, `push.default=simple` refuses) and telling the rejection apart from
+  stderr text (the porcelain output is meant for programs).
+- The backend's own texts are Polish and equal to the mock's where the mock has one; git's messages pass through in
+  English; `404` and parameter `400`s have an empty body. Rejected: English backend texts (the panel would mix languages
+  in its own messages).
 
 ### Limiting damage
 

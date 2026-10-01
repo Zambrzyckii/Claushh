@@ -56,6 +56,9 @@ public sealed class TestGit(ApiFactory api)
     // An https URL, as GitHub's: the test git configuration (ApiFactory.GitConfig) leads it to RemotesRoot.
     public string RemoteUrl(string name) => $"https://git.test/{name}.git";
 
+    // The bare repository behind RemoteUrl(name).
+    public string RemotePath(string name) => Path.Join(api.RemotesRoot, $"{name}.git");
+
     // A clone outside the projects directory ("another computer"), for commits that reach a remote from elsewhere.
     public string CloneElsewhere(string url)
     {

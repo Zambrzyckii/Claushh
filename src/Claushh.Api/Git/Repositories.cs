@@ -15,9 +15,10 @@ public sealed record FileChange(string Path, string Status);
 
 public sealed record RepoStatus(string? Branch, int Ahead, int Behind, IReadOnlyList<FileChange> Files);
 
-// Branch: null for a detached HEAD. Upstream: the tracked remote branch ("origin/main"); without one, Ahead and Behind
-// are 0.
-public sealed record HeadState(string? Branch, string? Upstream, int Ahead, int Behind);
+// Branch: null for a detached HEAD. Upstream: the tracked remote branch ("origin/main"), with Remote and MergeRef (the
+// branch on the remote) from the branch's configuration; without one, Ahead and Behind are 0. Sha: HEAD's commit, null
+// on a branch without commits.
+public sealed record HeadState(string? Branch, string? Upstream, string? Remote, string? MergeRef, int Ahead, int Behind, string? Sha, bool HasOrigin);
 
 public enum ShowStatus { Ok, NotFound, TooLarge, NotText }
 
@@ -53,6 +54,12 @@ public sealed class Repositories(ProjectPaths paths, ILogger<Repositories> log)
     {
         using var repository = new Repository(repo.FullPath);
         return Summarize(repository, repo);
+    }
+
+    public HeadState Head(ProjectPath repo)
+    {
+        using var repository = new Repository(repo.FullPath);
+        return HeadOf(repository);
     }
 
     public RepoStatus Status(ProjectPath repo)
@@ -151,9 +158,13 @@ public sealed class Repositories(ProjectPaths paths, ILogger<Repositories> log)
         return new HeadState(
             branch,
             tracked?.FriendlyName,
+            tracked is null ? null : head.RemoteName,
+            tracked is null ? null : head.UpstreamBranchCanonicalName,
             tracked is null || head.Tip is null ? 0 : head.TrackingDetails.AheadBy ?? 0,
             // On a branch without commits yet, every commit of the upstream is still to come.
-            tracked is null ? 0 : head.Tip is null ? tracked.Commits.Count() : head.TrackingDetails.BehindBy ?? 0);
+            tracked is null ? 0 : head.Tip is null ? tracked.Commits.Count() : head.TrackingDetails.BehindBy ?? 0,
+            head.Tip?.Sha,
+            repository.Config.Get<string>("remote.origin.url") is not null);
     }
 
     // What `git status` shows, one entry per file (also inside untracked directories), paths relative to the projects
