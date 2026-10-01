@@ -16,7 +16,9 @@ builder.Services.AddOptions<ProjectsOptions>()
     .Bind(builder.Configuration.GetSection("Projects"))
     .Validate(options => Path.IsPathFullyQualified(options.Root) && Directory.Exists(options.Root)
             && Libc.RealPath(options.Root, out _) is not (null or "/"),
-        "Projects:Root must be the absolute path of an existing directory (README.md, \"Running in development\").")
+        "Projects:Root must be the absolute path of an existing directory other than / (README.md, \"Running in development\").")
+    .Validate(options => Libc.CanReadWriteAndSearch(options.Root),
+        "Projects:Root must be a directory the API can read, write and search (README.md, \"Running in development\").")
     .ValidateOnStart();
 builder.Services.AddDbContext<ClaushhDbContext>((services, options) => options.UseNpgsql(
     services.GetRequiredService<IConfiguration>().GetConnectionString("Claushh")

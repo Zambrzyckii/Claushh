@@ -151,34 +151,40 @@ Backend decisions (stage 1):
 Backend decisions (stage 2):
 - The projects directory is the configuration key `Projects:Root` (`/srv/projects` in `appsettings.json`, a user-secret
   in development, a temporary directory in tests), checked when the API starts: an absolute path to an existing
-  directory whose real path is not `/`, otherwise the API refuses to start, with a message naming the key. The
-  directory may itself be a symlink: `ProjectPaths` resolves it once to its real path. Rejected: a constant
-  `/srv/projects` (development and tests need other directories) and a check on first use (a misconfigured server
-  would start and fail on every request).
+  directory whose real path is not `/`, which the API can read, write and search (saving files and creating
+  workspaces write there), otherwise the API refuses to start, with a message naming the key. Without that check a root
+  the API cannot use would list as empty and answer `404` for everything under it, with nothing logged. The directory
+  may itself be a symlink: `ProjectPaths` resolves it to its real path at the first request that needs it (a failure is
+  not remembered, so a directory that is back is used again). Rejected: a constant `/srv/projects` (development and
+  tests need other directories) and a check on first use (a misconfigured server would start and fail on every
+  request).
 - A path in the API is `""` (the projects directory itself) or non-empty segments joined by `/`, none of them `.`, `..`
   or `.git`, with no leading `/`, no `\` and no NUL: the rules of the frontend's `isSafeRelativePath`, plus no `.git`
   segment. Anything else is `400`. Rejected: normalising bad input (e.g. dropping a doubled `/`), because the API would
   accept paths the frontend never sends.
 - The joined path is resolved like `realpath(3)`: every component, relative targets, `..` inside targets, loops. The
-  result must be the projects directory or lie under it, so a link in the middle of a path cannot lead out either. A
-  path whose last component is a dangling symlink, or whose resolution loops, is `400`, and so is a name longer than the
-  file system allows; any other path that does not exist, or that lies under a directory that cannot be searched, is
-  `404`. Any other error from the file system is a `500`. Rejected: lexical checks (`Path.GetFullPath`), which do not
-  see symlinks, and a managed walk over `LinkTarget`, which would re-implement the kernel's path resolution with its
-  corner cases.
+  result must be the projects directory or lie under it, so a link in the middle of a path cannot lead out either. When
+  the end of the path does not exist (or cannot be reached), the nearest ancestor that `realpath` resolves decides, and
+  containment is checked first: a path that leads outside the projects directory or into `.git` is `400` even then,
+  because the status code must not tell whether something exists there. A dangling or looping symlink anywhere in the
+  path is `400`, and so is a name longer than the file system allows. Any other path that does not exist, or that lies
+  under a directory that cannot be searched, is `404`. Only the other errors of `realpath` are a `500`: an entry whose
+  type cannot be read is left out of a listing (`404` when asked for directly), and a directory that cannot be read
+  lists as empty. Rejected: lexical checks (`Path.GetFullPath`), which do not see symlinks, and a managed walk over
+  `LinkTarget`, which would re-implement the kernel's path resolution with its corner cases.
 - Listings include dotfiles (`.gitignore`, `.env`): .NET's directory enumeration skips hidden entries by default (on
   Linux, names starting with `.`), so the listing asks for all of them. They leave out `.git`, names that are not valid
-  paths (a `\` in the name), symlinks that lead outside, nowhere or in a loop, and special files. A symlink that stays
-  inside is listed with its target's kind and keeps its own path. Rejected: the default (dotfiles would vanish from the
-  explorer).
+  paths (a `\` in the name) or not valid UTF-8 (.NET decodes those with U+FFFD, so the name resolves to nothing),
+  symlinks that lead outside, nowhere or in a loop, and special files. A symlink that stays inside is listed with its
+  target's kind and keeps its own path. Rejected: the default (dotfiles would vanish from the explorer).
 - `.git` (a directory or a file) is left out of listings, and a path with a `.git` segment, before or after resolution,
   is `400`. Rejected: only hiding it in the listing (the contract's minimum), because the editor could still read
   `.git/config` or corrupt git's files with a direct request.
 - Only directories and regular files are treated as such; FIFOs, sockets and devices are left out of listings. The file
   type comes from `statx(2)` without following a final symlink. Rejected: treating them as files, because opening a
   FIFO blocks the request forever and .NET has no public API that tells a FIFO from a regular file.
-- `realpath` and `statx` are called through P/Invoke (`Files/Libc.cs`), so the backend runs only on Linux, like the
-  deployment.
+- `realpath`, `statx` and `access` are called through P/Invoke (`Files/Libc.cs`), so the backend runs only on Linux,
+  like the deployment.
 
 ### Limiting damage
 

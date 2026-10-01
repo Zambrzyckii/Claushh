@@ -18,7 +18,7 @@ to the internet. Progress: [`docs/PLAN.md`](docs/PLAN.md), section "Stages".
 
 ## Running in development
 
-Requirements: .NET 10 SDK, Node.js 22.12+ (npm 11), Docker.
+Requirements: Linux for the backend, .NET 10 SDK, Node.js 22.12+ (npm 11), Docker.
 
 ```bash
 # database

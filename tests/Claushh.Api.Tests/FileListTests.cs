@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Runtime.Versioning;
+using Microsoft.AspNetCore.Mvc.Testing.Handlers;
 
 namespace Claushh.Api.Tests;
 
@@ -70,9 +71,50 @@ public sealed class FileListTests(ApiFactory api) : ApiTest(api)
         Assert.Equal(HttpStatusCode.BadRequest, await ListStatusAsync("repo/to-outside/inner"));
     }
 
+    // The status code must not tell whether something exists outside the projects directory or in .git.
+    [Theory]
+    [InlineData("repo/to-secret/x")]
+    [InlineData("repo/to-outside/missing/x")]
+    [InlineData("repo/to-head/x")]
+    [InlineData("repo/dangling/x")]
+    public async Task A_path_through_a_link_that_leads_outside_into_git_or_nowhere_is_400_also_when_its_end_is_missing(string path)
+    {
+        Api.WriteProjectFile("repo/.git/HEAD", "ref: refs/heads/main\n");
+        using var outside = new OutsideDirectory();
+        File.WriteAllText(outside.Child("secret.txt"), "secret");
+        Api.Link("repo/to-outside", outside.Root);
+        Api.Link("repo/to-secret", outside.Child("secret.txt"));
+        Api.Link("repo/to-head", Api.ProjectPath("repo/.git/HEAD"));
+        Api.Link("repo/dangling", Api.ProjectPath("repo/nowhere"));
+
+        Assert.Equal(HttpStatusCode.BadRequest, await ListStatusAsync(path));
+    }
+
+    [Fact]
+    public async Task A_path_through_a_link_to_an_outside_directory_that_cannot_be_searched_is_400()
+    {
+        // Directory permissions do not bind root.
+        Assert.SkipWhen(Environment.IsPrivilegedProcess, "root can search every directory");
+        using var outside = new OutsideDirectory();
+        var locked = Directory.CreateDirectory(outside.Child("locked")).FullName;
+        Api.Link("repo/to-locked", locked);
+        File.SetUnixFileMode(locked, UnixFileMode.None);
+        try
+        {
+            Assert.Equal(HttpStatusCode.BadRequest, await ListStatusAsync("repo/to-locked/x"));
+        }
+        finally
+        {
+            // The directory has to be deletable when the OutsideDirectory is disposed.
+            File.SetUnixFileMode(locked, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+    }
+
     [Theory]
     [InlineData("missing")]
     [InlineData("notes.txt")]
+    [InlineData("missing/x")]
+    [InlineData("notes.txt/x")]
     public async Task A_missing_directory_or_a_file_is_404(string path)
     {
         Api.WriteProjectFile("notes.txt", "x");
@@ -122,6 +164,43 @@ public sealed class FileListTests(ApiFactory api) : ApiTest(api)
             // The reset of the next test has to be able to delete the directory.
             File.SetUnixFileMode(locked, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         }
+    }
+
+    // A directory whose path only starts like the projects directory is not inside it.
+    [Fact]
+    public async Task A_link_to_a_sibling_directory_with_the_same_prefix_is_400_and_left_out_of_the_listing()
+    {
+        var sibling = Api.ProjectsRoot + "-sibling";
+        Directory.CreateDirectory(sibling);
+        try
+        {
+            File.WriteAllText(Path.Join(sibling, "file.txt"), "x");
+            Api.WriteProjectFile("repo/kept.txt", "x");
+            Api.Link("repo/to-sibling", sibling);
+
+            Assert.Equal(HttpStatusCode.BadRequest, await ListStatusAsync("repo/to-sibling"));
+            Assert.Equal(new[] { new Entry("kept.txt", "repo/kept.txt", "file") }, await ListAsync("repo"));
+        }
+        finally
+        {
+            Directory.Delete(sibling, recursive: true);
+        }
+    }
+
+    // A second API instance on a fresh projects directory, so that the first request is the first use of the directory.
+    [Fact]
+    public async Task A_projects_directory_that_was_missing_at_the_first_request_is_used_once_it_is_back()
+    {
+        using var outside = new OutsideDirectory();
+        var root = Directory.CreateDirectory(outside.Child("projects")).FullName;
+        using var other = Api.WithWebHostBuilder(builder => builder.UseSetting("Projects:Root", root));
+        using var http = other.CreateDefaultClient(ApiClient.BaseAddress, new CookieContainerHandler(Client.Cookies));
+        Directory.Move(root, outside.Child("away"));
+
+        Assert.Equal(HttpStatusCode.InternalServerError, (await http.GetAsync("/api/files/list?path=")).StatusCode);
+        Directory.Move(outside.Child("away"), root);
+
+        Assert.Equal(HttpStatusCode.OK, (await http.GetAsync("/api/files/list?path=")).StatusCode);
     }
 
     [Fact]
