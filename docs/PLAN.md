@@ -168,9 +168,10 @@ Backend decisions (stage 2):
   containment is checked first: a path that leads outside the projects directory or into `.git` is `400` even then,
   because the status code must not tell whether something exists there. A dangling or looping symlink anywhere in the
   path is `400`, and so is a name longer than the file system allows. Any other path that does not exist, or that lies
-  under a directory that cannot be searched, is `404`. Only the other errors of `realpath` are a `500`: an entry whose
-  type cannot be read is left out of a listing (`404` when asked for directly), and a directory that cannot be read
-  lists as empty. Rejected: lexical checks (`Path.GetFullPath`), which do not see symlinks, and a managed walk over
+  under a directory that cannot be searched, is `404`. Other file system errors are a `500`: an unexpected error of
+  `realpath`, a directory that disappears while it is listed, or a projects directory that cannot be resolved when it is
+  first needed. An entry whose type cannot be read is left out of a listing (`404` when asked for directly), and a
+  directory that cannot be read lists as empty. Rejected: lexical checks (`Path.GetFullPath`), which do not see symlinks, and a managed walk over
   `LinkTarget`, which would re-implement the kernel's path resolution with its corner cases.
 - Listings include dotfiles (`.gitignore`, `.env`): .NET's directory enumeration skips hidden entries by default (on
   Linux, names starting with `.`), so the listing asks for all of them. They leave out `.git`, names that are not valid
