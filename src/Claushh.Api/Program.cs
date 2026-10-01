@@ -2,6 +2,8 @@
 using Claushh.Api.Auth;
 using Claushh.Api.Data;
 using Claushh.Api.Files;
+using Claushh.Api.Git;
+using Claushh.Api.Workspaces;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
@@ -47,6 +49,8 @@ builder.Services.AddHostedService(services => services.GetRequiredService<AuthCl
 builder.Services.AddScoped<CreateUserCommand>();
 builder.Services.AddSingleton<ProjectPaths>();
 builder.Services.AddSingleton<FileStore>();
+builder.Services.AddSingleton<Repositories>();
+builder.Services.AddScoped<WorkspaceStore>();
 builder.Services.AddAuthentication(SessionAuthenticationHandler.SchemeName)
     .AddScheme<AuthenticationSchemeOptions, SessionAuthenticationHandler>(SessionAuthenticationHandler.SchemeName, _ => { });
 // Closed by default: an endpoint without .AllowAnonymous() requires a session.
@@ -106,7 +110,7 @@ app.UseAuthorization();
 
 app.MapGet("/api/health", () => Results.Ok(new { status = "ok" })).AllowAnonymous();
 var api = app.MapGroup("/api").RequireXsrfToken();
-api.MapAuthEndpoints().MapSessionEndpoints().MapFileEndpoints();
+api.MapAuthEndpoints().MapSessionEndpoints().MapFileEndpoints().MapWorkspaceEndpoints().MapGitEndpoints();
 // Unknown /api paths: 401 without a session (fallback policy), 404 with one, never another handler's response.
 api.Map("{**path}", () => Results.NotFound());
 

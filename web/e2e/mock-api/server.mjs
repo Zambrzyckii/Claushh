@@ -228,6 +228,24 @@ const cloneName = (url) => url.replace(/\/+$/, '').split('/').pop().replace(/\.g
 const reposIn = (workspace) => [...state.repos.keys()].filter((p) => p.split('/')[0] === workspace);
 const slug = (name) => name.trim().toLowerCase().replace(/ł/g, 'l').normalize('NFD').replace(/\p{M}/gu, '').replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '');
 
+/**
+ * `workspace`, `repo` and `path` parameters use the files API's path syntax (docs/ARCHITECTURE.md, "Workspaces and
+ * git"): non-empty segments joined by "/", none of them ".", "..", ".git", no "\" and no NUL; `segments` fixes their
+ * number. Anything else is 400, as in the backend.
+ */
+function isApiPath(p, segments) {
+  if (typeof p !== 'string') return false;
+  const parts = p.split('/');
+  return (segments === undefined || parts.length === segments)
+    && parts.every((s) => s !== '' && s !== '.' && s !== '..' && s !== '.git' && !s.includes('\\') && !s.includes('\0'));
+}
+
+/** Repositories by name, ordinal and ignoring case, compared upper-cased like the backend's OrdinalIgnoreCase. */
+function byName(a, b) {
+  const [x, y] = [a, b].map((p) => p.slice(p.lastIndexOf('/') + 1).toUpperCase());
+  return x < y ? -1 : x > y ? 1 : 0;
+}
+
 // ---------- HTTP ----------
 
 // Security headers required from the backend (docs/ARCHITECTURE.md, "Security headers"). CSP is the policy
@@ -426,13 +444,15 @@ async function handle(req, res) {
       return json(res, 201, { name: name.trim(), path: p, repoCount: 0 });
     }
     if (url.pathname === '/api/repos' && req.method === 'GET') {
-      const ws = url.searchParams.get('workspace') ?? '';
+      const ws = url.searchParams.get('workspace');
+      if (!isApiPath(ws, 1)) return json(res, 400);
       if (!state.workspaces.has(ws)) return json(res, 404);
-      return json(res, 200, reposIn(ws).map(repoSummary));
+      return json(res, 200, reposIn(ws).sort(byName).map(repoSummary));
     }
     if (url.pathname === '/api/repos/clone' && req.method === 'POST') {
       const { workspace, url: remote } = (await readBody(req)) ?? {};
       state.log.push({ path: 'clone', workspace, url: remote });
+      if (!isApiPath(workspace, 1)) return json(res, 400);
       if (!state.workspaces.has(workspace)) return json(res, 404);
       const problem = cloneUrlProblem(remote);
       if (problem) return json(res, 400, { message: problem });
@@ -452,15 +472,19 @@ async function handle(req, res) {
       return json(res, 201, repoSummary(repoPath));
     }
 
-    const repoPath = url.searchParams.get('repo') ?? '';
+    const gitMethods = { '/api/git/show': 'GET', '/api/git/status': 'GET', '/api/git/pull': 'POST', '/api/git/push': 'POST' };
+    if (gitMethods[url.pathname] !== req.method) return json(res, 404);
+    const repoPath = url.searchParams.get('repo');
+    const file = url.searchParams.get('path');
+    const isShow = url.pathname === '/api/git/show';
+    if (!isApiPath(repoPath, 2) || (isShow && !(isApiPath(file) && file.startsWith(repoPath + '/')))) return json(res, 400);
     const repo = state.repos.get(repoPath);
     if (!repo) return json(res, 404);
-    if (url.pathname === '/api/git/show' && req.method === 'GET') {
-      const file = url.searchParams.get('path') ?? '';
-      if (!file.startsWith(repoPath + '/') || file.split('/').includes('..')) return json(res, 400);
-      return repo.committed.has(file) && repo.committed.get(file) !== null
-        ? json(res, 200, { content: repo.committed.get(file) })
-        : json(res, 404);
+    if (isShow) {
+      if (!repo.committed.has(file)) return json(res, 404);
+      // A binary file (null in the mock) is 415, as in the files API.
+      const content = repo.committed.get(file);
+      return content === null ? json(res, 415) : json(res, 200, { content });
     }
     if (url.pathname === '/api/git/status' && req.method === 'GET') {
       return json(res, 200, { branch: repo.branch, ahead: repo.ahead, behind: repo.behind, files: gitFiles(repoPath) });

@@ -71,6 +71,32 @@ test('the mock saves like the files API: `absent` creates a file, over 5 MB is 4
   expect((await save(existing, { content: 'a'.repeat(limit), baseVersion: version })).status()).toBe(200);
 });
 
+test('the mock refuses workspace, repo and path parameters that are not valid paths, like the backend', async ({ request }) => {
+  await request.get('/api/auth/me');
+  const xsrf = (await request.storageState()).cookies.find((c) => c.name === 'XSRF-TOKEN')!.value;
+  await request.post('/api/auth/login', { headers: { 'X-XSRF-TOKEN': xsrf }, data: { userName: 'owner', password: 'secret', totpCode: '123456' } });
+  await request.get('/api/auth/me');
+  const sessionXsrf = (await request.storageState()).cookies.find((c) => c.name === 'XSRF-TOKEN')!.value;
+  const lab = encodeURIComponent('studia/lab-3-sieci');
+  for (const url of [
+    '/api/repos',
+    `/api/repos?workspace=${encodeURIComponent('../studia')}`,
+    `/api/git/status?repo=studia`,
+    `/api/git/status?repo=${encodeURIComponent('studia/../x')}`,
+    `/api/git/show?repo=${lab}&path=${encodeURIComponent('studia/so-projekt-shell/src/shell.c')}`,
+    `/api/git/show?repo=${lab}&path=${encodeURIComponent('studia/lab-3-sieci/.git/config')}`
+  ]) {
+    expect((await request.get(url)).status(), url).toBe(400);
+  }
+  const clone = await request.post('/api/repos/clone', {
+    headers: { 'X-XSRF-TOKEN': sessionXsrf },
+    data: { workspace: 'studia/lab-3-sieci', url: 'https://github.com/o/r.git' }
+  });
+  expect(clone.status()).toBe(400);
+  // A binary file in HEAD is 415 (the files API's rule), not "not in HEAD".
+  expect((await request.get(`/api/git/show?repo=${lab}&path=${encodeURIComponent('studia/lab-3-sieci/logo.png')}`)).status()).toBe(415);
+});
+
 test('a token issued before logging in is refused afterwards (XSRF bound to the identity)', async ({ request }) => {
   await request.get('/api/auth/me');
   const xsrf = (await request.storageState()).cookies.find((c) => c.name === 'XSRF-TOKEN')!.value;

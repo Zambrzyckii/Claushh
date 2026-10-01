@@ -5,8 +5,9 @@ terminal and git in the browser. Runs on a home computer (EndeavourOS), access t
 login with a password and a TOTP code. One user.
 
 Status: **frontend ready (login and sessions, editor with a diff view, console, workspaces and git, terminal);
-backend: login, sessions and login protection (stage 1, parts A and B), the files API (stage 2).** Nothing is fit
-to be exposed to the internet. Progress: [`docs/PLAN.md`](docs/PLAN.md), section "Stages".
+backend: login, sessions and login protection (stage 1, parts A and B), the files API (stage 2), the repository list
+and git status (stage 4).** Nothing is fit to be exposed to the internet. Progress: [`docs/PLAN.md`](docs/PLAN.md),
+section "Stages".
 
 ## Documentation
 
@@ -37,6 +38,9 @@ cd web
 npm install
 npm start
 ```
+
+The backend reads repositories with libgit2, which comes with the build. Repositories in the projects directory must
+belong to the user the API runs as: libgit2 refuses others, like git's safe.directory.
 
 Lost phone or leaked password: `create-user --reset-totp` gives the account a new TOTP key,
 `create-user --reset-password` a new password; both end all sessions (commands in `docs/ARCHITECTURE.md`).

@@ -28,7 +28,7 @@ const cells = async (page: Page, name: string) =>
 
 test('lists workspaces and the repositories of the selected one', async ({ page }) => {
   await expect(panel(page).locator('.workspace')).toHaveText([/Studia\s*3 repo/, /Prywatne\s*1 repo/]);
-  await expect(panel(page).locator('.repo__name')).toHaveText(['lab-3-sieci', 'so-projekt-shell', 'bazy-danych-lab']);
+  await expect(panel(page).locator('.repo__name')).toHaveText(['bazy-danych-lab', 'lab-3-sieci', 'so-projekt-shell']);
 
   const lab = await cells(page, 'lab-3-sieci');
   expect(lab.slice(0, 5)).toEqual(['lab-3-sieci', 'main', 'czysto', 'parser: szkielet parse_ipv4 · 12 minut temu', 'origin ↑1']);

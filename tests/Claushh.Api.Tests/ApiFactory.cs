@@ -3,6 +3,7 @@
 using System.Diagnostics;
 using System.Text;
 using Claushh.Api.Data;
+using LibGit2Sharp;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -75,6 +76,25 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         Assert.Equal(0, mkfifo.ExitCode);
     }
 
+    // HOME of the git processes the tests start, and the only place libgit2 reads configuration from, so the machine's
+    // ~/.gitconfig (signing, hooks, autocrlf) reaches neither the test repositories nor the API.
+    public string GitHome { get; } = Directory.CreateTempSubdirectory("claushh-git-home-").FullName;
+
+    // Bare repositories that stand in for GitHub, and clones of them "on another computer"; emptied before every test.
+    public string RemotesRoot { get; } = Directory.CreateTempSubdirectory("claushh-remotes-").FullName;
+
+    public TestGit Git { get; }
+
+    public ApiFactory()
+    {
+        Git = new TestGit(this);
+        // libgit2 keeps these per process, and the API runs in this one.
+        foreach (var level in new[] { ConfigurationLevel.Global, ConfigurationLevel.Xdg, ConfigurationLevel.System })
+        {
+            GlobalSettings.SetConfigSearchPaths(level, GitHome);
+        }
+    }
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
@@ -89,13 +109,15 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
 
     public async ValueTask InitializeAsync() => await _db.StartAsync();
 
-    // Before every test: empty tables and projects directory, the clock at the current second, and (by default) the
-    // owner with TOTP enabled.
+    // Before every test: empty tables, projects and remotes directories, the clock at the current second, and (by
+    // default) the owner with TOTP enabled.
     public async Task ResetAsync(bool withUser = true)
     {
         // Directory.Delete removes symlinks without following them, so link targets outside stay untouched.
         Directory.Delete(ProjectsRoot, recursive: true);
         Directory.CreateDirectory(ProjectsRoot);
+        Directory.Delete(RemotesRoot, recursive: true);
+        Directory.CreateDirectory(RemotesRoot);
         Clock.Reset();
         await using var scope = Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<ClaushhDbContext>();
@@ -123,6 +145,8 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         await base.DisposeAsync();
         await _db.DisposeAsync();
         Directory.Delete(ProjectsRoot, recursive: true);
+        Directory.Delete(RemotesRoot, recursive: true);
+        Directory.Delete(GitHome, recursive: true);
     }
 
     private static void Check(IdentityResult result)

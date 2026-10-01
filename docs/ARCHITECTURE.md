@@ -5,7 +5,9 @@ Goals and decisions are in [`PLAN.md`](PLAN.md). After every change to the struc
 or dependency, update the relevant section.
 
 Status: frontend done (login, session countdown and the "Bezpieczeństwo" (Security) window, explorer, editor with diff view,
-console, workspaces and git, terminal). The backend has login, sessions, login protection and the files API: listing, reading and saving (section "Backend"); the other contracts are still only in the mock.
+console, workspaces and git, terminal). The backend has login, sessions, login protection, the files API (listing,
+reading and saving) and, of workspaces and git, the repository list, the git status and the HEAD content (section
+"Backend"); the other contracts are still only in the mock.
 The frontend is tested against a mock backend (`web/e2e/mock-api/`) that follows the contracts below.
 
 ## Flow
@@ -37,6 +39,8 @@ to the API at `http://localhost:5080` (`web/proxy.conf.json`).
 | `src/Claushh.Api/Data/` | `ClaushhDbContext` (Identity tables, `Sessions` and `LoginAttempts`) and EF Core migrations, applied at startup |
 | `src/Claushh.Api/Auth/` | login: `Session`, `AuthSessionOptions`, `AuthCookies` (cookie names), `SessionService` (the only code with session rules), `SessionAuthenticationHandler` (cookie → user, never extends), `SessionAntiforgeryData` (XSRF token bound to the session), `TotpVerifier` (TOTP codes, each accepted once), `LoginGuard` (limit per IP, account lockout, login history), `LoginAttempt`, `DeviceName` (User-Agent for storage and display), `AuthEndpoints` (`me`, `login`, `keepalive`, `logout`, XSRF filter), `SessionEndpoints` (session list, ending sessions, login history), `CreateUserCommand` (`create-user`), `AuthCleanup` (hourly deletion after 90 days) |
 | `src/Claushh.Api/Files/` | files: `ProjectsOptions` (`Projects:Root`), `ProjectPaths` (the only code that turns an API path into a path on disk: syntax, symlinks resolved with `realpath`, `.git` refused, file types from `statx`), `Libc` (the three libc calls: `realpath`, `statx` and `access`), `FileStore` (reading and saving: versions, the 5 MB limit, the text rule `DecodeText`, atomic saves under a per-file lock), `FileEndpoints` (`/api/files/*`) |
+| `src/Claushh.Api/Workspaces/` | workspaces: `WorkspaceStore` (what a workspace is), `WorkspaceEndpoints` (`/api/repos`) |
+| `src/Claushh.Api/Git/` | git: `Repositories` (what a repository is and its state, read with LibGit2Sharp: the repository list, the status, HEAD content), `GitEndpoints` (`/api/git/status`, `/api/git/show`) |
 | `dotnet-tools.json` | local .NET tools: `dotnet-ef` (`dotnet tool restore`) |
 | `tests/Claushh.Api.Tests/` | backend integration tests: xUnit, the API in memory (`WebApplicationFactory`), PostgreSQL 17 from Testcontainers (`ApiFactory`) |
 | `global.json` | `dotnet test` runs on Microsoft.Testing.Platform (required by xUnit v3 on the .NET 10 SDK) |
@@ -414,9 +418,11 @@ Events sent by the server with the `ConsoleEvent` method to all of the user's co
 
 ### Rules
 
-- A **workspace** is a top-level directory in the projects directory (e.g. `studia`), with a display name
-  (e.g. "Studia"). A **repository** is a directory with a git repository directly in the workspace
-  (e.g. `studia/lab-3-sieci`). The source of truth is the file system, not the database.
+- A **workspace** is a real directory (not a symlink) directly in the projects directory whose name does not start
+  with `.` (e.g. `studia`), with a display name (e.g. "Studia"). A **repository** is a real directory directly in a
+  workspace whose name does not start with `.`, with a real `.git` directory (not a symlink and not a `gitdir:` file,
+  which could point anywhere) that libgit2 can open (e.g. `studia/lab-3-sieci`). The source of truth is the file
+  system, not the database.
 - The open repository is in the page URL (`/?repo=studia%2Flab-3-sieci`). A page reload stays
   in the same repo, and after session expiry `returnUrl` returns to it after login.
 - Opening a repository sets: the explorer directory, the console directory and conversation, the git status (top bar,
@@ -439,6 +445,9 @@ Events sent by the server with the `ConsoleEvent` method to all of the user's co
 
 ### API contract (to be implemented in the backend)
 
+Implemented in the backend (section "Backend"): GET /api/repos, GET /api/git/status and GET /api/git/show; the others
+are still only in the mock.
+
 All endpoints require a session (otherwise `401`). `POST` requires the XSRF header.
 Errors have a `{"message"}` body with a description (e.g. git output), which the frontend shows under its own message.
 
@@ -446,15 +455,20 @@ Errors have a `{"message"}` body with a description (e.g. git output), which the
 |---|---|---|
 | GET | `/api/workspaces` | `200 [{"name","path","repoCount"}]` in display order |
 | POST | `/api/workspaces` | body `{"name"}`. `201 {"name","path","repoCount":0}`. Name: letters, digits, spaces, `-`, `_`, up to 40 characters. Directory: lowercase, Polish characters replaced with Latin ones (`ł`→`l`), spaces with `-`. `400` bad name, `409` directory exists |
-| GET | `/api/repos?workspace=<katalog>` | `200 [RepoSummary]`. `404` when the workspace does not exist |
+| GET | `/api/repos?workspace=<katalog>` | `200 [RepoSummary]` sorted by name (ordinal, ignoring case). `404` when the workspace does not exist |
 | POST | `/api/repos/clone` | body `{"workspace","url"}`. `201 RepoSummary`. Directory name from the last URL segment without `.git`, it must match `^[A-Za-z0-9_][A-Za-z0-9._-]{0,99}$` (so not `.`, `..`, `.git` or `-…`). `400` bad URL or name, `404` no workspace, `409` directory exists, `502` git error (e.g. no repository) |
-| GET | `/api/git/show?repo=<repo>&path=<plik>` | `200 {"content"}`: the file content in HEAD (for the diff view). `404` when the file is not in HEAD. `400` when `path` is not inside `repo` |
+| GET | `/api/git/show?repo=<repo>&path=<plik>` | `200 {"content"}`: the file content in HEAD (for the diff view). `404` when the file is not in HEAD (also a directory, a symlink, a submodule, or no commit yet). The content is what a checkout writes (line endings and ident from .gitattributes); 413 over 5 MB, 415 for a NUL byte or invalid UTF-8, a UTF-8 BOM is dropped (the files API's rules). `400` when `path` is not inside `repo` |
 | GET | `/api/git/status?repo=<repo>` | `200 {"branch","ahead","behind","files":[{"path","status"}]}`. `status`: `modified`/`added`/`deleted`/`renamed`/`untracked`/`conflicted`. Untracked files individually (`--untracked-files=all`). `404` when it is not a repository |
 | POST | `/api/git/pull?repo=<repo>` | `git pull --ff-only`. `200 {"message","changedPaths"}`. `409` when it cannot fast-forward or local changes would be overwritten. `400` no remote branch, `502` remote repository error |
 | POST | `/api/git/push?repo=<repo>` | `200 {"message"}` (without an upstream: `git push -u origin HEAD`). `409` rejected (pull first). `400` no remote repository, `502` other remote error |
 
 `RepoSummary`: `{"name","path","branch" | null,"changes","upstream" | null,"ahead","behind","lastCommit": {"message","date"} | null}`.
 Paths (`path`, `files[].path`, `changedPaths`) are always relative to the projects directory.
+`workspace`, `repo` and `path` are paths in the files API's syntax: `workspace` is one segment, `repo` two
+(`<workspace>/<repository>`), and `path` starts with `repo` + `/`. Anything else, and a path that resolves outside the
+projects directory, is `400` with an empty body; a valid path that is not a workspace or a repository is `404` with an
+empty body. `lastCommit` is the subject line of HEAD's commit and its committer date (ISO 8601, UTC). `ahead` and
+`behind` are counted against the local remote-tracking branch, so they are as fresh as its last fetch.
 
 Security requirements for the backend:
 - `workspace` and `repo` are checked like file paths (inside the projects directory, also after resolving symlinks).
@@ -557,6 +571,9 @@ Endpoints:
 | GET | `/api/files/list?path=<dir>` | the directories and files in a directory of the projects directory; 400 for a bad path (also a name longer than the file system allows), one that leads outside it or into `.git` (also when its end does not exist), or one with a dangling or looping symlink anywhere in it; 404 for a missing directory, a file, or a path under a directory that cannot be searched | session |
 | GET | `/api/files/content?path=<file>` | the content and version of a text file; 400 for a bad path as in the listing; 404 for a missing file, a directory, a special file (FIFO, socket, device) or a path under a directory that cannot be searched; 413 over 5 MB; 415 for a NUL byte or invalid UTF-8 | session |
 | PUT | `/api/files/content?path=<file>` | saves `{"content","baseVersion"}` when the file on disk still has `baseVersion` (`absent`: the file is created); 400 for a bad path as in the listing, a directory or special file as the target, or a missing field; 404 when the directory of a new file is missing or cannot be searched; 409 with `{"currentVersion"}` when the version differs; 413 for content over 5 MB; 415 for content with a NUL character | session, XSRF token |
+| GET | `/api/repos?workspace=<dir>` | the repositories of a workspace with their state, by name; 400 when workspace is not one valid path segment; 404 when it is not a workspace | session |
+| GET | `/api/git/status?repo=<repo>` | branch, ahead and behind, and the changed files of a repository; 400 when repo is not two valid path segments; 404 when it is not a repository | session |
+| GET | `/api/git/show?repo=<repo>&path=<file>` | a file as HEAD has it; 400 as for the status, or when path is not a valid path inside repo; 404 when HEAD has no such file; 413 over 5 MB; 415 for a NUL byte or invalid UTF-8 | session |
 
 Every other endpoint requires a session (`FallbackPolicy`), and every POST/PUT/PATCH/DELETE under `/api` a valid
 `X-XSRF-TOKEN` (filter `RequireXsrfToken` in `Auth/AuthEndpoints.cs`, 400 otherwise).
@@ -627,6 +644,21 @@ Files (`Files/`; the rules the frontend can see are in "Files API contract"):
 - Saving by rename (decisions: `docs/PLAN.md`): a writable file in a directory the API cannot write cannot be saved
   (`500`), and the saved file is a new inode.
 
+Workspaces and git (`Workspaces/`, `Git/`):
+- Local git state is read in-process with LibGit2Sharp 0.32.0 (libgit2 for linux-x64 comes with it, in
+  `LibGit2Sharp.NativeBinaries`): finding repositories, the status, the branch, the upstream, ahead and behind, the
+  last commit and the HEAD content. A repository is opened for one call and disposed. A repository libgit2 cannot read
+  (one owned by another user, an unknown ref format such as reftable, a broken `.git`) is not listed and is logged.
+- Status: git's rules for staged and unstaged changes, untracked files one by one (also inside untracked directories),
+  ignored files left out, renames detected in the index only, as `git status` does (a rename that is not staged is
+  `deleted` plus `untracked`). The first match wins: a conflict → `conflicted`; new in the index → `added`; renamed →
+  `renamed` (the new path); deleted in the index or the working tree → `deleted`; modified or a type change →
+  `modified`; new in the working tree → `untracked`. A repository's `changes` is the number of these entries, so the
+  table and the status bar agree.
+- `branch` is `null` for a detached HEAD (a branch without commits keeps its name), `upstream` is the tracked branch
+  (`origin/main`) or `null`. On a branch without commits that tracks an upstream, `behind` is the number of commits of
+  the upstream.
+
 Commands (`dotnet run --project src/Claushh.Api -- <command>`, on the server `./Claushh.Api <command>`):
 
 | Command | What it does |
@@ -641,8 +673,9 @@ Migrations: `dotnet tool restore`, then
 `ConnectionStrings__Claushh`.
 
 Folders in `src/Claushh.Api/` (each is created together with the code it concerns). Existing: `Auth/` (Identity, TOTP,
-sessions), `Data/` (DbContext, migrations), `Files/` (files API and path protection). Planned: `Console/` (the `claude`
-process, MCP for permissions), `Terminal/` (PTY, tmux), `Git/`, `Hubs/` (SignalR).
+sessions), `Data/` (DbContext, migrations), `Files/` (files API and path protection), `Workspaces/` (workspaces),
+`Git/` (repositories and git). Planned: `Console/` (the `claude` process, MCP for permissions), `Terminal/` (PTY,
+tmux), `Hubs/` (SignalR).
 
 ## Frontend
 
@@ -665,8 +698,12 @@ Rules: `CLAUDE.md`, section "Tests" (new code: only integration and e2e tests).
 | Kind | Command | What it covers |
 |---|---|---|
 | Integration + older unit | `cd web && npm test` | Vitest (jsdom). Integration: `console.integration.spec.ts` (panel + store + editor, SignalR and HTTP stubbed; also permission requests: hidden characters, button delay, "tak, zawsze", and a double Enter), `workspaces.integration.spec.ts` (Workspace panel + router + git status + explorer + editor, HTTP stubbed; also the strict clone URL validation), `security.integration.spec.ts` (AuthService + interceptor + SessionTimer + the "Bezpieczeństwo" window, HTTP, reload and clock stubbed; also expiry without a server response), `logout-confirmation.integration.spec.ts` (routes with guards + AuthService + login screen after an unconfirmed logout, also with a newer session from another tab). Older unit tests: auth, files API, paths, explorer, `EditorStore` |
-| E2E | `cd web && npm run e2e` | build + Playwright in Chromium on `e2e/mock-api/server.mjs`: login and sessions (including unconfirmed logout with "Back", a new tab and logging in again, embedding in a frame, Trusted Types), explorer and Monaco, console (steps, options, permissions, "tak, zawsze", interrupt, replay, multiple tabs, file changes), workspaces (opening a repo, git status, pull, push, create, clone, a conversation per repo), terminal (commands, keys, reload without duplicates, multiple terminals, `exit`, Ctrl+S, resizing, pasting with the decision panel, characters on a dropped connection without loss or duplication, also after closing the tab, queue limit, focus, OSC 8 links), session (countdown, "Przedłuż", activity once a minute on a fake clock, expiry, also without a server response and hubs closed by the server), the "Bezpieczeństwo" window with a second device (a separate browser context), diff view, Monaco worker startup, mock robustness and the contract rules that the frontend does not let through (clone URL, XSRF token bound to the identity, saving like the files API: `absent`, 5 MB, a NUL character). **Every test** (`fixtures.ts`) fails when the page reports a CSP or Trusted Types violation, an unhandled exception (including one caught by Angular's ErrorHandler, `console.error('ERROR', …)`) or Monaco does not create a worker |
-| Backend | `dotnet test` (needs Docker) | xUnit integration tests over HTTP (`WebApplicationFactory`, PostgreSQL 17 from Testcontainers, a test clock): login and its failures, `me`, `keepalive` and both deadlines, logout and 409, ending another session, XSRF token bound to the session, `no-store`, closed `/api/*`, `create-user`, TOTP codes used once, the limit per IP, the account lockout and its growth, session list, `revoke-others`, login history, cleanup, the password reset, the files API (listing, symlinks, `.git`, reading, saving, conflicts, re-creating a deleted file, limits, text rules, file modes, long names, two saves at once, empty error bodies) |
+| E2E | `cd web && npm run e2e` | build + Playwright in Chromium on `e2e/mock-api/server.mjs`: login and sessions (including unconfirmed logout with "Back", a new tab and logging in again, embedding in a frame, Trusted Types), explorer and Monaco, console (steps, options, permissions, "tak, zawsze", interrupt, replay, multiple tabs, file changes), workspaces (opening a repo, git status, pull, push, create, clone, a conversation per repo), terminal (commands, keys, reload without duplicates, multiple terminals, `exit`, Ctrl+S, resizing, pasting with the decision panel, characters on a dropped connection without loss or duplication, also after closing the tab, queue limit, focus, OSC 8 links), session (countdown, "Przedłuż", activity once a minute on a fake clock, expiry, also without a server response and hubs closed by the server), the "Bezpieczeństwo" window with a second device (a separate browser context), diff view, Monaco worker startup, mock robustness and the contract rules that the frontend does not let through (clone URL, XSRF token bound to the identity, saving like the files API: `absent`, 5 MB, a NUL character, workspace, repo and path parameters). **Every test** (`fixtures.ts`) fails when the page reports a CSP or Trusted Types violation, an unhandled exception (including one caught by Angular's ErrorHandler, `console.error('ERROR', …)`) or Monaco does not create a worker |
+| Backend | `dotnet test` (needs Docker) | xUnit integration tests over HTTP (`WebApplicationFactory`, PostgreSQL 17 from Testcontainers, a test clock): login and its failures, `me`, `keepalive` and both deadlines, logout and 409, ending another session, XSRF token bound to the session, `no-store`, closed `/api/*`, `create-user`, TOTP codes used once, the limit per IP, the account lockout and its growth, session list, `revoke-others`, login history, cleanup, the password reset, the files API (listing, symlinks, `.git`, reading, saving, conflicts, re-creating a deleted file, limits, text rules, file modes, long names, two saves at once, empty error bodies), workspaces and git (the repository list and its order, what is and is not a repository, every git status, ahead and behind, HEAD content with a checkout's line endings and the files API's limits) |
+
+Backend tests make repositories with the git CLI (tests/Claushh.Api.Tests/TestGit.cs): a fixed identity and date, HOME
+set to a temporary directory so the machine's ~/.gitconfig stays out (libgit2's configuration search paths point there
+too), and bare repositories in a second temporary directory as remotes.
 
 Notes on e2e:
 - The mock has one shared state, the tests run sequentially and start with `POST /__test/reset`. It listens only on

@@ -1,0 +1,194 @@
+// Repositories and their state, read in-process with LibGit2Sharp (docs/ARCHITECTURE.md, "Workspaces and git";
+// decisions: docs/PLAN.md, "Backend decisions (stage 4)"). A repository is a real directory directly in a workspace,
+// whose .git is a real directory and which libgit2 opens; anything else is not listed and is a 404. Repositories are
+// opened for one call and disposed, never shared between threads.
+using Claushh.Api.Files;
+using LibGit2Sharp;
+
+namespace Claushh.Api.Git;
+
+public sealed record CommitInfo(string Message, DateTime Date);
+
+public sealed record RepoSummary(string Name, string Path, string? Branch, int Changes, string? Upstream, int Ahead, int Behind, CommitInfo? LastCommit);
+
+public sealed record FileChange(string Path, string Status);
+
+public sealed record RepoStatus(string? Branch, int Ahead, int Behind, IReadOnlyList<FileChange> Files);
+
+// Branch: null for a detached HEAD. Upstream: the tracked remote branch ("origin/main"); without one, Ahead and Behind
+// are 0.
+public sealed record HeadState(string? Branch, string? Upstream, int Ahead, int Behind);
+
+public enum ShowStatus { Ok, NotFound, TooLarge, NotText }
+
+public sealed record ShowResult(ShowStatus Status, string Content = "");
+
+public sealed class Repositories(ProjectPaths paths, ILogger<Repositories> log)
+{
+    private const string GitDirectory = ".git";
+
+    // The repository at an API path "<workspace>/<repository>": null for a bad path (400), Kind NotFound for a valid
+    // path that is not a repository (404), otherwise its directory.
+    public ProjectPath? Find(string? relative)
+    {
+        if (relative is null || relative.Split('/').Length != 2 || paths.Resolve(relative) is not { } directory)
+        {
+            return null;
+        }
+        return IsCandidate(directory) && Open(directory, (_, found) => found) is not null
+            ? directory
+            : new ProjectPath(relative, "", PathKind.NotFound);
+    }
+
+    // The repositories directly in a workspace, by name: ordinal, ignoring case.
+    public IReadOnlyList<RepoSummary> List(ProjectPath workspace) =>
+        InWorkspace(workspace, Summarize)
+            .OrderBy(repo => repo.Name, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(repo => repo.Name, StringComparer.Ordinal)
+            .ToList();
+
+    public int Count(ProjectPath workspace) => InWorkspace(workspace, (_, directory) => directory).Count;
+
+    public RepoSummary Summary(ProjectPath repo)
+    {
+        using var repository = new Repository(repo.FullPath);
+        return Summarize(repository, repo);
+    }
+
+    public RepoStatus Status(ProjectPath repo)
+    {
+        using var repository = new Repository(repo.FullPath);
+        var head = HeadOf(repository);
+        return new RepoStatus(head.Branch, head.Ahead, head.Behind, Changes(repository, repo.Relative));
+    }
+
+    // The file at `path` (relative to the projects directory, inside `repo`) as HEAD has it, through the filters a
+    // checkout applies (line endings and ident from .gitattributes), so the diff view compares like with like.
+    public ShowResult Show(ProjectPath repo, string path)
+    {
+        using var repository = new Repository(repo.FullPath);
+        var inRepository = path[(repo.Relative.Length + 1)..];
+        // Only a file: a tree is a directory, a GitLink a submodule, and a symlink's blob is its target.
+        if (repository.Head.Tip?[inRepository] is not { TargetType: TreeEntryTargetType.Blob, Mode: not Mode.SymbolicLink, Target: Blob blob })
+        {
+            return new(ShowStatus.NotFound);
+        }
+        // Refused before it is read: the filters of a checkout add bytes (CR, the ident hash) rather than remove them.
+        if (blob.Size > FileStore.MaxBytes)
+        {
+            return new(ShowStatus.TooLarge);
+        }
+        using var content = blob.GetContentStream(new FilteringOptions(inRepository));
+        using var bytes = new MemoryStream();
+        content.CopyTo(bytes);
+        if (bytes.Length > FileStore.MaxBytes)
+        {
+            return new(ShowStatus.TooLarge);
+        }
+        return FileStore.DecodeText(bytes.GetBuffer().AsSpan(0, (int)bytes.Length)) is { } text
+            ? new(ShowStatus.Ok, text)
+            : new(ShowStatus.NotText);
+    }
+
+    private List<T> InWorkspace<T>(ProjectPath workspace, Func<Repository, ProjectPath, T> read) where T : class
+    {
+        var results = new List<T>();
+        foreach (var directory in paths.List(workspace).Where(IsCandidate))
+        {
+            if (Open(directory, read) is { } result)
+            {
+                results.Add(result);
+            }
+        }
+        return results;
+    }
+
+    // null when libgit2 cannot read the repository (a ref format or an extension it does not know, a broken .git);
+    // that is logged, and the repository is left out.
+    private T? Open<T>(ProjectPath directory, Func<Repository, ProjectPath, T> read) where T : class
+    {
+        try
+        {
+            using var repository = new Repository(directory.FullPath);
+            return read(repository, directory);
+        }
+        catch (LibGit2SharpException e)
+        {
+            log.LogWarning(e, "The repository {Path} cannot be read and is not listed", directory.Relative);
+            return null;
+        }
+    }
+
+    // A real directory (no symlink on the way), no name starting with ".", and a .git that is a real directory: a .git
+    // file (a worktree, a submodule) could point anywhere, also outside the projects directory. Checked before libgit2
+    // opens it, because libgit2 follows such a file.
+    private bool IsCandidate(ProjectPath directory) =>
+        directory.Kind == PathKind.Directory
+        && directory.FullPath == Path.Join(paths.Root, directory.Relative)
+        && !directory.Relative.Split('/').Any(name => name.StartsWith('.'))
+        && Libc.FileType(Path.Join(directory.FullPath, GitDirectory)) == Libc.S_IFDIR;
+
+    private static RepoSummary Summarize(Repository repository, ProjectPath directory)
+    {
+        var head = HeadOf(repository);
+        var tip = repository.Head.Tip;
+        return new RepoSummary(
+            Path.GetFileName(directory.Relative),
+            directory.Relative,
+            head.Branch,
+            Changes(repository, directory.Relative).Count,
+            head.Upstream,
+            head.Ahead,
+            head.Behind,
+            tip is null ? null : new CommitInfo(tip.MessageShort, tip.Committer.When.UtcDateTime));
+    }
+
+    private static HeadState HeadOf(Repository repository)
+    {
+        var head = repository.Head;
+        var branch = repository.Info.IsHeadDetached ? null : head.FriendlyName;
+        var tracked = branch is null ? null : head.TrackedBranch;
+        return new HeadState(
+            branch,
+            tracked?.FriendlyName,
+            tracked is null || head.Tip is null ? 0 : head.TrackingDetails.AheadBy ?? 0,
+            // On a branch without commits yet, every commit of the upstream is still to come.
+            tracked is null ? 0 : head.Tip is null ? tracked.Commits.Count() : head.TrackingDetails.BehindBy ?? 0);
+    }
+
+    // What `git status` shows, one entry per file (also inside untracked directories), paths relative to the projects
+    // directory.
+    private static List<FileChange> Changes(Repository repository, string repo)
+    {
+        var options = new StatusOptions
+        {
+            IncludeUntracked = true,
+            RecurseUntrackedDirs = true,
+            IncludeIgnored = false,
+            DetectRenamesInIndex = true,
+            DetectRenamesInWorkDir = false,
+        };
+        var changes = new List<FileChange>();
+        foreach (var entry in repository.RetrieveStatus(options))
+        {
+            if (StatusOf(entry.State) is { } status)
+            {
+                changes.Add(new FileChange($"{repo}/{entry.FilePath}", status));
+            }
+        }
+        return changes;
+    }
+
+    // The contract's statuses; the first match wins.
+    private static string? StatusOf(FileStatus state) => state switch
+    {
+        _ when state.HasFlag(FileStatus.Conflicted) => "conflicted",
+        _ when state.HasFlag(FileStatus.NewInIndex) => "added",
+        _ when state.HasFlag(FileStatus.RenamedInIndex) => "renamed",
+        _ when (state & (FileStatus.DeletedFromIndex | FileStatus.DeletedFromWorkdir)) != 0 => "deleted",
+        _ when (state & (FileStatus.ModifiedInIndex | FileStatus.ModifiedInWorkdir | FileStatus.TypeChangeInIndex
+            | FileStatus.TypeChangeInWorkdir)) != 0 => "modified",
+        _ when state.HasFlag(FileStatus.NewInWorkdir) => "untracked",
+        _ => null,
+    };
+}

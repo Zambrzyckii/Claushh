@@ -223,6 +223,33 @@ Backend decisions (stage 2):
   `ApiFactory.cs`), so the platform analyzer accepts the Unix-only calls such as `File.SetUnixFileMode`. Rejected: the
   attribute on `FileStore` alone (every caller would get the warning).
 
+Backend decisions (stage 4):
+- Git access: LibGit2Sharp in-process for everything local (finding repositories, status, branch, upstream, ahead and
+  behind, last commit, HEAD content); the `git` CLI only for the network (clone, fetch, pull, push). New repositories on
+  the server use the `files` ref format and SHA-1, which libgit2 reads; a repository libgit2 cannot read is not listed
+  and is logged. Rejected: the CLI for the status too (one process per repository on every save) and LibGit2Sharp for
+  the network (libgit2 does not use git's credential helpers, and the `protocol.*` rules are git CLI settings).
+- A workspace is a real directory (not a symlink) directly in `Projects:Root` whose name does not start with `.`, as
+  `ProjectPaths` lists the root. A repository is a real directory directly in a workspace, not starting with `.`, whose
+  `.git` is a real directory (checked with `lstat` before libgit2 opens it) and which libgit2 opens without searching
+  parent directories. Rejected: accepting a `.git` file (worktrees, submodules): its `gitdir:` line can point anywhere,
+  also outside the projects directory.
+- `workspace`, `repo` and `path` use the files API's path syntax and `.git` rule; `workspace` is exactly one segment,
+  `repo` exactly two, and `path` must start with `repo` + `/`. Syntax errors and paths that resolve outside are `400`,
+  a valid path that is not a workspace or repository is `404`, both with an empty body. Rejected: the mock's `404` for
+  everything (the files API answers bad paths with `400`, and one rule is easier to check).
+- Status: git's rules, untracked files one by one, ignored files skipped, renames detected in the index only, the
+  contract's six statuses in a fixed order (first match wins). Rejected: detecting working-tree renames (the panel would
+  show renames that the terminal's `git status` does not).
+- `lastCommit` is HEAD's subject line and committer date. Rejected: the author date (after a rebase the list would show
+  when the change was first written rather than when it landed).
+- HEAD content is the tree entry at that path in HEAD (git's tree, so no symlink of the working tree is followed),
+  through the checkout filters (line endings and `ident` from `.gitattributes`), then the files API's rules (5 MB,
+  UTF-8, BOM dropped). Rejected: the raw blob (with `eol=crlf` every line would differ) and the mock's `404` for binary
+  files (the diff view would say "new file").
+- Repositories are listed by directory name, ordinal and ignoring case. Rejected: the file system's order (looks random
+  on ext4) and the last commit (rows would move under the cursor after every pull).
+
 ### Limiting damage
 
 - Everything runs as the `workspace` user without administrator privileges.
