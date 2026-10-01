@@ -3,6 +3,7 @@
 using System.Diagnostics;
 using System.Text;
 using Claushh.Api.Data;
+using Claushh.Api.Git;
 using Claushh.Api.Workspaces;
 using LibGit2Sharp;
 using Microsoft.AspNetCore.Hosting;
@@ -11,6 +12,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using Testcontainers.PostgreSql;
 
 [assembly: AssemblyFixture(typeof(Claushh.Api.Tests.ApiFactory))]
@@ -86,6 +88,14 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
 
     public TestGit Git { get; }
 
+    // The global git configuration of the test run: https://git.test/<name>.git leads to RemotesRoot, and the file
+    // transport that this needs is allowed. GIT_CONFIG_GLOBAL points every git of this process at it, the API's
+    // included; the API's own -c protocol.allow=never still refuses every other transport but https.
+    public string GitConfig => Path.Join(GitHome, ".gitconfig");
+
+    // Git:NetworkTimeout for the API; null: the configured value.
+    private TimeSpan? _networkTimeout;
+
     public ApiFactory()
     {
         Git = new TestGit(this);
@@ -94,6 +104,19 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         {
             GlobalSettings.SetConfigSearchPaths(level, GitHome);
         }
+        WriteGitConfig();
+        Environment.SetEnvironmentVariable("GIT_CONFIG_GLOBAL", GitConfig);
+    }
+
+    public void WriteGitConfig(bool allowFileTransport = true) =>
+        File.WriteAllText(GitConfig, $"[url \"{RemotesRoot}/\"]\n\tinsteadOf = https://git.test/\n"
+            + (allowFileTransport ? "[protocol \"file\"]\n\tallow = always\n" : ""));
+
+    // The API reads Git:NetworkTimeout through IOptionsMonitor, so emptying its cache applies a new value at once.
+    public void SetNetworkTimeout(TimeSpan? timeout)
+    {
+        _networkTimeout = timeout;
+        Services.GetRequiredService<IOptionsMonitorCache<GitOptions>>().Clear();
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -105,6 +128,7 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         {
             services.AddSingleton<TimeProvider>(Clock);
             services.AddSingleton<IStartupFilter, TestRemoteIp>();
+            services.PostConfigure<GitOptions>(options => options.NetworkTimeout = _networkTimeout ?? options.NetworkTimeout);
         });
     }
 
@@ -119,6 +143,8 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         Directory.CreateDirectory(ProjectsRoot);
         Directory.Delete(RemotesRoot, recursive: true);
         Directory.CreateDirectory(RemotesRoot);
+        WriteGitConfig();
+        SetNetworkTimeout(null);
         Clock.Reset();
         await using var scope = Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<ClaushhDbContext>();

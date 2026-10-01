@@ -25,6 +25,10 @@ builder.Services.AddOptions<ProjectsOptions>()
     .Validate(options => Libc.CanReadWriteAndSearch(options.Root),
         "Projects:Root must be a directory the API can read, write and search (README.md, \"Running in development\").")
     .ValidateOnStart();
+builder.Services.AddOptions<GitOptions>()
+    .Bind(builder.Configuration.GetSection("Git"))
+    .Validate(options => options.NetworkTimeout > TimeSpan.Zero, "Git:NetworkTimeout must be a positive time span.")
+    .ValidateOnStart();
 builder.Services.AddDbContext<ClaushhDbContext>((services, options) => options.UseNpgsql(
     services.GetRequiredService<IConfiguration>().GetConnectionString("Claushh")
     ?? throw new InvalidOperationException("ConnectionStrings:Claushh is not set (README.md, \"Running in development\").")));
@@ -51,6 +55,8 @@ builder.Services.AddSingleton<ProjectPaths>();
 builder.Services.AddSingleton<FileStore>();
 builder.Services.AddSingleton<Repositories>();
 builder.Services.AddScoped<WorkspaceStore>();
+builder.Services.AddSingleton<GitRunner>();
+builder.Services.AddSingleton<RepoLocks>();
 builder.Services.AddAuthentication(SessionAuthenticationHandler.SchemeName)
     .AddScheme<AuthenticationSchemeOptions, SessionAuthenticationHandler>(SessionAuthenticationHandler.SchemeName, _ => { });
 // Closed by default: an endpoint without .AllowAnonymous() requires a session.

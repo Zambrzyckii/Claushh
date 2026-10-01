@@ -6,7 +6,7 @@ login with a password and a TOTP code. One user.
 
 Status: **frontend ready (login and sessions, editor with a diff view, console, workspaces and git, terminal);
 backend: login, sessions and login protection (stage 1, parts A and B), the files API (stage 2), workspaces, the
-repository list and git status (stage 4).** Nothing is fit to be exposed to the internet.
+repository list, cloning and git status (stage 4).** Nothing is fit to be exposed to the internet.
 Progress: [`docs/PLAN.md`](docs/PLAN.md), section "Stages".
 
 ## Documentation
@@ -19,7 +19,8 @@ Progress: [`docs/PLAN.md`](docs/PLAN.md), section "Stages".
 
 ## Running in development
 
-Requirements: Linux for the backend, .NET 10 SDK, Node.js 22.12+ (npm 11), Docker.
+Requirements: Linux for the backend, .NET 10 SDK, Node.js 22.12+ (npm 11), Docker, git (the API runs it for clone,
+fetch, pull and push).
 
 ```bash
 # database
@@ -41,6 +42,9 @@ npm start
 
 The backend reads repositories with libgit2, which comes with the build. Repositories in the projects directory must
 belong to the user the API runs as: libgit2 refuses others, like git's safe.directory.
+
+Cloning, pulling and pushing public repositories needs no credential helper in development; the server's GitHub token
+is set up with the deployment.
 
 Lost phone or leaked password: `create-user --reset-totp` gives the account a new TOTP key,
 `create-user --reset-password` a new password; both end all sessions (commands in `docs/ARCHITECTURE.md`).

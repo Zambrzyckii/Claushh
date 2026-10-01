@@ -43,7 +43,18 @@ public sealed class TestGit(ApiFactory api)
         return RemoteUrl(name);
     }
 
-    public string RemoteUrl(string name) => Path.Join(api.RemotesRoot, $"{name}.git");
+    // A remote with one commit "first" (README.md), pushed from a clone elsewhere.
+    public string MakeSeededRemote(string name)
+    {
+        var url = MakeRemote(name);
+        var seed = CloneElsewhere(url);
+        Commit(seed, "README.md", $"# {name}\n", "first");
+        Run(seed, "push", "-q", "origin", "main");
+        return url;
+    }
+
+    // An https URL, as GitHub's: the test git configuration (ApiFactory.GitConfig) leads it to RemotesRoot.
+    public string RemoteUrl(string name) => $"https://git.test/{name}.git";
 
     // A clone outside the projects directory ("another computer"), for commits that reach a remote from elsewhere.
     public string CloneElsewhere(string url)

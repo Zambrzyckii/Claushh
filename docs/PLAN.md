@@ -50,7 +50,7 @@ Devices: mainly laptop and PC. The phone is secondary.
 | Frontend | Angular, Monaco (`ngx-monaco-editor-v2`), xterm.js, `@microsoft/signalr` |
 | Console | process `claude -p --output-format stream-json --input-format stream-json` |
 | Terminal | PTY (Pty.Net) + tmux, so that sessions survive closing the tab |
-| Git | LibGit2Sharp for status and diffs, `git` CLI for pull/push |
+| Git | LibGit2Sharp for everything local (status, branches, HEAD content), the git CLI for clone, fetch, pull and push |
 | Access from outside | Cloudflare Tunnel (+ optionally Cloudflare Access) |
 
 ### Claude Code integration
@@ -264,6 +264,25 @@ Backend decisions (stage 4):
 - Creating: under one process-wide lock, the name must be free, then `mkdir`, then the row; if the row cannot be
   written, the directory is removed again and the request fails (`500`). Rejected: the row first (a failed `mkdir`
   would leave a name for a directory that does not exist).
+- The git CLI runs without a shell, stdin closed, with `-c protocol.allow=never -c protocol.https.allow=always -c
+  core.fsmonitor=false`, no prompts (`GIT_TERMINAL_PROMPT=0`, `GCM_INTERACTIVE=never`), English messages (`LC_ALL=C.UTF-8`)
+  and git's own repository variables removed; hooks stay. Rejected: a shell command line (quoting mistakes) and
+  disabling hooks (a pre-push hook of the owner's would silently not run from the panel).
+- Time limits: one deadline per clone, pull or push request, `Git:NetworkTimeout` (100 s) from its start, covering the
+  lock wait and every git step, which keeps the answer under Cloudflare's 125 s; local steps also at most 30 s each. On
+  a timeout the process tree is killed, a partial clone is removed, and the answer is `502` with
+  "Git nie skończył w ciągu N s i został przerwany.". Rejected: `504` (the frontend shows "błąd serwera" without the
+  reason) and a limit per git step (a pull waiting behind another operation could pass 125 s).
+- The clone URL is checked with the frontend's rule in .NET terms (`[0-9]` and `\z` in the pattern, then the WHATWG
+  canonical-form checks for ports, `.`/`..` segments and IPv4 hosts), and git gets exactly that string after `--`.
+  Rejected: .NET's `Uri` (canonicalises differently from WHATWG) and validating punycode with `IdnMapping` (a different
+  algorithm from the browser's; refusing `xn--` hosts costs nothing for GitHub).
+- Clone: checks in the mock's order, then `git clone` under the lock of the target path; a failure removes the target.
+  Rejected: cloning into a temporary name and renaming (a second place where a half-finished clone can stay).
+- One `SemaphoreSlim` per repository path, shared by clone (target), pull and push; a request waits for it within its
+  deadline. Rejected: striped locks as in the files API (a pull could wait behind an operation on an unrelated
+  repository that shares its stripe) and refusing a second pull with `409` (the panel already disables its buttons
+  while a request is pending).
 
 ### Limiting damage
 

@@ -3,6 +3,7 @@
 using System.Text.Json;
 using Claushh.Api.Files;
 using Claushh.Api.Git;
+using Microsoft.Extensions.Options;
 
 namespace Claushh.Api.Workspaces;
 
@@ -10,12 +11,14 @@ public static class WorkspaceEndpoints
 {
     public sealed record CreateWorkspaceRequest(string? Name);
     public sealed record MessageResponse(string Message);
+    public sealed record CloneRequest(string? Workspace, string? Url);
 
     public static RouteGroupBuilder MapWorkspaceEndpoints(this RouteGroupBuilder api)
     {
         api.MapGet("/workspaces", List);
         api.MapPost("/workspaces", Create);
         api.MapGet("/repos", Repos);
+        api.MapPost("/repos/clone", Clone);
         return api;
     }
 
@@ -41,6 +44,81 @@ public static class WorkspaceEndpoints
             return Results.BadRequest();
         }
         return directory.Kind == PathKind.Directory ? Results.Ok(repositories.List(directory)) : Results.NotFound();
+    }
+
+    // The mock's order of checks (body and workspace, URL, directory name, a free target), then git clone under the
+    // target's lock, all within one Git:NetworkTimeout.
+    private static async Task<IResult> Clone(HttpContext http, WorkspaceStore workspaces, Repositories repositories,
+        RepoLocks locks, GitRunner git, IOptionsMonitor<GitOptions> options)
+    {
+        var body = await ReadJsonAsync<CloneRequest>(http);
+        if (body is null || workspaces.Find(body.Workspace) is not { } workspace)
+        {
+            return Results.BadRequest();
+        }
+        if (workspace.Kind != PathKind.Directory)
+        {
+            return Results.NotFound();
+        }
+        if (!CloneUrl.IsValid(body.Url))
+        {
+            return Results.BadRequest(new MessageResponse("Nieprawidłowy adres."));
+        }
+        if (CloneUrl.DirectoryName(body.Url) is not { } name)
+        {
+            return Results.BadRequest(new MessageResponse("Nieprawidłowa nazwa katalogu."));
+        }
+        var target = Path.Join(workspace.FullPath, name);
+        if (Libc.FileType(target) is not null)
+        {
+            return Results.Conflict(new MessageResponse("Katalog już istnieje."));
+        }
+        using var deadline = new GitDeadline(options.CurrentValue.NetworkTimeout, http.RequestAborted);
+        try
+        {
+            using (await locks.EnterAsync(target, deadline))
+            {
+                if (Libc.FileType(target) is not null)
+                {
+                    return Results.Conflict(new MessageResponse("Katalog już istnieje."));
+                }
+                GitResult result;
+                try
+                {
+                    // The destination is given by name, not by the resolved target path: git's own "Cloning into '…'"
+                    // message would otherwise put the resolved projects path in a 502 response.
+                    result = await git.RunAsync(workspace.FullPath, ["clone", "--", body.Url, name], deadline);
+                }
+                catch
+                {
+                    // Killed at the time limit or because the client went away: git had no chance to clean up.
+                    RemovePartialClone(target);
+                    throw;
+                }
+                if (!result.Succeeded)
+                {
+                    RemovePartialClone(target);
+                    return Results.Json(new MessageResponse(result.Message), statusCode: StatusCodes.Status502BadGateway);
+                }
+            }
+        }
+        catch (GitTimeoutException e)
+        {
+            return Results.Json(new MessageResponse(e.ResponseMessage), statusCode: StatusCodes.Status502BadGateway);
+        }
+        // A clone must pass what a repository is, like any other.
+        return repositories.Find($"{workspace.Relative}/{name}") is { Kind: PathKind.Directory } repository
+            ? Results.Json(repositories.Summary(repository), statusCode: StatusCodes.Status201Created)
+            : throw new InvalidOperationException($"The clone {workspace.Relative}/{name} is not a repository the portal can read.");
+    }
+
+    // The target was free before git ran, under its lock, so whatever is there now is git's.
+    private static void RemovePartialClone(string target)
+    {
+        if (Libc.FileType(target) == Libc.S_IFDIR)
+        {
+            Directory.Delete(target, recursive: true);
+        }
     }
 
     // null for a body that is missing, not JSON or of the wrong shape. Read by hand, as in AuthEndpoints.Logout: with an
