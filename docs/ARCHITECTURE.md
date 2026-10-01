@@ -298,7 +298,7 @@ XSRF header.
 |---|---|---|
 | GET | `/api/files/list?path=<katalog>` | `200 [{"name","path","kind":"file"\|"directory"}]`. Without the `.git` directory. `404` when the directory does not exist |
 | GET | `/api/files/content?path=<plik>` | `200 {"path","content","version"}`. `404` no file, `413` too large, `415` binary file |
-| PUT | `/api/files/content?path=<plik>` | body `{"content","baseVersion"}`. `200 {"version"}` or `409 {"currentVersion"}` when the version on disk differs from `baseVersion` |
+| PUT | `/api/files/content?path=<plik>` | body `{"content","baseVersion"}`. `200 {"version"}` or `409 {"currentVersion"}` when the version on disk differs from `baseVersion`. `413` content too large, `415` content that is not text (a NUL character) |
 
 Listing: it includes dotfiles such as `.gitignore`. It leaves out `.git` (a directory or a file), names that are not
 valid API paths (a name containing `\`, or one that is not valid UTF-8), symlinks that lead outside the projects
@@ -308,28 +308,28 @@ with its target's kind and keeps its own path. `400` for a path that leads outsi
 never tells whether something exists there. `404` also when the path is a file. A directory that cannot be read lists
 as empty, and a path under a directory that cannot be searched is `404`.
 
-Reading and saving (`FileStore`):
-- The version is the lower-case hex SHA-256 of the file's bytes on disk, and `absent` for a file that does not exist.
-  The frontend treats it as opaque (the mock has its own format: a shortened SHA-1, and no `absent`).
-- A save with `baseVersion` `absent` creates the file when the name is free and its directory exists (`404` when the
-  directory is missing). This is what "Nadpisz moją wersją" (Overwrite with my version) sends after the file was
-  deleted: the `409` for the old version carries `{"currentVersion":"absent"}`. When the file exists after all, `absent`
-  is a `409` with its real version.
+Reading and saving:
+- The version is opaque to the client, except `absent`: the version of a file that does not exist. A save with
+  `baseVersion` `absent` creates the file when the name is free and its directory exists (`404` when the directory is
+  missing). This is what "Nadpisz moją wersją" (Overwrite with my version) sends after the file was deleted: the `409`
+  for the old version carries `{"currentVersion":"absent"}`. When the file exists after all, `absent` is a `409` with
+  its real version. (The mock's other versions are a shortened SHA-1, the backend's are described in section "Backend".)
 - At most 5 MB (5 × 1024 × 1024 bytes): a bigger file is `413` on read, and so is content that is bigger as UTF-8 (plus
   the BOM that is kept) on save.
-- Only UTF-8 text: a NUL byte or invalid UTF-8 (so any other encoding, e.g. Windows-1250) is `415` on read. A UTF-8 BOM
-  is not part of `content`; it is written back when the file on disk had one. Line endings are never changed.
-- A save writes a temporary file next to the target, flushes it, gives it the old file's Unix mode (a new file gets the
-  default one) and renames it over the target, under a lock per file (a fixed array of semaphores picked by the hash of
-  the resolved path): two saves with the same `baseVersion` give one `200` and one `409`. Through a symlink the target
-  is written and the link stays. The lock covers saves through this API only. The console and the terminal write
-  without it, and the version check still catches their changes, except within a window of milliseconds.
+- Only UTF-8 text: a NUL byte or invalid UTF-8 (so any other encoding, e.g. Windows-1250) is `415` on read. A save of
+  content with a NUL character is `415` too and leaves the file unchanged, so the editor never writes a file it cannot
+  read back (the frontend shows "Nie zapisano. To plik binarny, nie da się go wyświetlić jako tekst."). A UTF-8 BOM is
+  not part of `content`; it is written back when the file on disk had one. Line endings are never changed.
+- Two saves of one file with the same `baseVersion` give one `200` and one `409`. A save through a symlink changes the
+  target and leaves the link. A change made from outside (the console, the terminal) is caught by the version check
+  except in the time it takes to hash the file and rename it (section "Backend", "Files").
 - A directory, FIFO, socket or device is `404` on read and `400` on save. A save without `content` or `baseVersion` is
   `400`. The endpoints' own error responses other than `409` have no body.
 
-Common to all: `400` when the path is invalid or, after resolution (including symlinks), goes outside
-the projects directory. The `index.html` and `monaco.css` files are served with `Cache-Control: no-cache`
-(the name `monaco.css` has no hash, so after a Monaco update the browser must download the new version).
+Common to all: `400` when the path is invalid, has a `.git` segment (before or after resolution) or, after resolution
+(including symlinks), goes outside the projects directory. The `index.html` and `monaco.css` files are served with
+`Cache-Control: no-cache` (the name `monaco.css` has no hash, so after a Monaco update the browser must download the
+new version).
 
 ## Console
 
@@ -556,7 +556,7 @@ Endpoints:
 | GET | `/api/auth/logins` | the last 20 login attempts, newest first | session |
 | GET | `/api/files/list?path=<dir>` | the directories and files in a directory of the projects directory; 400 for a bad path (also a name longer than the file system allows), one that leads outside it or into `.git` (also when its end does not exist), or one with a dangling or looping symlink anywhere in it; 404 for a missing directory, a file, or a path under a directory that cannot be searched | session |
 | GET | `/api/files/content?path=<file>` | the content and version of a text file; 400 for a bad path as in the listing; 404 for a missing file, a directory, a special file (FIFO, socket, device) or a path under a directory that cannot be searched; 413 over 5 MB; 415 for a NUL byte or invalid UTF-8 | session |
-| PUT | `/api/files/content?path=<file>` | saves `{"content","baseVersion"}` when the file on disk still has `baseVersion` (`absent`: the file is created); 400 for a bad path as in the listing, a directory or special file as the target, or a missing field; 404 when the directory of a new file is missing or cannot be searched; 409 with `{"currentVersion"}` when the version differs; 413 for content over 5 MB | session, XSRF token |
+| PUT | `/api/files/content?path=<file>` | saves `{"content","baseVersion"}` when the file on disk still has `baseVersion` (`absent`: the file is created); 400 for a bad path as in the listing, a directory or special file as the target, or a missing field; 404 when the directory of a new file is missing or cannot be searched; 409 with `{"currentVersion"}` when the version differs; 413 for content over 5 MB; 415 for content with a NUL character | session, XSRF token |
 
 Every other endpoint requires a session (`FallbackPolicy`), and every POST/PUT/PATCH/DELETE under `/api` a valid
 `X-XSRF-TOKEN` (filter `RequireXsrfToken` in `Auth/AuthEndpoints.cs`, 400 otherwise).
@@ -605,6 +605,28 @@ Login protection (`Auth/`):
 - Logins in the API process run one at a time (`LoginGuard.EnterAsync`), so the checks and writes of parallel attempts
   never interleave.
 
+Files (`Files/`; the rules the frontend can see are in "Files API contract"):
+- Every path goes through `ProjectPaths.Resolve` first (`FileEndpoints`: `400` when it returns null, before any file is
+  touched); `FileStore` works on the resolved path.
+- The version is the lower-case hex SHA-256 of the file's bytes on disk (the BOM included), and `absent` when there is
+  no file. The text rule is `FileStore.DecodeText`: `null` for a NUL byte or invalid UTF-8, otherwise the text without a
+  leading BOM; a save applies the same rule to the content it is given.
+- A read measures the file, refuses one over 5 MB without reading it, and reads into a buffer of its length plus one
+  byte (the extra byte shows that the file has grown meanwhile, and the buffer then grows, to 5 MB plus one at most), so
+  a read allocates about the size of the file and not the limit.
+- A save of a file or a free name first refuses content with a NUL character or without a UTF-8 form (`415`) and content
+  over 5 MB (`413`, counted with `GetByteCount`, so oversized content is not even encoded). Then it takes the lock of
+  the file: a fixed array of 64 semaphores picked by the hash of the resolved path, so a symlink and its target share
+  one. Under the lock it hashes the file (version, BOM and Unix mode, read from the open file) and answers `409` when
+  it is not `baseVersion`. Then it writes a temporary file `.claushh-<id>.tmp` in the same directory (the name does not
+  contain the file's name; the file is created for its owner only when it replaces a file, with the default mode when
+  it creates one) and flushes it to disk. Then it hashes the file again: when it changed meanwhile, the temporary file
+  is deleted and the answer is `409` with the version just found; otherwise the temporary file gets the old file's mode
+  (set on its open handle) and is renamed over the file. The temporary file is also deleted when any step fails. What
+  is left of the race with writers outside this API is the time to hash the file and rename it.
+- Saving by rename (decisions: `docs/PLAN.md`): a writable file in a directory the API cannot write cannot be saved
+  (`500`), and the saved file is a new inode.
+
 Commands (`dotnet run --project src/Claushh.Api -- <command>`, on the server `./Claushh.Api <command>`):
 
 | Command | What it does |
@@ -643,8 +665,8 @@ Rules: `CLAUDE.md`, section "Tests" (new code: only integration and e2e tests).
 | Kind | Command | What it covers |
 |---|---|---|
 | Integration + older unit | `cd web && npm test` | Vitest (jsdom). Integration: `console.integration.spec.ts` (panel + store + editor, SignalR and HTTP stubbed; also permission requests: hidden characters, button delay, "tak, zawsze", and a double Enter), `workspaces.integration.spec.ts` (Workspace panel + router + git status + explorer + editor, HTTP stubbed; also the strict clone URL validation), `security.integration.spec.ts` (AuthService + interceptor + SessionTimer + the "Bezpieczeństwo" window, HTTP, reload and clock stubbed; also expiry without a server response), `logout-confirmation.integration.spec.ts` (routes with guards + AuthService + login screen after an unconfirmed logout, also with a newer session from another tab). Older unit tests: auth, files API, paths, explorer, `EditorStore` |
-| E2E | `cd web && npm run e2e` | build + Playwright in Chromium on `e2e/mock-api/server.mjs`: login and sessions (including unconfirmed logout with "Back", a new tab and logging in again, embedding in a frame, Trusted Types), explorer and Monaco, console (steps, options, permissions, "tak, zawsze", interrupt, replay, multiple tabs, file changes), workspaces (opening a repo, git status, pull, push, create, clone, a conversation per repo), terminal (commands, keys, reload without duplicates, multiple terminals, `exit`, Ctrl+S, resizing, pasting with the decision panel, characters on a dropped connection without loss or duplication, also after closing the tab, queue limit, focus, OSC 8 links), session (countdown, "Przedłuż", activity once a minute on a fake clock, expiry, also without a server response and hubs closed by the server), the "Bezpieczeństwo" window with a second device (a separate browser context), diff view, Monaco worker startup, mock robustness and the contract rules that the frontend does not let through (clone URL, XSRF token bound to the identity). **Every test** (`fixtures.ts`) fails when the page reports a CSP or Trusted Types violation, an unhandled exception (including one caught by Angular's ErrorHandler, `console.error('ERROR', …)`) or Monaco does not create a worker |
-| Backend | `dotnet test` (needs Docker) | xUnit integration tests over HTTP (`WebApplicationFactory`, PostgreSQL 17 from Testcontainers, a test clock): login and its failures, `me`, `keepalive` and both deadlines, logout and 409, ending another session, XSRF token bound to the session, `no-store`, closed `/api/*`, `create-user`, TOTP codes used once, the limit per IP, the account lockout and its growth, session list, `revoke-others`, login history, cleanup, the password reset, the files API (listing, symlinks, `.git`, reading, saving, conflicts, re-creating a deleted file, limits, two saves at once) |
+| E2E | `cd web && npm run e2e` | build + Playwright in Chromium on `e2e/mock-api/server.mjs`: login and sessions (including unconfirmed logout with "Back", a new tab and logging in again, embedding in a frame, Trusted Types), explorer and Monaco, console (steps, options, permissions, "tak, zawsze", interrupt, replay, multiple tabs, file changes), workspaces (opening a repo, git status, pull, push, create, clone, a conversation per repo), terminal (commands, keys, reload without duplicates, multiple terminals, `exit`, Ctrl+S, resizing, pasting with the decision panel, characters on a dropped connection without loss or duplication, also after closing the tab, queue limit, focus, OSC 8 links), session (countdown, "Przedłuż", activity once a minute on a fake clock, expiry, also without a server response and hubs closed by the server), the "Bezpieczeństwo" window with a second device (a separate browser context), diff view, Monaco worker startup, mock robustness and the contract rules that the frontend does not let through (clone URL, XSRF token bound to the identity, saving like the files API: `absent`, 5 MB, a NUL character). **Every test** (`fixtures.ts`) fails when the page reports a CSP or Trusted Types violation, an unhandled exception (including one caught by Angular's ErrorHandler, `console.error('ERROR', …)`) or Monaco does not create a worker |
+| Backend | `dotnet test` (needs Docker) | xUnit integration tests over HTTP (`WebApplicationFactory`, PostgreSQL 17 from Testcontainers, a test clock): login and its failures, `me`, `keepalive` and both deadlines, logout and 409, ending another session, XSRF token bound to the session, `no-store`, closed `/api/*`, `create-user`, TOTP codes used once, the limit per IP, the account lockout and its growth, session list, `revoke-others`, login history, cleanup, the password reset, the files API (listing, symlinks, `.git`, reading, saving, conflicts, re-creating a deleted file, limits, text rules, file modes, long names, two saves at once, empty error bodies) |
 
 Notes on e2e:
 - The mock has one shared state, the tests run sequentially and start with `POST /__test/reset`. It listens only on

@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text;
+using Claushh.Api.Files;
 
 namespace Claushh.Api.Tests;
 
@@ -82,6 +83,9 @@ public sealed class FileContentTests(ApiFactory api) : ApiTest(api)
         Api.WriteProjectFile("repo/src/main.c", "");
         Api.MakeFifo("repo/pipe");
 
+        // The file next to them opens, so that the 404 of the others is not the answer to everything.
+        Assert.Equal(HttpStatusCode.OK,
+            (await ReadAsync("repo/src/main.c").WaitAsync(TestContext.Current.CancellationToken)).StatusCode);
         foreach (var path in new[] { "repo/missing.c", "repo/src", "repo/pipe", "" })
         {
             Assert.Equal(HttpStatusCode.NotFound,
@@ -225,6 +229,132 @@ public sealed class FileContentTests(ApiFactory api) : ApiTest(api)
 
         Assert.Equal(new[] { HttpStatusCode.OK, HttpStatusCode.Conflict }, responses.Select(r => r.StatusCode).Order());
         Assert.Equal(responses[0].StatusCode == HttpStatusCode.OK ? "first\n" : "second\n", File.ReadAllText(path));
+    }
+
+    [Fact]
+    public async Task Two_saves_through_a_symlink_and_through_its_target_give_one_200_and_one_409()
+    {
+        var path = Api.WriteProjectFile("repo/run.sh", "v1\n");
+        Api.Link("repo/run-link", "run.sh");
+        var file = await ReadOkAsync("repo/run.sh");
+
+        var responses = await Task.WhenAll(
+            SaveAsync("repo/run-link", "first\n", file.Version),
+            SaveAsync("repo/run.sh", "second\n", file.Version));
+
+        Assert.Equal(new[] { HttpStatusCode.OK, HttpStatusCode.Conflict }, responses.Select(r => r.StatusCode).Order());
+        Assert.Equal(responses[0].StatusCode == HttpStatusCode.OK ? "first\n" : "second\n", File.ReadAllText(path));
+    }
+
+    [Fact]
+    public async Task The_5_MB_limit_of_a_save_counts_the_BOM_that_is_kept()
+    {
+        var path = Api.WriteProjectFile("repo/win.txt", [.. Bom, (byte)'x']);
+        var file = await ReadOkAsync("repo/win.txt");
+
+        var over = await SaveAsync("repo/win.txt", new string('a', FileStore.MaxBytes - 2), file.Version);
+
+        Assert.Equal(HttpStatusCode.RequestEntityTooLarge, over.StatusCode);
+        Assert.Equal(file.Version, VersionOf(File.ReadAllBytes(path)));
+        await SaveOkAsync("repo/win.txt", new string('a', FileStore.MaxBytes - 3), file.Version);
+        Assert.Equal(FileStore.MaxBytes - 3, (await ReadOkAsync("repo/win.txt")).Content.Length);
+    }
+
+    [Fact]
+    public async Task Content_of_exactly_5_MB_is_saved_and_can_be_read_back()
+    {
+        Api.WriteProjectFile("repo/main.c", "v1\n");
+        var file = await ReadOkAsync("repo/main.c");
+
+        await SaveOkAsync("repo/main.c", new string('a', FileStore.MaxBytes), file.Version);
+
+        Assert.Equal(FileStore.MaxBytes, (await ReadOkAsync("repo/main.c")).Content.Length);
+    }
+
+    [Fact]
+    public async Task A_file_with_a_250_byte_name_can_be_read_and_saved()
+    {
+        var name = "repo/" + new string('n', 250);
+        var path = Api.WriteProjectFile(name, "old\n");
+        var file = await ReadOkAsync(name);
+
+        await SaveOkAsync(name, "new\n", file.Version);
+
+        Assert.Equal("new\n", File.ReadAllText(path));
+        Assert.Equal(new[] { path }, Directory.GetFileSystemEntries(Api.ProjectPath("repo"), "*", new EnumerationOptions { AttributesToSkip = 0 }));
+    }
+
+    [Fact]
+    public async Task A_save_keeps_a_private_mode_and_a_new_file_gets_the_default_mode()
+    {
+        var secret = Api.WriteProjectFile("repo/.env", "KEY=1\n");
+        File.SetUnixFileMode(secret, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+        // Created like a new file: with the default mode of this process (the umask applies).
+        var reference = Api.WriteProjectFile("repo/reference.txt", "x");
+        var file = await ReadOkAsync("repo/.env");
+
+        await SaveOkAsync("repo/.env", "KEY=2\n", file.Version);
+        await SaveOkAsync("repo/new.txt", "x", "absent");
+
+        Assert.Equal("KEY=2\n", File.ReadAllText(secret));
+        Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite, File.GetUnixFileMode(secret));
+        Assert.Equal(File.GetUnixFileMode(reference), File.GetUnixFileMode(Api.ProjectPath("repo/new.txt")));
+    }
+
+    [Fact]
+    public async Task Content_with_a_nul_character_is_415_and_nothing_is_written()
+    {
+        var path = Api.WriteProjectFile("repo/main.c", "v1\n");
+        var file = await ReadOkAsync("repo/main.c");
+
+        Assert.Equal(HttpStatusCode.UnsupportedMediaType, (await SaveAsync("repo/main.c", "a\u0000b", file.Version)).StatusCode);
+        Assert.Equal(HttpStatusCode.UnsupportedMediaType, (await SaveAsync("repo/new.c", "a\u0000b", "absent")).StatusCode);
+
+        Assert.Equal("v1\n", File.ReadAllText(path));
+        Assert.False(File.Exists(Api.ProjectPath("repo/new.c")));
+    }
+
+    [Fact]
+    public async Task Error_responses_have_no_body()
+    {
+        Api.WriteProjectFile("repo/main.c", "v1\n");
+        Api.WriteProjectFile("big/over.txt", Enumerable.Repeat((byte)'a', FileStore.MaxBytes + 1).ToArray());
+        Api.WriteProjectFile("bin/cp1250.txt", [0x7A, 0xB3, 0x6F]);
+        var file = await ReadOkAsync("repo/main.c");
+        var tooLarge = new string('a', FileStore.MaxBytes + 1);
+
+        (HttpStatusCode Status, HttpResponseMessage Response)[] answers =
+        [
+            (HttpStatusCode.BadRequest, await ReadAsync("../etc/passwd")),
+            (HttpStatusCode.BadRequest, await SaveAsync("../new.txt", "x", "absent")),
+            (HttpStatusCode.NotFound, await ReadAsync("repo/missing.c")),
+            (HttpStatusCode.RequestEntityTooLarge, await ReadAsync("big/over.txt")),
+            (HttpStatusCode.RequestEntityTooLarge, await SaveAsync("repo/main.c", tooLarge, file.Version)),
+            (HttpStatusCode.UnsupportedMediaType, await ReadAsync("bin/cp1250.txt")),
+            (HttpStatusCode.UnsupportedMediaType, await SaveAsync("repo/main.c", "a\u0000b", file.Version)),
+        ];
+        foreach (var (status, response) in answers)
+        {
+            Assert.Equal(status, response.StatusCode);
+            Assert.Equal("", await response.Content.ReadAsStringAsync());
+        }
+    }
+
+    [Fact]
+    public async Task Saving_onto_an_existing_file_outside_or_in_git_through_a_link_is_400_also_with_its_real_version()
+    {
+        var config = Api.WriteProjectFile("repo/.git/config", "[core]\n");
+        using var outside = new OutsideDirectory();
+        var secret = outside.Child("secret.txt");
+        File.WriteAllText(secret, "secret");
+        Api.Link("repo/to-secret", secret);
+        Api.Link("repo/to-config", config);
+
+        Assert.Equal(HttpStatusCode.BadRequest, (await SaveAsync("repo/to-secret", "x", VersionOf(File.ReadAllBytes(secret)))).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await SaveAsync("repo/to-config", "x", VersionOf(File.ReadAllBytes(config)))).StatusCode);
+
+        Assert.Equal("secret", File.ReadAllText(secret));
+        Assert.Equal("[core]\n", File.ReadAllText(config));
     }
 
     [Fact]

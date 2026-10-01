@@ -63,6 +63,7 @@ public static class FileEndpoints
             SaveStatus.Saved => Results.Ok(new SavedResponse(result.Version)),
             SaveStatus.Conflict => Results.Conflict(new ConflictResponse(result.Version)),
             SaveStatus.TooLarge => Results.StatusCode(StatusCodes.Status413PayloadTooLarge),
+            SaveStatus.NotText => Results.StatusCode(StatusCodes.Status415UnsupportedMediaType),
             SaveStatus.NotFound => Results.NotFound(),
             _ => Results.BadRequest(),
         };

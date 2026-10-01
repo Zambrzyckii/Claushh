@@ -190,18 +190,27 @@ Backend decisions (stage 2):
   modification time (too coarse, and editors keep it).
 - Text is strict UTF-8: a NUL byte anywhere, or invalid UTF-8, is `415`, so Windows-1250 and other encodings count as
   binary. A UTF-8 BOM is left out of `content` on read and written back on save when the file on disk had one; line
-  endings are never changed. Rejected: guessing other encodings, and normalising line endings (every save of a Windows
-  file would rewrite all its lines).
+  endings are never changed. The editor never writes what it cannot read back: a save of content with a NUL character,
+  or that has no UTF-8 form, is also `415` and leaves the file unchanged. Rejected: guessing other encodings,
+  normalising line endings (every save of a Windows file would rewrite all its lines), and saving a NUL character (the
+  next read would refuse the file as binary, and the editor could not open it again).
 - The size limit is 5 MB (5 × 1024 × 1024 bytes): `413` when the file on disk is larger (read), or when the content to
   write is larger as UTF-8 plus the kept BOM (save).
 - A save runs under a lock per file (a fixed array of semaphores picked by the hash of the resolved path): read the
-  current bytes, compare the version, write a temporary file in the same directory, flush it to disk, give it the old
-  file's Unix mode and rename it over the file (atomic). A save through a symlink writes the target and the link stays.
-  The temporary file (`.<name>.claushh-<id>.tmp`) is removed when a step fails. Responses never contain resolved paths
-  or exception texts, and file contents are never logged. Rejected: writing in place (a crash or a concurrent reader
-  would see half a file). Accepted limit: the lock covers saves through this API only. The console and the terminal
-  write without it, and the version check still catches their changes, except within a window of milliseconds (a file
-  deleted from outside in that window makes the save a `500`).
+  current bytes and compare the version, write a temporary file in the same directory, flush it to disk, compare the
+  version again, give the temporary file the old file's Unix mode and rename it over the file (atomic). A save through a
+  symlink writes the target and the link stays. The temporary file is named `.claushh-<id>.tmp`, without the file's
+  name (a name close to the 255-byte limit would leave no room for a suffix), and it is created for its owner only when
+  it replaces a file (the old file's mode is set on its open handle just before the rename), so the new content of a
+  private file, such as a `.env` of mode `600`, is never readable by others while it is written. It is removed when a
+  step fails or the version changed. Responses never contain resolved paths or exception texts, and file contents are
+  never logged. Rejected: writing in place (a crash or a concurrent reader would see half a file), and checking the
+  version only before the write (the whole write and flush would be the window for a change from outside). Accepted
+  limits: the lock covers saves through this API only, so the console and the terminal write without it, and the
+  second check catches their changes except in the time it takes to hash the file and rename it. Saving by rename means
+  that a writable file in a directory the API cannot write cannot be saved (`500`), and that the saved file is a new
+  inode: hard links elsewhere keep the old content, and owner, group, ACLs and extended attributes are those of a new
+  file (the mode is kept).
 - Saving a file that disappeared: a save with another `baseVersion` is `409 {"currentVersion":"absent"}`, and a save
   with `baseVersion` `absent` creates the file when the name does not exist at all (not even as a dangling symlink,
   which could lead anywhere) and its directory exists inside the projects directory (`404` when it is missing). When

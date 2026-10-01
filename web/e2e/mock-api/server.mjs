@@ -19,6 +19,8 @@ const DIST = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../d
 const HOST = '127.0.0.1';
 const ORIGIN = `http://${HOST}:${PORT}`;
 const RS = '\x1e'; // message separator in the SignalR protocol
+const MAX_FILE_BYTES = 5 * 1024 * 1024; // the largest file the files API saves (docs/ARCHITECTURE.md, "Files API contract")
+const ABSENT_VERSION = 'absent'; // the version of a file that does not exist: a save with it creates the file
 
 export const USER = { userName: 'owner', password: 'secret', totpCode: '123456' };
 export const MAIN = 'studia/lab-3-sieci/src/main.c';
@@ -138,6 +140,7 @@ function xsrfOk(req) {
   const token = cookies(req)['XSRF-TOKEN'];
   return !!token && req.headers['x-xsrf-token'] === token && state.xsrfTokens.has(token) && state.xsrfTokens.get(token) === (sessionOf(req)?.id ?? null);
 }
+// A shortened SHA-1: the contract fixes only the version of a missing file (ABSENT_VERSION), the rest is opaque.
 const version = (content) => crypto.createHash('sha1').update(content ?? '').digest('hex').slice(0, 12);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -514,7 +517,12 @@ async function handle(req, res) {
       const body = await readBody(req);
       state.log.push({ path: 'write', p, xsrf: ok });
       if (!ok) return json(res, 400);
-      const current = version(state.files.get(p));
+      if (typeof body?.content !== 'string' || typeof body?.baseVersion !== 'string') return json(res, 400);
+      // As in the backend, whatever the version: text that a read would refuse, and more than 5 MB, is not saved.
+      if (body.content.includes('\u0000')) return json(res, 415);
+      if (Buffer.byteLength(body.content, 'utf8') > MAX_FILE_BYTES) return json(res, 413);
+      // Decided by the existence of the file, not by its content: a missing, an empty and a binary file hash alike.
+      const current = state.files.has(p) ? version(state.files.get(p)) : ABSENT_VERSION;
       if (body.baseVersion !== current) return json(res, 409, { currentVersion: current });
       state.files.set(p, body.content);
       return json(res, 200, { version: version(body.content) });
