@@ -1,6 +1,7 @@
-// EF Core context: Identity tables (AspNetUsers, ...), login sessions and login attempts. Schema changes only through migrations
-// in Data/Migrations, applied at startup (Program.cs).
+// EF Core context: Identity tables (AspNetUsers, ...), login sessions, login attempts and workspace names. Schema changes
+// only through migrations in Data/Migrations, applied at startup (Program.cs).
 using Claushh.Api.Auth;
+using Claushh.Api.Workspaces;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
@@ -11,6 +12,7 @@ public sealed class ClaushhDbContext(DbContextOptions<ClaushhDbContext> options)
 {
     public DbSet<Session> Sessions => Set<Session>();
     public DbSet<LoginAttempt> LoginAttempts => Set<LoginAttempt>();
+    public DbSet<Workspace> Workspaces => Set<Workspace>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -25,5 +27,6 @@ public sealed class ClaushhDbContext(DbContextOptions<ClaushhDbContext> options)
             attempt.HasIndex(a => new { a.Ip, a.At });
             attempt.HasIndex(a => a.At);
         });
+        builder.Entity<Workspace>().HasKey(w => w.Directory);
     }
 }

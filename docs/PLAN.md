@@ -67,7 +67,7 @@ Devices: mainly laptop and PC. The phone is secondary.
 
 ### Data in the database
 
-Account and 2FA secret, active sessions and login history (date, IP, device), workspaces and repositories,
+Account and 2FA secret, active sessions and login history (date, IP, device), the display names of workspaces,
 console conversation identifiers, settings (default model, effort, mode).
 
 ## Security
@@ -249,6 +249,21 @@ Backend decisions (stage 4):
   files (the diff view would say "new file").
 - Repositories are listed by directory name, ordinal and ignoring case. Rejected: the file system's order (looks random
   on ext4) and the last commit (rows would move under the cursor after every pull).
+- A workspace's display name lives in the table `Workspaces` (`Directory` primary key, `DisplayName`, `CreatedAt`); the
+  file system decides which workspaces exist. A directory without a row is shown under its directory name; a row
+  without a directory is ignored and kept; creating a workspace inserts the row or takes over a stale one. Rejected: a
+  marker file in the workspace (the files API lists dotfiles, so it would show in the explorer and could be deleted by
+  accident) and a name derived from the directory (loses Polish letters and case).
+- Workspaces with a row by `CreatedAt` (the mock's order: Studia, Prywatne, then new ones), then the others by directory
+  name, ordinal and ignoring case. Rejected: the file system's order.
+- The name and directory rules are exactly the frontend's and the mock's: trimmed as JavaScript does, 1-40 code points
+  of letters, digits (Unicode L and N), spaces, `_` and `-`; the directory lower case, `ł`→`l`, NFD without combining
+  marks, every run outside `[a-z0-9_-]` → one `-`, trimmed of `-`. A name whose directory would be empty is `400`; any
+  existing entry with that name (also a dangling symlink) is `409`. Rejected: transliterating more letters (`ß`→`ss`),
+  which would accept names the mock refuses.
+- Creating: under one process-wide lock, the name must be free, then `mkdir`, then the row; if the row cannot be
+  written, the directory is removed again and the request fails (`500`). Rejected: the row first (a failed `mkdir`
+  would leave a name for a directory that does not exist).
 
 ### Limiting damage
 

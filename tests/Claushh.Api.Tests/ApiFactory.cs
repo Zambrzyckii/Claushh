@@ -3,6 +3,7 @@
 using System.Diagnostics;
 using System.Text;
 using Claushh.Api.Data;
+using Claushh.Api.Workspaces;
 using LibGit2Sharp;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Identity;
@@ -121,7 +122,7 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         Clock.Reset();
         await using var scope = Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<ClaushhDbContext>();
-        await db.Database.ExecuteSqlRawAsync("""TRUNCATE "Sessions", "LoginAttempts", "AspNetUsers" CASCADE""");
+        await db.Database.ExecuteSqlRawAsync("""TRUNCATE "Sessions", "LoginAttempts", "AspNetUsers", "Workspaces" CASCADE""");
         if (!withUser)
         {
             return;
@@ -138,6 +139,15 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     {
         await using var scope = Services.CreateAsyncScope();
         return await scope.ServiceProvider.GetRequiredService<ClaushhDbContext>().LoginAttempts.CountAsync();
+    }
+
+    // A row of the Workspaces table, as creating a workspace leaves it (its directory is up to the test).
+    public async Task AddWorkspaceRowAsync(string directory, string displayName, DateTimeOffset createdAt)
+    {
+        await using var scope = Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ClaushhDbContext>();
+        db.Workspaces.Add(new Workspace { Directory = directory, DisplayName = displayName, CreatedAt = createdAt });
+        await db.SaveChangesAsync();
     }
 
     public override async ValueTask DisposeAsync()
