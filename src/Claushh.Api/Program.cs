@@ -57,6 +57,7 @@ builder.Services.AddSingleton<Repositories>();
 builder.Services.AddScoped<WorkspaceStore>();
 builder.Services.AddSingleton<GitRunner>();
 builder.Services.AddSingleton<RepoLocks>();
+builder.Services.AddSingleton<BackgroundFetch>();
 builder.Services.AddAuthentication(SessionAuthenticationHandler.SchemeName)
     .AddScheme<AuthenticationSchemeOptions, SessionAuthenticationHandler>(SessionAuthenticationHandler.SchemeName, _ => { });
 // Closed by default: an endpoint without .AllowAnonymous() requires a session.

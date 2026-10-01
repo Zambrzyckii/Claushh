@@ -37,13 +37,27 @@ public static class WorkspaceEndpoints
         };
     }
 
-    private static IResult Repos(string? workspace, WorkspaceStore workspaces, Repositories repositories)
+    // Never waits for the network: ↑/↓ count against the last fetch, and the repositories with an upstream are fetched
+    // in the background for the panel's next refresh.
+    private static IResult Repos(string? workspace, WorkspaceStore workspaces, Repositories repositories, BackgroundFetch fetch)
     {
         if (workspaces.Find(workspace) is not { } directory)
         {
             return Results.BadRequest();
         }
-        return directory.Kind == PathKind.Directory ? Results.Ok(repositories.List(directory)) : Results.NotFound();
+        if (directory.Kind != PathKind.Directory)
+        {
+            return Results.NotFound();
+        }
+        var entries = repositories.List(directory);
+        foreach (var entry in entries)
+        {
+            if (entry.Remote is { } remote)
+            {
+                fetch.Start(entry.Directory, entry.Summary.Path, remote);
+            }
+        }
+        return Results.Ok(entries.Select(entry => entry.Summary).ToList());
     }
 
     // The mock's order of checks (body and workspace, URL, directory name, a free target), then git clone under the

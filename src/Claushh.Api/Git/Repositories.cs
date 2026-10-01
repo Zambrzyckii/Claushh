@@ -11,6 +11,10 @@ public sealed record CommitInfo(string Message, DateTime Date);
 
 public sealed record RepoSummary(string Name, string Path, string? Branch, int Changes, string? Upstream, int Ahead, int Behind, CommitInfo? LastCommit);
 
+// A listed repository with what the background fetch needs: its directory and the remote of its upstream (null without
+// one).
+public sealed record RepoEntry(RepoSummary Summary, string Directory, string? Remote);
+
 public sealed record FileChange(string Path, string Status);
 
 public sealed record RepoStatus(string? Branch, int Ahead, int Behind, IReadOnlyList<FileChange> Files);
@@ -42,10 +46,14 @@ public sealed class Repositories(ProjectPaths paths, ILogger<Repositories> log)
     }
 
     // The repositories directly in a workspace, by name: ordinal, ignoring case.
-    public IReadOnlyList<RepoSummary> List(ProjectPath workspace) =>
-        InWorkspace(workspace, Summarize)
-            .OrderBy(repo => repo.Name, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(repo => repo.Name, StringComparer.Ordinal)
+    public IReadOnlyList<RepoEntry> List(ProjectPath workspace) =>
+        InWorkspace(workspace, (repository, directory) =>
+            {
+                var head = HeadOf(repository);
+                return new RepoEntry(Summarize(repository, directory, head), directory.FullPath, head.Remote);
+            })
+            .OrderBy(entry => entry.Summary.Name, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(entry => entry.Summary.Name, StringComparer.Ordinal)
             .ToList();
 
     public int Count(ProjectPath workspace) => InWorkspace(workspace, (_, directory) => directory).Count;
@@ -53,7 +61,7 @@ public sealed class Repositories(ProjectPaths paths, ILogger<Repositories> log)
     public RepoSummary Summary(ProjectPath repo)
     {
         using var repository = new Repository(repo.FullPath);
-        return Summarize(repository, repo);
+        return Summarize(repository, repo, HeadOf(repository));
     }
 
     public HeadState Head(ProjectPath repo)
@@ -135,9 +143,8 @@ public sealed class Repositories(ProjectPaths paths, ILogger<Repositories> log)
         && !directory.Relative.Split('/').Any(name => name.StartsWith('.'))
         && Libc.FileType(Path.Join(directory.FullPath, GitDirectory)) == Libc.S_IFDIR;
 
-    private static RepoSummary Summarize(Repository repository, ProjectPath directory)
+    private static RepoSummary Summarize(Repository repository, ProjectPath directory, HeadState head)
     {
-        var head = HeadOf(repository);
         var tip = repository.Head.Tip;
         return new RepoSummary(
             Path.GetFileName(directory.Relative),

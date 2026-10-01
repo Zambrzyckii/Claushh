@@ -138,6 +138,8 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     // default) the owner with TOTP enabled.
     public async Task ResetAsync(bool withUser = true)
     {
+        // A fetch the previous test started in the background must not touch this test's repositories.
+        await Services.GetRequiredService<BackgroundFetch>().ResetAsync();
         // Directory.Delete removes symlinks without following them, so link targets outside stay untouched.
         Directory.Delete(ProjectsRoot, recursive: true);
         Directory.CreateDirectory(ProjectsRoot);

@@ -279,10 +279,17 @@ Backend decisions (stage 4):
   algorithm from the browser's; refusing `xn--` hosts costs nothing for GitHub).
 - Clone: checks in the mock's order, then `git clone` under the lock of the target path; a failure removes the target.
   Rejected: cloning into a temporary name and renaming (a second place where a half-finished clone can stay).
-- One `SemaphoreSlim` per repository path, shared by clone (target), pull and push; a request waits for it within its
-  deadline. Rejected: striped locks as in the files API (a pull could wait behind an operation on an unrelated
-  repository that shares its stripe) and refusing a second pull with `409` (the panel already disables its buttons
-  while a request is pending).
+- One `SemaphoreSlim` per repository path, shared by clone (target), pull, push and the background fetch; a request
+  waits for it within its deadline. The background fetch skips a busy repository, and a request that finds a
+  background fetch holding the lock cancels it (its process tree is killed; a pull fetches anyway). Rejected: striped
+  locks as in the files API (a pull could wait behind an operation on an unrelated repository that shares its stripe)
+  and refusing a second pull with `409` (the panel already disables its buttons while a request is pending).
+- ↑/↓ come from the local remote-tracking branches. When `GET /api/repos` has built the list, every repository with an
+  upstream whose last fetch attempt is at least 5 minutes old (by `TimeProvider`) is fetched in the background with the
+  network limit; the response does not wait, a failure is logged and tried again after another 5 minutes, a busy
+  repository is skipped, and running fetches are killed when the API stops. So ↑/↓ show the remote's state within about
+  5 minutes of using the panel (owner's decision). Rejected: a timer for all repositories (network traffic while nobody
+  uses the portal) and a fetch inside the request (every save would wait for GitHub).
 - Pull is the contract's `git pull --ff-only` run as its two steps, so that the status follows the step that failed: no
   upstream `400`, the fetch `502`, nothing new "Już aktualne.", the fast-forward merge `409` (diverged branches, local
   changes that would be overwritten, a lock file), success "Pobrano N commit/commity/commitów." with `changedPaths` from
@@ -363,8 +370,9 @@ The order is chosen so that only already secured things reach the internet.
         in the status bar, git markers in the explorer, a separate console conversation for each repo.
   - [x] Frontend: Terminal tab (xterm.js): multiple terminals, reattaching after a reload without losing
         or duplicating output, size fitting, `exit`, Ctrl+S for the program in the terminal.
-  - [ ] Backend: workspaces and git API and hub `/hubs/terminal` from the contracts in `ARCHITECTURE.md`
-        (terminal: PTY + tmux).
+  - [x] Backend: workspaces and git API from the contract in `ARCHITECTURE.md` (LibGit2Sharp locally, the `git` CLI
+        for the network, display names in the database, a background fetch at most every 5 minutes).
+  - [ ] Backend: hub `/hubs/terminal` from the contract in `ARCHITECTURE.md` (terminal: PTY + tmux).
 - [ ] **Stage 5: polish.**
   - [x] Frontend: session countdown with extension on activity, "Bezpieczeństwo" (security) dialog (active sessions,
         login history, "Wyloguj pozostałe sesje" (log out other sessions) and "Wyloguj wszędzie" (log out
