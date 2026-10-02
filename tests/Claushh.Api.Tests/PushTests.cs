@@ -30,6 +30,20 @@ public sealed class PushTests(ApiFactory api) : ApiTest(api)
     }
 
     [Fact]
+    public async Task Pushes_the_first_commit_of_a_clone_of_an_empty_remote()
+    {
+        var url = Api.Git.MakeRemote("empty");
+        Api.Git.Run(Api.ProjectPath(""), "clone", "-q", url, Api.ProjectPath("studia/empty"));
+        Api.Git.Commit(Api.ProjectPath("studia/empty"), "a.txt", "a\n", "a");
+
+        var response = await PushAsync("studia/empty");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(new MessageBody("Wypchnięto 1 commit do origin/main."), await response.Content.ReadFromJsonAsync<MessageBody>());
+        Assert.Equal(Api.Git.Run(Api.ProjectPath("studia/empty"), "rev-parse", "HEAD"), Api.Git.Run(Api.Git.RemotePath("empty"), "rev-parse", "main"));
+    }
+
+    [Fact]
     public async Task Nothing_ahead_is_nothing_to_push_without_the_network()
     {
         Api.Git.MakeTrackedRepo("studia/lab");

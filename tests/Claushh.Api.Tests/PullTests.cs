@@ -144,6 +144,45 @@ public sealed class PullTests(ApiFactory api) : ApiTest(api)
     }
 
     [Fact]
+    public async Task Pulls_into_an_empty_clone_after_the_remote_gets_a_commit_elsewhere()
+    {
+        var url = Api.Git.MakeRemote("empty");
+        Api.Git.Run(Api.ProjectPath(""), "clone", "-q", url, Api.ProjectPath("studia/empty"));
+        var elsewhere = Api.Git.CloneElsewhere(url);
+        Api.Git.Commit(elsewhere, "README.md", "# empty\n", "first");
+        Api.Git.Run(elsewhere, "push", "-q", "origin", "main");
+
+        var response = await PullAsync("studia/empty");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var pulled = (await response.Content.ReadFromJsonAsync<PullBody>())!;
+        Assert.Equal("Pobrano 1 commit.", pulled.Message);
+        Assert.True(File.Exists(Api.ProjectPath("studia/empty/README.md")));
+    }
+
+    [Fact(Timeout = 30_000)]
+    public async Task A_local_step_is_not_killed_when_the_client_goes_away()
+    {
+        var lab = Api.Git.MakeTrackedRepo("studia/lab");
+        var elsewhere = Api.Git.CloneElsewhere(Api.Git.RemoteUrl("lab"));
+        Api.Git.Commit(elsewhere, "a.txt", "a\n", "a");
+        Api.Git.Run(elsewhere, "push", "-q", "origin", "main");
+        var marker = Path.Join(Api.ProjectsRoot, "post-merge-ran");
+        var hook = Path.Join(lab, ".git", "hooks", "post-merge");
+        File.WriteAllText(hook, $"#!/bin/sh\nsleep 2\ntouch '{marker}'\n");
+        File.SetUnixFileMode(hook, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        using var cts = new CancellationTokenSource();
+        cts.CancelAfter(TimeSpan.FromMilliseconds(500));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => Client.Http.PostAsync($"/api/git/pull?repo={Uri.EscapeDataString("studia/lab")}", null, cts.Token));
+        await Task.Delay(TimeSpan.FromSeconds(3), TestContext.Current.CancellationToken);
+
+        Assert.True(File.Exists(marker), "the post-merge hook must run to completion despite the client going away");
+        Assert.Equal(Api.Git.Run(elsewhere, "rev-parse", "main"), Api.Git.Run(lab, "rev-parse", "HEAD"));
+    }
+
+    [Fact]
     public async Task Two_pulls_at_once_run_one_after_the_other()
     {
         Api.Git.MakeTrackedRepo("studia/lab");

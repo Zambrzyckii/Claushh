@@ -93,6 +93,19 @@ public sealed class GitStatusTests(ApiFactory api) : ApiTest(api)
         Assert.Empty(after.Files);
     }
 
+    [Fact]
+    public async Task A_core_worktree_outside_the_projects_directory_is_not_a_repository()
+    {
+        using var outside = new OutsideDirectory();
+        var lab = Api.Git.MakeRepo("studia/lab");
+        Api.Git.Run(lab, "config", "core.worktree", outside.Root);
+
+        var list = await Client.Http.GetFromJsonAsync<List<RepoListTests.RepoBody>>("/api/repos?workspace=studia");
+
+        Assert.Empty(list!);
+        Assert.Equal(HttpStatusCode.NotFound, (await StatusAsync("studia/lab")).StatusCode);
+    }
+
     [Theory]
     [InlineData("studia/missing")]
     [InlineData("studia/plain")]

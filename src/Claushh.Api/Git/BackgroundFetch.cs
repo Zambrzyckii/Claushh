@@ -80,7 +80,8 @@ public sealed class BackgroundFetch(RepoLocks locks, GitRunner git, IOptionsMoni
             }
             catch (Exception e)
             {
-                // Logged by the relative path: responses and logs never contain resolved paths.
+                // Logged by the relative path, even though GitRunner's own logging of this fetch uses the resolved
+                // directory: responses never contain resolved paths, but logs may.
                 log.LogWarning(e, "The background fetch in {Directory} failed", relative);
             }
         }

@@ -14,6 +14,7 @@ import {
   openRepo,
   repoRow,
   resetMock,
+  setRepoState,
   treeRow
 } from './helpers';
 
@@ -94,6 +95,10 @@ test('push sends local commits and reports rejections', async ({ page, request }
   await expect(panel(page).getByRole('status')).toHaveText('Wypchnięto 1 commit do origin/main.');
   await expect(repoRow(page, 'lab-3-sieci').locator('td').nth(4)).toHaveText('origin');
 
+  // bazy-danych-lab is ahead 0 / behind 2 by default (nothing to push without the network); its own state here, so
+  // the push is rejected (ahead and behind both non-zero), as the backend answers, without touching the fourth
+  // repository that other tests' list order and counts pin.
+  await setRepoState(request, 'studia/bazy-danych-lab', { ahead: 1 });
   await repoRow(page, 'bazy-danych-lab').getByRole('button', { name: 'Push bazy-danych-lab' }).click();
   const error = panel(page).getByRole('alert');
   await expect(error).toContainText('Push odrzucony: na zdalnym repozytorium są nowsze zmiany. Najpierw zrób Pull.');

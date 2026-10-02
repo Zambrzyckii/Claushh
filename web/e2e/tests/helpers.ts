@@ -35,6 +35,15 @@ export async function setFile(request: APIRequestContext, path: string, content:
   await request.put('/__test/file', { data: { path, content } });
 }
 
+/** Sets a repository's ahead/behind in the mock, so a test gets its own push/pull state without a fourth repository. */
+export async function setRepoState(
+  request: APIRequestContext,
+  repo: string,
+  state: { ahead?: number; behind?: number }
+): Promise<void> {
+  await request.post('/__test/repo-state', { data: { repo, ...state } });
+}
+
 /** Sets the session inactivity timeout in the mock (seconds), also for already existing sessions. */
 export async function setSessionTimeout(request: APIRequestContext, idleSeconds: number): Promise<void> {
   await request.post(`/__test/session-timeout?idle=${idleSeconds}`);

@@ -233,7 +233,9 @@ Backend decisions (stage 4):
   `ProjectPaths` lists the root. A repository is a real directory directly in a workspace, not starting with `.`, whose
   `.git` is a real directory (checked with `lstat` before libgit2 opens it) and which libgit2 opens without searching
   parent directories. Rejected: accepting a `.git` file (worktrees, submodules): its `gitdir:` line can point anywhere,
-  also outside the projects directory.
+  also outside the projects directory. The opened repository must also point back here (`Repository.Info.Path` is
+  `<dir>/.git/` and `Info.WorkingDirectory` is `<dir>/`): a misconfigured `core.worktree` could otherwise read or
+  write outside the projects directory; a `.git/commondir` is refused before libgit2 opens it, for the same reason.
 - `workspace`, `repo` and `path` use the files API's path syntax and `.git` rule; `workspace` is exactly one segment,
   `repo` exactly two, and `path` must start with `repo` + `/`. Syntax errors and paths that resolve outside are `400`,
   a valid path that is not a workspace or repository is `404`, both with an empty body. Rejected: the mock's `404` for
@@ -265,9 +267,19 @@ Backend decisions (stage 4):
   written, the directory is removed again and the request fails (`500`). Rejected: the row first (a failed `mkdir`
   would leave a name for a directory that does not exist).
 - The git CLI runs without a shell, stdin closed, with `-c protocol.allow=never -c protocol.https.allow=always -c
-  core.fsmonitor=false`, no prompts (`GIT_TERMINAL_PROMPT=0`, `GCM_INTERACTIVE=never`), English messages (`LC_ALL=C.UTF-8`)
-  and git's own repository variables removed; hooks stay. Rejected: a shell command line (quoting mistakes) and
-  disabling hooks (a pre-push hook of the owner's would silently not run from the panel).
+  core.fsmonitor=false`, no prompts (`GIT_TERMINAL_PROMPT=0`, `GCM_INTERACTIVE=never`), English messages
+  (`LC_ALL=C.UTF-8`) and an environment built from a clean slate (see the next bullet), so git's own repository
+  variables are simply never set; hooks stay. Rejected: a shell command line (quoting mistakes) and disabling hooks
+  (a pre-push hook of the owner's would silently not run from the panel).
+- git's environment (`Processes/ChildEnvironment`, owner's decision 2026-10-02) is built from an allowlist (`HOME`,
+  `USER`, `LOGNAME`, `SHELL`, `PATH`, `LANG`, `LANGUAGE`, every `LC_*`, `TZ`), not inherited and then trimmed by a
+  denylist: a denylist only ever catches variables someone already thought of, and the API's own process picks up new
+  ones over time (a secret from a systemd unit, a variable a future dependency reads) that a denylist would miss and
+  leak into every git process. `GitRunner`'s own overrides (`XDG_CONFIG_HOME`, `XDG_RUNTIME_DIR`,
+  `DBUS_SESSION_BUS_ADDRESS` passed through, then `Git:Environment:*`, then git's own variables) are layered on top of
+  the allowlist, in that order. Rejected: the previous denylist (missed `GIT_ALLOW_PROTOCOL`,
+  `GIT_CONFIG_PARAMETERS`, `GIT_CONFIG_COUNT`/`KEY_n`/`VALUE_n`, `GIT_SSL_NO_VERIFY`, `GIT_TRACE*` and
+  `ConnectionStrings__*`, found in review).
 - Time limits: one deadline per clone, pull or push request, `Git:NetworkTimeout` (100 s) from its start, covering the
   lock wait and every git step, which keeps the answer under Cloudflare's 125 s; local steps also at most 30 s each. On
   a timeout the process tree is killed, a partial clone is removed, and the answer is `502` with

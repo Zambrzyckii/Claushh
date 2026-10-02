@@ -39,7 +39,8 @@ to the API at `http://localhost:5080` (`web/proxy.conf.json`).
 | `src/Claushh.Api/Auth/` | login: `Session`, `AuthSessionOptions`, `AuthCookies` (cookie names), `SessionService` (the only code with session rules), `SessionAuthenticationHandler` (cookie → user, never extends), `SessionAntiforgeryData` (XSRF token bound to the session), `TotpVerifier` (TOTP codes, each accepted once), `LoginGuard` (limit per IP, account lockout, login history), `LoginAttempt`, `DeviceName` (User-Agent for storage and display), `AuthEndpoints` (`me`, `login`, `keepalive`, `logout`, XSRF filter), `SessionEndpoints` (session list, ending sessions, login history), `CreateUserCommand` (`create-user`), `AuthCleanup` (hourly deletion after 90 days) |
 | `src/Claushh.Api/Files/` | files: `ProjectsOptions` (`Projects:Root`), `ProjectPaths` (the only code that turns an API path into a path on disk: syntax, symlinks resolved with `realpath`, `.git` refused, file types from `statx`), `Libc` (the three libc calls: `realpath`, `statx` and `access`), `FileStore` (reading and saving: versions, the 5 MB limit, the text rule `DecodeText`, atomic saves under a per-file lock), `FileEndpoints` (`/api/files/*`) |
 | `src/Claushh.Api/Workspaces/` | workspaces: `Workspace` (entity: display name and creation time), `WorkspaceNames` (the name rule and the directory made from a name), `CloneUrl` (the frontend's clone URL rule in .NET terms), `WorkspaceStore` (what a workspace is, the list in display order, creating one), `WorkspaceEndpoints` (`/api/workspaces`, `/api/repos`, `/api/repos/clone`) |
-| `src/Claushh.Api/Git/` | git: `Repositories` (what a repository is and its state, read with LibGit2Sharp: the repository list, the status, HEAD content), `GitOptions` (`Git:NetworkTimeout`), `GitRunner` (the git CLI: safety options, environment, output, time limits, killing the process tree), `RepoLocks` (one lock per repository), `BackgroundFetch` (the fetch after `GET /api/repos`, at most every 5 minutes per repository), `GitEndpoints` (`/api/git/*`: status, show, pull, push) |
+| `src/Claushh.Api/Git/` | git: `Repositories` (what a repository is and its state, read with LibGit2Sharp: the repository list, the status, HEAD content), `GitOptions` (`Git:NetworkTimeout`, `Git:Environment:*`), `GitRunner` (the git CLI: safety options, environment through `ChildEnvironment`, output, time limits, killing the process tree), `RepoLocks` (one lock per repository), `BackgroundFetch` (the fetch after `GET /api/repos`, at most every 5 minutes per repository), `GitEndpoints` (`/api/git/*`: status, show, pull, push) |
+| `src/Claushh.Api/Processes/` | `ChildEnvironment` (a clean, allowlisted environment for a child process: `GitRunner` today, the terminal's PTY from a later sub-project) |
 | `dotnet-tools.json` | local .NET tools: `dotnet-ef` (`dotnet tool restore`) |
 | `tests/Claushh.Api.Tests/` | backend integration tests: xUnit, the API in memory (`WebApplicationFactory`), PostgreSQL 17 from Testcontainers (`ApiFactory`) |
 | `global.json` | `dotnet test` runs on Microsoft.Testing.Platform (required by xUnit v3 on the .NET 10 SDK) |
@@ -603,6 +604,7 @@ Configuration:
 | `Sessions:SecureCookies` | `appsettings.json` (`true`), `appsettings.Development.json` (`false`) | `false` only for plain http in development: cookie names without `__Host-`, `Secure` only on HTTPS |
 | `Projects:Root` | `appsettings.json` (`/srv/projects`); development: `dotnet user-secrets`; server: variable `Projects__Root` | the projects directory: an absolute path to an existing directory whose real path is not `/`, which the API can read, write and search; checked at start (the API does not start otherwise) |
 | `Git:NetworkTimeout` | `appsettings.json` (`00:01:40`) | the one deadline of a clone, pull or push request, lock wait included, and of a background fetch; at it the git process tree is killed (502) |
+| `Git:Environment:*` | not set by default | extra variables for the git CLI's environment (`ChildEnvironment`'s overrides in `GitRunner.StartInfo`), e.g. for a credential helper's configuration |
 
 Sessions (`Auth/`):
 - Table `Sessions`: public `Id` (the `sessionId` of `/me`, constant for the life of the session), `SecretHash`
@@ -680,14 +682,23 @@ Workspaces and git (`Workspaces/`, `Git/`):
   trim (not .NET's), code points (not UTF-16 characters), and İ lowercased as JavaScript does.
 - The `git` CLI runs only for the network and its local steps (`GitRunner`): without a shell (`ArgumentList`), stdin
   closed, in the repository (the workspace for a clone), always with `-c protocol.allow=never -c
-  protocol.https.allow=always -c core.fsmonitor=false`, with `GIT_TERMINAL_PROMPT=0`, `GCM_INTERACTIVE=never` and
-  `LC_ALL=C.UTF-8` (English, stable messages), and without `GIT_ASKPASS`, `SSH_ASKPASS`, `GIT_DIR`, `GIT_WORK_TREE`,
-  `GIT_INDEX_FILE`. Hooks run as in the terminal. stdout and stderr are read at the same time, each kept up to its last
-  64 KB; the `message` of an answer is stderr then stdout, trimmed, at most 4000 characters. Logs name the operation,
-  the directory, the exit code and the duration, never the output.
+  protocol.https.allow=always -c core.fsmonitor=false`. Its environment is built by `Processes/ChildEnvironment`: not
+  the API's whole environment (a denylist would miss whatever variable the API's own process picks up next), but an
+  allowlist (`HOME`, `USER`, `LOGNAME`, `SHELL`, `PATH`, `LANG`, `LANGUAGE`, every `LC_*`, `TZ`, `LANG=C.UTF-8` added
+  when none of `LANG`/`LC_ALL`/`LC_CTYPE` is set), then `GitRunner`'s own overrides: `XDG_CONFIG_HOME`,
+  `XDG_RUNTIME_DIR`, `DBUS_SESSION_BUS_ADDRESS` passed through when the API has them (git's config lookup and
+  credential helpers such as libsecret need them), the configured `Git:Environment:*` values, then git's own
+  `GIT_TERMINAL_PROMPT=0`, `GCM_INTERACTIVE=never` and `LC_ALL=C.UTF-8` (English, stable messages), which always win.
+  `GIT_ASKPASS`, `SSH_ASKPASS`, `GIT_DIR`, `GIT_WORK_TREE`, `GIT_INDEX_FILE` and the like are simply never set. Hooks
+  run as in the terminal. stdout and stderr are read at the same time, each kept up to its last 64 KB; the `message`
+  of an answer is stderr then stdout, trimmed, at most 4000 characters. Logs name the operation, the directory, the
+  exit code and the duration, never the output (but the directory is the resolved path: responses never contain
+  resolved paths, logs may).
 - Time limits: one deadline per request, `Git:NetworkTimeout` from its start, covering the lock wait and every step;
   local steps (merge, diff) are also capped at 30 s. At a limit the process tree is killed (`git` starts
-  `git-remote-https`) and the answer is `502` "Git nie skończył w ciągu N s i został przerwany.".
+  `git-remote-https`) and the answer is `502` "Git nie skończył w ciągu N s i został przerwany.". A local step keeps
+  running under its own cap when the client goes away (only a network step is stopped then): there is no one to
+  answer either way, but a `git merge` half done would leave the repository in a worse state than letting it finish.
 - One lock per repository directory (`RepoLocks`), also for the target of a clone; a request waits for it within its
   deadline.
 - Background fetch (`BackgroundFetch`): once `GET /api/repos` has built the list, every repository with an upstream
@@ -697,7 +708,7 @@ Workspaces and git (`Workspaces/`, `Git/`):
   fetch holding the repository's lock stops it (its process tree is killed; a pull fetches anyway), and running
   fetches are killed when the API stops.
 - Clone: the checks in the mock's order (body and workspace `400`/`404`, the URL rule, the directory name, any entry at
-  the target `409`), then `git clone -- <url> <target>` under the target's lock, run in the workspace directory with
+  the target `409`), then `git clone -- <url> <name>` under the target's lock, run in the workspace directory with
   the destination given by name (not the resolved path), so git's own "Cloning into '…'" message never puts a
   resolved path in a `502` response. A failure or a timeout removes the target directory if it exists and answers
   `502`; a clone that is not a repository the portal can read is a `500`.
@@ -726,8 +737,8 @@ Migrations: `dotnet tool restore`, then
 
 Folders in `src/Claushh.Api/` (each is created together with the code it concerns). Existing: `Auth/` (Identity, TOTP,
 sessions), `Data/` (DbContext, migrations), `Files/` (files API and path protection), `Workspaces/` (workspaces),
-`Git/` (repositories and git). Planned: `Console/` (the `claude` process, MCP for permissions), `Terminal/` (PTY,
-tmux), `Hubs/` (SignalR).
+`Git/` (repositories and git), `Processes/` (a clean child environment, shared by git and, later, the terminal).
+Planned: `Console/` (the `claude` process, MCP for permissions), `Terminal/` (PTY, tmux), `Hubs/` (SignalR).
 
 ## Frontend
 
@@ -751,14 +762,16 @@ Rules: `CLAUDE.md`, section "Tests" (new code: only integration and e2e tests).
 |---|---|---|
 | Integration + older unit | `cd web && npm test` | Vitest (jsdom). Integration: `console.integration.spec.ts` (panel + store + editor, SignalR and HTTP stubbed; also permission requests: hidden characters, button delay, "tak, zawsze", and a double Enter), `workspaces.integration.spec.ts` (Workspace panel + router + git status + explorer + editor, HTTP stubbed; also the strict clone URL validation), `security.integration.spec.ts` (AuthService + interceptor + SessionTimer + the "Bezpieczeństwo" window, HTTP, reload and clock stubbed; also expiry without a server response), `logout-confirmation.integration.spec.ts` (routes with guards + AuthService + login screen after an unconfirmed logout, also with a newer session from another tab). Older unit tests: auth, files API, paths, explorer, `EditorStore` |
 | E2E | `cd web && npm run e2e` | build + Playwright in Chromium on `e2e/mock-api/server.mjs`: login and sessions (including unconfirmed logout with "Back", a new tab and logging in again, embedding in a frame, Trusted Types), explorer and Monaco, console (steps, options, permissions, "tak, zawsze", interrupt, replay, multiple tabs, file changes), workspaces (opening a repo, git status, pull, push, create, clone, a conversation per repo), terminal (commands, keys, reload without duplicates, multiple terminals, `exit`, Ctrl+S, resizing, pasting with the decision panel, characters on a dropped connection without loss or duplication, also after closing the tab, queue limit, focus, OSC 8 links), session (countdown, "Przedłuż", activity once a minute on a fake clock, expiry, also without a server response and hubs closed by the server), the "Bezpieczeństwo" window with a second device (a separate browser context), diff view, Monaco worker startup, mock robustness and the contract rules that the frontend does not let through (clone URL, XSRF token bound to the identity, saving like the files API: `absent`, 5 MB, a NUL character, workspace, repo and path parameters). **Every test** (`fixtures.ts`) fails when the page reports a CSP or Trusted Types violation, an unhandled exception (including one caught by Angular's ErrorHandler, `console.error('ERROR', …)`) or Monaco does not create a worker |
-| Backend | `dotnet test` (needs Docker) | xUnit integration tests over HTTP (`WebApplicationFactory`, PostgreSQL 17 from Testcontainers, a test clock): login and its failures, `me`, `keepalive` and both deadlines, logout and 409, ending another session, XSRF token bound to the session, `no-store`, closed `/api/*`, `create-user`, TOTP codes used once, the limit per IP, the account lockout and its growth, session list, `revoke-others`, login history, cleanup, the password reset, the files API (listing, symlinks, `.git`, reading, saving, conflicts, re-creating a deleted file, limits, text rules, file modes, long names, two saves at once, empty error bodies), workspaces and git (the repository list and its order, what is and is not a repository, every git status, ahead and behind, HEAD content with a checkout's line endings and the files API's limits), workspaces (the list and its order, names and directories, creating, a stale row), cloning (every refused URL, git's own errors, the time limit against a server that never answers, only https), pull and push (every answer, both paths of a rename, a branch without commits, two pulls at once, a hook that refuses, only https), the background fetch (every 5 minutes by the test clock, a pull or push taking the repository from a fetch that hangs) |
+| Backend | `dotnet test` (needs Docker) | xUnit integration tests over HTTP (`WebApplicationFactory`, PostgreSQL 17 from Testcontainers, a test clock): login and its failures, `me`, `keepalive` and both deadlines, logout and 409, ending another session, XSRF token bound to the session, `no-store`, closed `/api/*`, `create-user`, TOTP codes used once, the limit per IP, the account lockout and its growth, session list, `revoke-others`, login history, cleanup, the password reset, the files API (listing, symlinks, `.git`, reading, saving, conflicts, re-creating a deleted file, limits, text rules, file modes, long names, two saves at once, empty error bodies), workspaces and git (the repository list and its order, what is and is not a repository, every git status, ahead and behind, HEAD content with a checkout's line endings and the files API's limits), workspaces (the list and its order, names and directories, creating, a stale row), cloning (every refused URL, git's own errors, the time limit against a server that never answers, only https), pull and push (every answer, both paths of a rename, a branch without commits, two pulls at once, a hook that refuses, only https), the background fetch (every 5 minutes by the test clock, a pull or push taking the repository from a fetch that hangs); needs the git CLI ≥ 2.45 (`--ref-format=reftable`) |
 
-Backend tests make repositories with the git CLI (tests/Claushh.Api.Tests/TestGit.cs): a fixed identity and date, HOME
-set to a temporary directory so the machine's ~/.gitconfig stays out (libgit2's configuration search paths point there
-too), and bare repositories in a second temporary directory as remotes. `ApiFactory` writes a global git configuration
-and sets `GIT_CONFIG_GLOBAL` for the test process, so also for the git the API starts: `https://git.test/<name>.git`
-leads to the bare repositories, and the file transport they need is allowed (the API's `-c protocol.allow=never` still
-refuses everything but https). Tests shorten `Git:NetworkTimeout` with `ApiFactory.SetNetworkTimeout`.
+Backend tests make repositories with the git CLI (`tests/Claushh.Api.Tests/TestGit.cs`): a fixed identity and date,
+`HOME` set to a temporary directory so the machine's `~/.gitconfig` stays out (libgit2's configuration search paths
+point there too), and bare repositories in a second temporary directory as remotes. `ApiFactory` writes a global git
+configuration and binds it to `Git:Environment:GIT_CONFIG_GLOBAL` (`ConfigureWebHost`), so the git the API starts
+(through `ChildEnvironment`'s allowlist, not through the test process's own environment) also uses it:
+`https://git.test/<name>.git` leads to the bare repositories, and the file transport they need is allowed (the API's
+`-c protocol.allow=never` still refuses everything but https). `TestGit` sets `HOME` itself for the git processes it
+starts directly, independently of this. Tests shorten `Git:NetworkTimeout` with `ApiFactory.SetNetworkTimeout`.
 `ApiFactory.ResetAsync` stops the background fetches of the previous test and forgets their times
 (`BackgroundFetch.ResetAsync`).
 
@@ -771,6 +784,9 @@ Notes on e2e:
   with a D ms outage, a slow `Attach`, hubs unavailable for K ms).
 - A second browser ("second device") via the `newDevice` fixture, so that it is also under CSP control.
 - The session idle time in the mock can be shortened: `POST /__test/session-timeout?idle=<s>`.
+- A repository's ahead/behind in the mock can be set directly: `POST /__test/repo-state {"repo","ahead"?,"behind"?}`,
+  so a test gets its own push/pull state (e.g. a rejected push) without adding a fourth repository, which would move
+  the list order and counts other tests pin.
 - Git in the mock is simulated: the "committed" state is the file content from the reset, the status is the difference from it.
 - Browser: `npx playwright install chromium` or the `CHROMIUM_PATH` variable pointing to the system Chromium.
 - Monaco and xterm display spaces as `\u00a0`. `helpers.ts` → `editorText` and `terminalText` normalize the text.

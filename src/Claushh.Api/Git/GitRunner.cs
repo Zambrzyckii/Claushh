@@ -3,6 +3,8 @@
 // https, and a time limit after which the whole process tree is killed.
 using System.Diagnostics;
 using System.Text;
+using Claushh.Api.Processes;
+using Microsoft.Extensions.Options;
 
 namespace Claushh.Api.Git;
 
@@ -36,6 +38,9 @@ public sealed class GitDeadline : IDisposable
     public TimeSpan Limit { get; }
     public CancellationToken Aborted { get; }
     public CancellationToken Token => _any.Token;
+    // The deadline alone, without the caller going away: a local step (e.g. `git merge --ff-only`) is linked to this
+    // instead of `Token`, so it keeps running under its own cap when the client disconnects (M-a).
+    public CancellationToken TimeoutToken => _timeout.Token;
     public bool Expired => _timeout.IsCancellationRequested;
 
     public void Dispose()
@@ -45,7 +50,7 @@ public sealed class GitDeadline : IDisposable
     }
 }
 
-public sealed class GitRunner(ILogger<GitRunner> log)
+public sealed class GitRunner(ILogger<GitRunner> log, IOptionsMonitor<GitOptions> options)
 {
     public static readonly TimeSpan LocalStepLimit = TimeSpan.FromSeconds(30);
 
@@ -53,13 +58,16 @@ public sealed class GitRunner(ILogger<GitRunner> log)
     private const int MaxMessage = 4000;
     private static readonly string[] SafetyOptions =
         ["-c", "protocol.allow=never", "-c", "protocol.https.allow=always", "-c", "core.fsmonitor=false"];
-    private static readonly string[] RemovedVariables = ["GIT_ASKPASS", "SSH_ASKPASS", "GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"];
+    // Passed through from the API's own environment when set: git's config lookup and credential helpers such as
+    // libsecret need them.
+    private static readonly string[] Passthrough = ["XDG_CONFIG_HOME", "XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS"];
 
     // `git <arguments>` in `directory`, stopped when the deadline passes or, for a local step, after `stepLimit`. Throws
-    // GitTimeoutException at a time limit and OperationCanceledException when the deadline was aborted.
+    // GitTimeoutException at a time limit and OperationCanceledException when the deadline was aborted. A local step
+    // (`stepLimit` given) is not stopped when the caller goes away (M-a): only a network step is.
     public async Task<GitResult> RunAsync(string directory, IReadOnlyList<string> arguments, GitDeadline deadline, TimeSpan? stepLimit = null)
     {
-        using var step = CancellationTokenSource.CreateLinkedTokenSource(deadline.Token);
+        using var step = CancellationTokenSource.CreateLinkedTokenSource(stepLimit is null ? deadline.Token : deadline.TimeoutToken);
         if (stepLimit is { } cap)
         {
             step.CancelAfter(cap);
@@ -91,7 +99,7 @@ public sealed class GitRunner(ILogger<GitRunner> log)
         return new GitResult(git.ExitCode, stdout, MessageOf(await error, stdout));
     }
 
-    private static ProcessStartInfo StartInfo(string directory, IReadOnlyList<string> arguments)
+    private ProcessStartInfo StartInfo(string directory, IReadOnlyList<string> arguments)
     {
         var start = new ProcessStartInfo("git")
         {
@@ -104,14 +112,25 @@ public sealed class GitRunner(ILogger<GitRunner> log)
         {
             start.ArgumentList.Add(argument);
         }
-        start.Environment["GIT_TERMINAL_PROMPT"] = "0";
-        start.Environment["GCM_INTERACTIVE"] = "never";
-        // English and stable messages, whatever the server's locale.
-        start.Environment["LC_ALL"] = "C.UTF-8";
-        foreach (var name in RemovedVariables)
+        // A clean environment (ChildEnvironment), then: the variables git's config lookup and credential helpers need,
+        // then Git:Environment:* (configuration), then git's own variables, which always win.
+        var overrides = new Dictionary<string, string>();
+        foreach (var name in Passthrough)
         {
-            start.Environment.Remove(name);
+            if (Environment.GetEnvironmentVariable(name) is { } value)
+            {
+                overrides[name] = value;
+            }
         }
+        foreach (var (name, value) in options.CurrentValue.Environment)
+        {
+            overrides[name] = value;
+        }
+        overrides["GIT_TERMINAL_PROMPT"] = "0";
+        overrides["GCM_INTERACTIVE"] = "never";
+        // English and stable messages, whatever the server's locale.
+        overrides["LC_ALL"] = "C.UTF-8";
+        ChildEnvironment.Apply(start, overrides);
         return start;
     }
 

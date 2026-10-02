@@ -89,8 +89,10 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     public TestGit Git { get; }
 
     // The global git configuration of the test run: https://git.test/<name>.git leads to RemotesRoot, and the file
-    // transport that this needs is allowed. GIT_CONFIG_GLOBAL points every git of this process at it, the API's
-    // included; the API's own -c protocol.allow=never still refuses every other transport but https.
+    // transport that this needs is allowed. TestGit sets its own HOME to GitHome, which resolves to this file by
+    // itself; the API's git gets it through Git:Environment:GIT_CONFIG_GLOBAL (ConfigureWebHost), not through the
+    // test process's own environment, which ChildEnvironment no longer passes through. The API's own
+    // -c protocol.allow=never still refuses every other transport but https.
     public string GitConfig => Path.Join(GitHome, ".gitconfig");
 
     // Git:NetworkTimeout for the API; null: the configured value.
@@ -105,7 +107,6 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
             GlobalSettings.SetConfigSearchPaths(level, GitHome);
         }
         WriteGitConfig();
-        Environment.SetEnvironmentVariable("GIT_CONFIG_GLOBAL", GitConfig);
     }
 
     public void WriteGitConfig(bool allowFileTransport = true) =>
@@ -124,6 +125,7 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         builder.UseEnvironment("Testing");
         builder.UseSetting("ConnectionStrings:Claushh", _db.GetConnectionString());
         builder.UseSetting("Projects:Root", ProjectsRoot);
+        builder.UseSetting("Git:Environment:GIT_CONFIG_GLOBAL", GitConfig);
         builder.ConfigureTestServices(services =>
         {
             services.AddSingleton<TimeProvider>(Clock);

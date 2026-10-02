@@ -43,8 +43,8 @@ npm start
 The backend reads repositories with libgit2, which comes with the build. Repositories in the projects directory must
 belong to the user the API runs as: libgit2 refuses others, like git's safe.directory.
 
-Cloning, pulling and pushing public repositories needs no credential helper in development; the server's GitHub token
-is set up with the deployment.
+Cloning, fetching and pulling a public repository needs no credential helper in development; pushing always needs
+credentials (also for a public repository), and the server's GitHub token is set up with the deployment.
 
 Lost phone or leaked password: `create-user --reset-totp` gives the account a new TOTP key,
 `create-user --reset-password` a new password; both end all sessions (commands in `docs/ARCHITECTURE.md`).
@@ -67,3 +67,5 @@ Node's own `localStorage` hides jsdom's (the test environment's). For npm script
 ```bash
 dotnet test    # integration tests; needs Docker (starts PostgreSQL 17 in a container)
 ```
+
+Also needs the git CLI ≥ 2.45 (some test repositories use `--ref-format=reftable`).

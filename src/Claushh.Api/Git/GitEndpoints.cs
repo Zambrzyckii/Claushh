@@ -132,12 +132,15 @@ public static class GitEndpoints
             string pushed;
             if (head is { Upstream: { } upstream, Remote: { } remote, MergeRef: { } mergeRef })
             {
-                if (head.Ahead == 0)
+                if (head.AheadKnown && head.Ahead == 0)
                 {
                     return Results.Ok(new MessageResponse("Nic do wypchnięcia."));
                 }
                 arguments = ["push", "--porcelain", remote, $"HEAD:{mergeRef}"];
-                pushed = $"Wypchnięto {head.Ahead} {Commits(head.Ahead)} do {upstream}.";
+                // Ahead unknown (no common history with the upstream, e.g. a freshly cloned empty remote): every
+                // commit of HEAD is one that this push sends.
+                var count = head.AheadKnown ? head.Ahead : repositories.CommitCount(repository);
+                pushed = $"Wypchnięto {count} {Commits(count)} do {upstream}.";
             }
             else if (head.HasOrigin)
             {

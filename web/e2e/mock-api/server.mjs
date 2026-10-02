@@ -228,6 +228,9 @@ const cloneName = (url) => url.replace(/\/+$/, '').split('/').pop().replace(/\.g
 const reposIn = (workspace) => [...state.repos.keys()].filter((p) => p.split('/')[0] === workspace);
 const slug = (name) => name.trim().toLowerCase().replace(/ł/g, 'l').normalize('NFD').replace(/\p{M}/gu, '').replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '');
 
+/** Polish plural of "commit" (docs/ARCHITECTURE.md, "Workspaces and git"): 1 commit, 2-4 commity (but 12-14 commitów), otherwise commitów. */
+const commitWord = (n) => (n === 1 ? 'commit' : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? 'commity' : 'commitów');
+
 /**
  * `workspace`, `repo` and `path` parameters use the files API's path syntax (docs/ARCHITECTURE.md, "Workspaces and
  * git"): non-empty segments joined by "/", none of them ".", "..", ".git", no "\" and no NUL; `segments` fixes their
@@ -311,6 +314,17 @@ async function handle(req, res) {
   if (url.pathname === '/__test/file' && req.method === 'PUT') {
     const body = await readBody(req);
     state.files.set(body.path, body.content);
+    json(res, 204);
+    return;
+  }
+  if (url.pathname === '/__test/repo-state' && req.method === 'POST') {
+    // A test's own ahead/behind for a repository, so it does not have to add a fourth repository (which would move
+    // the list other tests pin) to get a push rejection or a diverged pull.
+    const body = await readBody(req);
+    const repo = body && state.repos.get(body.repo);
+    if (!repo) return json(res, 400);
+    if (typeof body.ahead === 'number') repo.ahead = body.ahead;
+    if (typeof body.behind === 'number') repo.behind = body.behind;
     json(res, 204);
     return;
   }
@@ -494,6 +508,10 @@ async function handle(req, res) {
       await sleep(150);
       if (!repo.upstream) return json(res, 400, { message: 'Gałąź nie ma gałęzi zdalnej.' });
       if (repo.behind === 0 || !repo.remote) return json(res, 200, { message: 'Już aktualne.', changedPaths: [] });
+      // Diverged (ahead and behind both non-zero): not a fast-forward, as the backend's `git merge --ff-only` answers.
+      if (repo.ahead > 0) {
+        return json(res, 409, { message: `fatal: Not possible to fast-forward, aborting.` });
+      }
       const incoming = Object.keys(repo.remote.files);
       const blocked = incoming.filter((p) => state.files.get(p) !== repo.committed.get(p));
       if (blocked.length) {
@@ -507,17 +525,19 @@ async function handle(req, res) {
       repo.remote = null;
       const pulled = repo.behind;
       repo.behind = 0;
-      return json(res, 200, { message: `Pobrano ${pulled} commity.`, changedPaths: incoming });
+      return json(res, 200, { message: `Pobrano ${pulled} ${commitWord(pulled)}.`, changedPaths: incoming });
     }
     if (url.pathname === '/api/git/push' && req.method === 'POST') {
       state.log.push({ path: 'push', repo: repoPath });
       await sleep(150);
       if (!repo.upstream) return json(res, 400, { message: "Brak zdalnego repozytorium 'origin'." });
-      if (repo.behind > 0) return json(res, 409, { message: ` ! [rejected]        ${repo.branch} -> ${repo.branch} (fetch first)` });
+      // Nothing ahead: nothing to push, without the network, whatever "behind" is (the contract's rule).
       if (repo.ahead === 0) return json(res, 200, { message: 'Nic do wypchnięcia.' });
+      // Ahead and behind both non-zero: the remote has newer commits too, so the push is [rejected].
+      if (repo.behind > 0) return json(res, 409, { message: ` ! [rejected]        ${repo.branch} -> ${repo.branch} (fetch first)` });
       const pushed = repo.ahead;
       repo.ahead = 0;
-      return json(res, 200, { message: `Wypchnięto ${pushed} commit do ${repo.upstream}.` });
+      return json(res, 200, { message: `Wypchnięto ${pushed} ${commitWord(pushed)} do ${repo.upstream}.` });
     }
     return json(res, 404);
   }

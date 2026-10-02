@@ -20,9 +20,11 @@ public sealed record FileChange(string Path, string Status);
 public sealed record RepoStatus(string? Branch, int Ahead, int Behind, IReadOnlyList<FileChange> Files);
 
 // Branch: null for a detached HEAD. Upstream: the tracked remote branch ("origin/main"), with Remote and MergeRef (the
-// branch on the remote) from the branch's configuration; without one, Ahead and Behind are 0. Sha: HEAD's commit, null
-// on a branch without commits.
-public sealed record HeadState(string? Branch, string? Upstream, string? Remote, string? MergeRef, int Ahead, int Behind, string? Sha, bool HasOrigin);
+// branch on the remote) from the branch's configuration; without one, Ahead and Behind are 0. AheadKnown: whether
+// libgit2 could compute Ahead (false when the tracked branch has no tip, or there is no common ancestor); callers that
+// must not treat an unknown ahead as zero (e.g. push) check this instead of Ahead. Sha: HEAD's commit, null on a
+// branch without commits.
+public sealed record HeadState(string? Branch, string? Upstream, string? Remote, string? MergeRef, int Ahead, bool AheadKnown, int Behind, string? Sha, bool HasOrigin);
 
 public enum ShowStatus { Ok, NotFound, TooLarge, NotText }
 
@@ -68,6 +70,14 @@ public sealed class Repositories(ProjectPaths paths, ILogger<Repositories> log)
     {
         using var repository = new Repository(repo.FullPath);
         return HeadOf(repository);
+    }
+
+    // The number of commits in HEAD's history: for push's message when Ahead is unknown (no common history with the
+    // upstream, e.g. a freshly cloned empty remote), every local commit is one that push sends.
+    public int CommitCount(ProjectPath repo)
+    {
+        using var repository = new Repository(repo.FullPath);
+        return repository.Head.Commits.Count();
     }
 
     public RepoStatus Status(ProjectPath repo)
@@ -118,13 +128,22 @@ public sealed class Repositories(ProjectPaths paths, ILogger<Repositories> log)
         return results;
     }
 
-    // null when libgit2 cannot read the repository (a ref format or an extension it does not know, a broken .git);
-    // that is logged, and the repository is left out.
+    // null when libgit2 cannot read the repository (a ref format or an extension it does not know, a broken .git), or
+    // when it is open but does not point here (a logged repository is left out silently: it is a configuration, not
+    // a read, problem).
     private T? Open<T>(ProjectPath directory, Func<Repository, ProjectPath, T> read) where T : class
     {
         try
         {
             using var repository = new Repository(directory.FullPath);
+            // core.worktree (or any other way to move the working directory, or libgit2's own .git path) could lead
+            // outside this directory, also outside the projects directory: then this is not a repository here.
+            var expectedGitPath = Path.Join(directory.FullPath, GitDirectory) + Path.DirectorySeparatorChar;
+            var expectedWorkingDirectory = directory.FullPath + Path.DirectorySeparatorChar;
+            if (repository.Info.Path != expectedGitPath || repository.Info.WorkingDirectory != expectedWorkingDirectory)
+            {
+                return null;
+            }
             return read(repository, directory);
         }
         catch (LibGit2SharpException e)
@@ -136,12 +155,14 @@ public sealed class Repositories(ProjectPaths paths, ILogger<Repositories> log)
 
     // A real directory (no symlink on the way), no name starting with ".", and a .git that is a real directory: a .git
     // file (a worktree, a submodule) could point anywhere, also outside the projects directory. Checked before libgit2
-    // opens it, because libgit2 follows such a file.
+    // opens it, because libgit2 follows such a file. A `.git/commondir` (a linked worktree's common .git, normally
+    // reached through a `.git` file rather than a directory) is refused the same way, before it is opened.
     private bool IsCandidate(ProjectPath directory) =>
         directory.Kind == PathKind.Directory
         && directory.FullPath == Path.Join(paths.Root, directory.Relative)
         && !directory.Relative.Split('/').Any(name => name.StartsWith('.'))
-        && Libc.FileType(Path.Join(directory.FullPath, GitDirectory)) == Libc.S_IFDIR;
+        && Libc.FileType(Path.Join(directory.FullPath, GitDirectory)) == Libc.S_IFDIR
+        && Libc.FileType(Path.Join(directory.FullPath, GitDirectory, "commondir")) is null;
 
     private static RepoSummary Summarize(Repository repository, ProjectPath directory, HeadState head)
     {
@@ -162,14 +183,19 @@ public sealed class Repositories(ProjectPaths paths, ILogger<Repositories> log)
         var head = repository.Head;
         var branch = repository.Info.IsHeadDetached ? null : head.FriendlyName;
         var tracked = branch is null ? null : head.TrackedBranch;
+        // Unknown (no common ancestor, or the tracked branch has no tip yet, e.g. a freshly cloned empty remote):
+        // AheadBy is null. That must not become 0, or push would believe there is nothing to send.
+        var aheadKnown = tracked is not null && head.Tip is not null && head.TrackingDetails.AheadBy is not null;
         return new HeadState(
             branch,
             tracked?.FriendlyName,
             tracked is null ? null : head.RemoteName,
             tracked is null ? null : head.UpstreamBranchCanonicalName,
-            tracked is null || head.Tip is null ? 0 : head.TrackingDetails.AheadBy ?? 0,
-            // On a branch without commits yet, every commit of the upstream is still to come.
-            tracked is null ? 0 : head.Tip is null ? tracked.Commits.Count() : head.TrackingDetails.BehindBy ?? 0,
+            aheadKnown ? head.TrackingDetails.AheadBy!.Value : 0,
+            aheadKnown,
+            // On a branch without commits yet, every commit of the upstream is still to come; on a tracked branch
+            // without a tip either (e.g. a freshly cloned, completely empty remote), there is nothing to count.
+            tracked is null ? 0 : head.Tip is null ? (tracked.Tip is null ? 0 : tracked.Commits.Count()) : head.TrackingDetails.BehindBy ?? 0,
             head.Tip?.Sha,
             repository.Config.Get<string>("remote.origin.url") is not null);
     }

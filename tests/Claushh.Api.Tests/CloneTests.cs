@@ -32,6 +32,23 @@ public sealed class CloneTests(ApiFactory api) : ApiTest(api)
         Assert.Equal("https://git.test/lab.git\n", Api.Git.Run(Api.ProjectPath("studia/lab"), "config", "remote.origin.url"));
     }
 
+    [Fact]
+    public async Task Clones_an_empty_remote_without_commits()
+    {
+        var url = Api.Git.MakeRemote("empty");
+
+        var response = await CloneAsync("studia", url);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var summary = await response.Content.ReadFromJsonAsync<RepoListTests.RepoBody>();
+        Assert.Equal(new RepoListTests.RepoBody("empty", "studia/empty", "main", 0, "origin/main", 0, 0, null), summary);
+        Assert.Equal("refs/heads/main", Api.Git.Run(Api.ProjectPath("studia/empty"), "config", "branch.main.merge").Trim());
+
+        var list = await Client.Http.GetFromJsonAsync<List<RepoListTests.RepoBody>>("/api/repos?workspace=studia");
+        Assert.Equal(new[] { summary }, list);
+        Assert.Equal(HttpStatusCode.OK, (await Client.Http.GetAsync("/api/git/status?repo=studia%2Fempty")).StatusCode);
+    }
+
     [Theory]
     [InlineData("https://github.com\\@evil.example/o/r.git", "Nieprawidłowy adres.")]
     [InlineData("https://github.com/o/../r", "Nieprawidłowy adres.")]
@@ -114,6 +131,42 @@ public sealed class CloneTests(ApiFactory api) : ApiTest(api)
         Assert.Equal(new MessageBody("Git nie skończył w ciągu 2 s i został przerwany."), await response.Content.ReadFromJsonAsync<MessageBody>());
         Assert.InRange(watch.Elapsed, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(15));
         Assert.False(Directory.Exists(Api.ProjectPath("studia/r")));
+    }
+
+    [Fact]
+    public async Task Git_s_own_environment_is_clean()
+    {
+        // A global `post-checkout` hook dumps the environment git's own clone process ran with, so the test observes
+        // it without depending on GitRunner's internals.
+        var hooks = Directory.CreateTempSubdirectory("claushh-hooks-").FullName;
+        var dump = Path.Join(hooks, "env.txt");
+        var hook = Path.Join(hooks, "post-checkout");
+        File.WriteAllText(hook, $"#!/bin/sh\nenv > '{dump}'\n");
+        File.SetUnixFileMode(hook, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        Api.Git.Run(Api.GitHome, "config", "--file", Api.GitConfig, "core.hooksPath", hooks);
+        var canary = Environment.GetEnvironmentVariable("CLAUSHH_TEST_CANARY");
+        var connectionString = Environment.GetEnvironmentVariable("ConnectionStrings__Claushh");
+        Environment.SetEnvironmentVariable("CLAUSHH_TEST_CANARY", "leak-canary");
+        Environment.SetEnvironmentVariable("ConnectionStrings__Claushh", "should-not-leak");
+        try
+        {
+            var url = Api.Git.MakeSeededRemote("lab");
+
+            Assert.Equal(HttpStatusCode.Created, (await CloneAsync("studia", url)).StatusCode);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("CLAUSHH_TEST_CANARY", canary);
+            Environment.SetEnvironmentVariable("ConnectionStrings__Claushh", connectionString);
+        }
+
+        Assert.True(File.Exists(dump), "the post-checkout hook must have run");
+        var env = File.ReadAllText(dump);
+        Assert.Contains("PATH=", env, StringComparison.Ordinal);
+        Assert.Contains("HOME=", env, StringComparison.Ordinal);
+        Assert.DoesNotContain("CLAUSHH_TEST_CANARY", env, StringComparison.Ordinal);
+        Assert.DoesNotContain("ConnectionStrings", env, StringComparison.Ordinal);
+        Directory.Delete(hooks, recursive: true);
     }
 
     [Fact]
