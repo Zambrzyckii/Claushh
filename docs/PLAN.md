@@ -316,6 +316,21 @@ Backend decisions (stage 4):
 - The backend's own texts are Polish and equal to the mock's where the mock has one; git's messages pass through in
   English; `404` and parameter `400`s have an empty body. Rejected: English backend texts (the panel would mix languages
   in its own messages).
+- Hubs (SignalR, the console hub later too): WebSocket only, the JSON protocol, Polish `HubException` texts and no
+  detailed errors. Rejected: long polling and SSE (more ways in, and the frontend never uses them).
+- The `Origin` of every request under `/hubs` must equal one of `Hubs:AllowedOrigins` (ordinal), checked before
+  authentication; a missing or other value is `403`. Production has an empty list until the deployment sets the public
+  origin. No XSRF token on hubs: the upgrade is a GET outside `/api`. Rejected: `WebSocketOptions.AllowedOrigins` (a
+  request without `Origin` passes it).
+- A global hub filter checks the session on connect and on every call (one indexed query) and never extends it; an
+  ended session aborts the connection and fails the call with "Sesja wygasła". Rejected: remembering the check per
+  connection (a revocation by `create-user` in another process would pass) and `CloseOnAuthenticationExpiration` (the
+  session ticket has no expiry).
+- Open connections are registered by session; a sweep aborts those of sessions that are no longer active, every 5 s and
+  right after logout, ending a session and revoke-others. Events sent to clients are not checked; a connection of an
+  ended session receives them until it is aborted (at once, or within 5 s for an end in another process). Rejected: a
+  timer per connection (blind to another process) and `SessionService` calling the hubs (the session rules would depend
+  on the hubs).
 
 ### Limiting damage
 

@@ -40,6 +40,7 @@ to the API at `http://localhost:5080` (`web/proxy.conf.json`).
 | `src/Claushh.Api/Files/` | files: `ProjectsOptions` (`Projects:Root`), `ProjectPaths` (the only code that turns an API path into a path on disk: syntax, symlinks resolved with `realpath`, `.git` refused, file types from `statx`), `Libc` (the three libc calls: `realpath`, `statx` and `access`), `FileStore` (reading and saving: versions, the 5 MB limit, the text rule `DecodeText`, atomic saves under a per-file lock), `FileEndpoints` (`/api/files/*`) |
 | `src/Claushh.Api/Workspaces/` | workspaces: `Workspace` (entity: display name and creation time), `WorkspaceNames` (the name rule and the directory made from a name), `CloneUrl` (the frontend's clone URL rule in .NET terms), `WorkspaceStore` (what a workspace is, the list in display order, creating one), `WorkspaceEndpoints` (`/api/workspaces`, `/api/repos`, `/api/repos/clone`) |
 | `src/Claushh.Api/Git/` | git: `Repositories` (what a repository is and its state, read with LibGit2Sharp: the repository list, the status, HEAD content), `GitOptions` (`Git:NetworkTimeout`, `Git:Environment:*`), `GitRunner` (the git CLI: safety options, environment through `ChildEnvironment`, output, time limits, killing the process tree), `RepoLocks` (one lock per repository), `BackgroundFetch` (the fetch after `GET /api/repos`, at most every 5 minutes per repository), `GitEndpoints` (`/api/git/*`: status, show, pull, push) |
+| `src/Claushh.Api/Hubs/` | SignalR hubs and what they share: `HubsOptions` (`Hubs:AllowedOrigins`), `HubOrigins` (the Origin check for `/hubs`), `HubSessionFilter` (the session on connect and on every call, never extended), `HubConnections` (open connections by session), `HubSessionSweep` (closes the connections of ended sessions every 5 s and right after a logout or revocation), `TerminalHub` (`/hubs/terminal`) |
 | `src/Claushh.Api/Processes/` | `ChildEnvironment` (a clean, allowlisted environment for a child process: `GitRunner` today, the terminal's PTY still to come) |
 | `dotnet-tools.json` | local .NET tools: `dotnet-ef` (`dotnet tool restore`) |
 | `tests/Claushh.Api.Tests/` | backend integration tests: xUnit, the API in memory (`WebApplicationFactory`), PostgreSQL 17 from Testcontainers (`ApiFactory`) |
@@ -191,9 +192,8 @@ to the API at `http://localhost:5080` (`web/proxy.conf.json`).
 
 ### API contract
 
-Implemented in the backend (section "Backend"), except closing the WebSockets of an ended session, which comes with the
-hubs, and `ip` from `CF-Connecting-IP`, which needs `ForwardedHeaders` (stage 1, part C) — until then `ip` is the
-connection address.
+Implemented in the backend (section "Backend"), except `ip` from `CF-Connecting-IP`, which needs `ForwardedHeaders`
+(stage 1, part C) — until then `ip` is the connection address.
 
 | Method | Path | Response |
 |---|---|---|
@@ -588,9 +588,14 @@ Endpoints:
 | GET | `/api/git/show?repo=<repo>&path=<file>` | a file as HEAD has it; 400 as for the status, or when path is not a valid path inside repo; 404 when HEAD has no such file; 413 over 5 MB; 415 for a NUL byte or invalid UTF-8 | session |
 | POST | `/api/git/pull?repo=<repo>` | fetch and fast-forward merge under the repository's lock; 400 no upstream; 404 not a repository; 409 the merge failed; 502 the fetch failed or ran out of time | session, XSRF token |
 | POST | `/api/git/push?repo=<repo>` | push to the upstream (or -u origin HEAD) under the repository's lock; 400 detached HEAD or no origin; 404 not a repository; 409 [rejected]; 502 any other failure or the time limit | session, XSRF token |
+| GET (WebSocket) | `/hubs/terminal` | the terminal hub (contract: "Terminal"); WebSocket only, without negotiation | session, Origin |
 
 Every other endpoint requires a session (`FallbackPolicy`), and every POST/PUT/PATCH/DELETE under `/api` a valid
 `X-XSRF-TOKEN` (filter `RequireXsrfToken` in `Auth/AuthEndpoints.cs`, 400 otherwise).
+
+Hubs (`/hubs/*`) need a session and an Origin header equal to one of `Hubs:AllowedOrigins`: otherwise 403 with an empty
+body, also when Origin is missing. They are outside `/api`, so no XSRF token (the WebSocket upgrade is a GET; the
+Origin check and the `SameSite=Strict` cookie cover cross-site requests).
 
 All `/api/*` responses have `Cache-Control: no-store`. An unknown `/api/*` path gives 401 without a session and 404
 with one. Unhandled errors give 500 as `application/problem+json`, without details outside Development.
@@ -604,6 +609,7 @@ Configuration:
 | `Sessions:SecureCookies` | `appsettings.json` (`true`), `appsettings.Development.json` (`false`) | `false` only for plain http in development: cookie names without `__Host-`, `Secure` only on HTTPS |
 | `Projects:Root` | `appsettings.json` (`/srv/projects`); development: `dotnet user-secrets`; server: variable `Projects__Root` | the projects directory: an absolute path to an existing directory whose real path is not `/`, which the API can read, write and search; checked at start (the API does not start otherwise) |
 | `Git:NetworkTimeout` | `appsettings.json` (`00:01:40`) | the one deadline of a clone, pull or push request, lock wait included, and of a background fetch; at it the git process tree is killed (502) |
+| `Hubs:AllowedOrigins` | `appsettings.json` (empty: every hub request is refused), `appsettings.Development.json` (`http://localhost:4200`, `http://localhost:5080`) | the exact Origin values (scheme, host, port) a hub request may carry, compared ordinally |
 | `Git:Environment:*` | not set by default | extra variables for the git CLI's environment (`ChildEnvironment`'s overrides in `GitRunner.StartInfo`), e.g. for a credential helper's configuration |
 
 Sessions (`Auth/`):
@@ -725,6 +731,19 @@ Workspaces and git (`Workspaces/`, `Git/`):
   stale lock file) has it replaced
   with the API path, as clone's destination name does for its own message.
 
+Hubs (`Hubs/`, shared by every hub):
+- SignalR with the JSON protocol, WebSocket only; the frontend skips negotiation. Detailed errors are off: a client
+  sees only `HubException` texts, which are Polish, and the frontend shows its own texts anyway.
+- `HubOrigins` runs before authentication for every path under `/hubs`.
+- `HubSessionFilter`, a global hub filter: on connect it registers the connection under its session (claim
+  `session_id`) and checks the session once; on every call it checks it again (`SessionService.IsActiveAsync`, one
+  indexed query). An ended session: the connection is aborted (the client does not reconnect and checks the session
+  over HTTP) and the call fails with "Sesja wygasła". It never extends the session.
+- `HubSessionSweep` asks which registered sessions are still active (`SessionService.ActiveIdsAsync`, one query) and
+  aborts the connections of the others: every 5 s (expiry, `create-user` in another process) and right after logout,
+  ending another session and revoke-others in this process. Events sent to clients are not checked, so a connection of
+  an ended session can receive them until it is aborted: at once for an end in this process, within 5 s otherwise.
+
 Commands (`dotnet run --project src/Claushh.Api -- <command>`, on the server `./Claushh.Api <command>`):
 
 | Command | What it does |
@@ -741,8 +760,9 @@ Migrations: `dotnet tool restore`, then
 
 Folders in `src/Claushh.Api/` (each is created together with the code it concerns). Existing: `Auth/` (Identity, TOTP,
 sessions), `Data/` (DbContext, migrations), `Files/` (files API and path protection), `Workspaces/` (workspaces),
-`Git/` (repositories and git), `Processes/` (a clean child environment, shared by git and, later, the terminal).
-Planned: `Console/` (the `claude` process, MCP for permissions), `Terminal/` (PTY, tmux), `Hubs/` (SignalR).
+`Git/` (repositories and git), `Processes/` (a clean child environment, shared by git and, later, the terminal),
+`Hubs/` (SignalR hubs: the Origin check, the session check, the terminal hub).
+Planned: `Console/` (the `claude` process, MCP for permissions), `Terminal/` (PTY, tmux).
 
 ## Frontend
 
@@ -766,7 +786,7 @@ Rules: `CLAUDE.md`, section "Tests" (new code: only integration and e2e tests).
 |---|---|---|
 | Integration + older unit | `cd web && npm test` | Vitest (jsdom). Integration: `console.integration.spec.ts` (panel + store + editor, SignalR and HTTP stubbed; also permission requests: hidden characters, button delay, "tak, zawsze", and a double Enter), `workspaces.integration.spec.ts` (Workspace panel + router + git status + explorer + editor, HTTP stubbed; also the strict clone URL validation), `security.integration.spec.ts` (AuthService + interceptor + SessionTimer + the "Bezpieczeństwo" window, HTTP, reload and clock stubbed; also expiry without a server response), `logout-confirmation.integration.spec.ts` (routes with guards + AuthService + login screen after an unconfirmed logout, also with a newer session from another tab). Older unit tests: auth, files API, paths, explorer, `EditorStore` |
 | E2E | `cd web && npm run e2e` | build + Playwright in Chromium on `e2e/mock-api/server.mjs`: login and sessions (including unconfirmed logout with "Back", a new tab and logging in again, embedding in a frame, Trusted Types), explorer and Monaco, console (steps, options, permissions, "tak, zawsze", interrupt, replay, multiple tabs, file changes), workspaces (opening a repo, git status, pull, push, create, clone, a conversation per repo), terminal (commands, keys, reload without duplicates, multiple terminals, `exit`, Ctrl+S, resizing, pasting with the decision panel, characters on a dropped connection without loss or duplication, also after closing the tab, queue limit, focus, OSC 8 links), session (countdown, "Przedłuż", activity once a minute on a fake clock, expiry, also without a server response and hubs closed by the server), the "Bezpieczeństwo" window with a second device (a separate browser context), diff view, Monaco worker startup, mock robustness and the contract rules that the frontend does not let through (clone URL, XSRF token bound to the identity, saving like the files API: `absent`, 5 MB, a NUL character, workspace, repo and path parameters). **Every test** (`fixtures.ts`) fails when the page reports a CSP or Trusted Types violation, an unhandled exception (including one caught by Angular's ErrorHandler, `console.error('ERROR', …)`) or Monaco does not create a worker |
-| Backend | `dotnet test` (needs Docker) | xUnit integration tests over HTTP (`WebApplicationFactory`, PostgreSQL 17 from Testcontainers, a test clock): login and its failures, `me`, `keepalive` and both deadlines, logout and 409, ending another session, XSRF token bound to the session, `no-store`, closed `/api/*`, `create-user`, TOTP codes used once, the limit per IP, the account lockout and its growth, session list, `revoke-others`, login history, cleanup, the password reset, the files API (listing, symlinks, `.git`, reading, saving, conflicts, re-creating a deleted file, limits, text rules, file modes, long names, two saves at once, empty error bodies), workspaces and git (the repository list and its order, what is and is not a repository, every git status, ahead and behind, HEAD content with a checkout's line endings and the files API's limits), workspaces (the list and its order, names and directories, creating, a stale row), cloning (every refused URL, git's own errors, the time limit against a server that never answers, only https), pull and push (every answer, both paths of a rename, a branch without commits, two pulls at once, a hook that refuses, only https), the background fetch (every 5 minutes by the test clock, a pull or push taking the repository from a fetch that hangs); needs the git CLI ≥ 2.45 (`--ref-format=reftable`) |
+| Backend | `dotnet test` (needs Docker) | xUnit integration tests over HTTP (`WebApplicationFactory`, PostgreSQL 17 from Testcontainers, a test clock): login and its failures, `me`, `keepalive` and both deadlines, logout and 409, ending another session, XSRF token bound to the session, `no-store`, closed `/api/*`, `create-user`, TOTP codes used once, the limit per IP, the account lockout and its growth, session list, `revoke-others`, login history, cleanup, the password reset, the files API (listing, symlinks, `.git`, reading, saving, conflicts, re-creating a deleted file, limits, text rules, file modes, long names, two saves at once, empty error bodies), workspaces and git (the repository list and its order, what is and is not a repository, every git status, ahead and behind, HEAD content with a checkout's line endings and the files API's limits), workspaces (the list and its order, names and directories, creating, a stale row), cloning (every refused URL, git's own errors, the time limit against a server that never answers, only https), pull and push (every answer, both paths of a rename, a branch without commits, two pulls at once, a hook that refuses, only https), the background fetch (every 5 minutes by the test clock, a pull or push taking the repository from a fetch that hangs), the hubs (session and Origin on the WebSocket, WebSockets only, connections closed on logout, ending a session, revoke-others, expiry and a revocation by another process, hub calls never extending the session); needs the git CLI ≥ 2.45 (`--ref-format=reftable`) |
 
 Backend tests make repositories with the git CLI (`tests/Claushh.Api.Tests/TestGit.cs`): a fixed identity and date,
 `HOME` set to a temporary directory so the machine's `~/.gitconfig` stays out (libgit2's configuration search paths
@@ -778,6 +798,8 @@ configuration and binds it to `Git:Environment:GIT_CONFIG_GLOBAL` (`ConfigureWeb
 starts directly, independently of this. Tests shorten `Git:NetworkTimeout` with `ApiFactory.SetNetworkTimeout`.
 `ApiFactory.ResetAsync` stops the background fetches of the previous test and forgets their times
 (`BackgroundFetch.ResetAsync`).
+Hub tests connect with the SignalR .NET client over the in-memory server's WebSocket (`tests/Claushh.Api.Tests/TestHub.cs`):
+WebSocket only, no negotiation, the browser's cookies and Origin: `https://localhost` (`Hubs:AllowedOrigins` in the tests).
 
 Notes on e2e:
 - The mock has one shared state, the tests run sequentially and start with `POST /__test/reset`. It listens only on

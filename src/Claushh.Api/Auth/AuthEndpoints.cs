@@ -1,6 +1,7 @@
 // Login API from docs/ARCHITECTURE.md, "Authentication" → "API contract"; sessions and cookies: "Backend".
 using System.Globalization;
 using System.Text.Json;
+using Claushh.Api.Hubs;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Identity;
 
@@ -99,7 +100,7 @@ public static class AuthEndpoints
     // so a late retry does not end a newer session (docs/ARCHITECTURE.md, "Authentication" → "Rules").
     // The body is read by hand: an inferred JSON body makes routing skip this endpoint for a POST without Content-Type,
     // and the catch-all /api route would answer 404.
-    private static async Task<IResult> Logout(HttpContext http, SessionService sessions, AuthCookies cookies)
+    private static async Task<IResult> Logout(HttpContext http, SessionService sessions, AuthCookies cookies, HubSessionSweep sweep)
     {
         var session = SessionAuthenticationHandler.Current(http);
         LogoutRequest? body;
@@ -118,6 +119,8 @@ public static class AuthEndpoints
             return Results.Conflict();
         }
         await sessions.RevokeAsync(session.Id, session.UserId, http.RequestAborted);
+        // Its hub connections close now, not at the next sweep; also when the client has gone meanwhile.
+        await sweep.RunOnceAsync(CancellationToken.None);
         cookies.ExpireAll(http.Response);
         return Results.NoContent();
     }

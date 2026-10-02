@@ -3,11 +3,14 @@ using Claushh.Api.Auth;
 using Claushh.Api.Data;
 using Claushh.Api.Files;
 using Claushh.Api.Git;
+using Claushh.Api.Hubs;
 using Claushh.Api.Workspaces;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http.Connections;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 
 // The backend runs only on Linux (docs/PLAN.md, "Backend decisions (stage 2)"): libc calls and Unix file modes.
@@ -58,6 +61,13 @@ builder.Services.AddScoped<WorkspaceStore>();
 builder.Services.AddSingleton<GitRunner>();
 builder.Services.AddSingleton<RepoLocks>();
 builder.Services.AddSingleton<BackgroundFetch>();
+builder.Services.Configure<HubsOptions>(builder.Configuration.GetSection("Hubs"));
+builder.Services.AddSingleton<HubConnections>();
+builder.Services.AddSingleton<HubSessionFilter>();
+builder.Services.AddSingleton<HubSessionSweep>();
+builder.Services.AddHostedService(services => services.GetRequiredService<HubSessionSweep>());
+// For every hub: the session on connect and on every call (docs/ARCHITECTURE.md, "Backend" → "Hubs").
+builder.Services.AddSignalR(options => options.AddFilter<HubSessionFilter>());
 builder.Services.AddAuthentication(SessionAuthenticationHandler.SchemeName)
     .AddScheme<AuthenticationSchemeOptions, SessionAuthenticationHandler>(SessionAuthenticationHandler.SchemeName, _ => { });
 // Closed by default: an endpoint without .AllowAnonymous() requires a session.
@@ -112,6 +122,8 @@ app.Use((context, next) =>
     return next(context);
 });
 app.UseExceptionHandler();
+// Before authentication: a foreign or missing Origin never reaches the session lookup.
+app.UseHubOriginCheck();
 app.UseAuthentication();
 app.UseAuthorization();
 
@@ -120,6 +132,9 @@ var api = app.MapGroup("/api").RequireXsrfToken();
 api.MapAuthEndpoints().MapSessionEndpoints().MapFileEndpoints().MapWorkspaceEndpoints().MapGitEndpoints();
 // Unknown /api paths: 401 without a session (fallback policy), 404 with one, never another handler's response.
 api.Map("{**path}", () => Results.NotFound());
+// WebSocket only: the frontend skips negotiation, and other transports would only add ways in.
+app.MapHub<TerminalHub>("/hubs/terminal", options => options.Transports = HttpTransportType.WebSockets)
+    .RequireAuthorization();
 
 app.Run();
 return 0;

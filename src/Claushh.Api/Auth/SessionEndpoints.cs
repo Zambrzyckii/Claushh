@@ -1,5 +1,7 @@
 // Session list, ending sessions and the login history for the "Bezpieczeństwo" window
 // (docs/ARCHITECTURE.md, "Authentication" → "Sessions and login history").
+using Claushh.Api.Hubs;
+
 namespace Claushh.Api.Auth;
 
 public static class SessionEndpoints
@@ -25,21 +27,27 @@ public static class SessionEndpoints
             s.Id, s.Id == current.Id, DeviceName.From(s.Device), s.Ip, s.CreatedAt, s.LastActivityAt)));
     }
 
-    private static async Task<IResult> RevokeOthers(HttpContext http, SessionService sessions)
+    private static async Task<IResult> RevokeOthers(HttpContext http, SessionService sessions, HubSessionSweep sweep)
     {
         await sessions.RevokeOthersAsync(SessionAuthenticationHandler.Current(http), http.RequestAborted);
+        await sweep.RunOnceAsync(CancellationToken.None);
         return Results.NoContent();
     }
 
     // 404 also for ended and expired sessions: the frontend reads it as "already gone" (auth.service.ts, endSession).
-    private static async Task<IResult> EndSession(Guid id, HttpContext http, SessionService sessions)
+    private static async Task<IResult> EndSession(Guid id, HttpContext http, SessionService sessions, HubSessionSweep sweep)
     {
         var current = SessionAuthenticationHandler.Current(http);
         if (id == current.Id)
         {
             return Results.BadRequest();
         }
-        return await sessions.RevokeAsync(id, current.UserId, http.RequestAborted) ? Results.NoContent() : Results.NotFound();
+        if (!await sessions.RevokeAsync(id, current.UserId, http.RequestAborted))
+        {
+            return Results.NotFound();
+        }
+        await sweep.RunOnceAsync(CancellationToken.None);
+        return Results.NoContent();
     }
 
     private static async Task<IResult> Logins(HttpContext http, LoginGuard guard)

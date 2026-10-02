@@ -125,6 +125,7 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         builder.UseEnvironment("Testing");
         builder.UseSetting("ConnectionStrings:Claushh", _db.GetConnectionString());
         builder.UseSetting("Projects:Root", ProjectsRoot);
+        builder.UseSetting("Hubs:AllowedOrigins:0", TestHub.Origin);
         builder.UseSetting("Git:Environment:GIT_CONFIG_GLOBAL", GitConfig);
         builder.ConfigureTestServices(services =>
         {
