@@ -40,7 +40,7 @@ to the API at `http://localhost:5080` (`web/proxy.conf.json`).
 | `src/Claushh.Api/Files/` | files: `ProjectsOptions` (`Projects:Root`), `ProjectPaths` (the only code that turns an API path into a path on disk: syntax, symlinks resolved with `realpath`, `.git` refused, file types from `statx`), `Libc` (the three libc calls: `realpath`, `statx` and `access`), `FileStore` (reading and saving: versions, the 5 MB limit, the text rule `DecodeText`, atomic saves under a per-file lock), `FileEndpoints` (`/api/files/*`) |
 | `src/Claushh.Api/Workspaces/` | workspaces: `Workspace` (entity: display name and creation time), `WorkspaceNames` (the name rule and the directory made from a name), `CloneUrl` (the frontend's clone URL rule in .NET terms), `WorkspaceStore` (what a workspace is, the list in display order, creating one), `WorkspaceEndpoints` (`/api/workspaces`, `/api/repos`, `/api/repos/clone`) |
 | `src/Claushh.Api/Git/` | git: `Repositories` (what a repository is and its state, read with LibGit2Sharp: the repository list, the status, HEAD content), `GitOptions` (`Git:NetworkTimeout`, `Git:Environment:*`), `GitRunner` (the git CLI: safety options, environment through `ChildEnvironment`, output, time limits, killing the process tree), `RepoLocks` (one lock per repository), `BackgroundFetch` (the fetch after `GET /api/repos`, at most every 5 minutes per repository), `GitEndpoints` (`/api/git/*`: status, show, pull, push) |
-| `src/Claushh.Api/Processes/` | `ChildEnvironment` (a clean, allowlisted environment for a child process: `GitRunner` today, the terminal's PTY from a later sub-project) |
+| `src/Claushh.Api/Processes/` | `ChildEnvironment` (a clean, allowlisted environment for a child process: `GitRunner` today, the terminal's PTY still to come) |
 | `dotnet-tools.json` | local .NET tools: `dotnet-ef` (`dotnet tool restore`) |
 | `tests/Claushh.Api.Tests/` | backend integration tests: xUnit, the API in memory (`WebApplicationFactory`), PostgreSQL 17 from Testcontainers (`ApiFactory`) |
 | `global.json` | `dotnet test` runs on Microsoft.Testing.Platform (required by xUnit v3 on the .NET 10 SDK) |
@@ -673,7 +673,7 @@ Workspaces and git (`Workspaces/`, `Git/`):
   table and the status bar agree.
 - `branch` is `null` for a detached HEAD (a branch without commits keeps its name), `upstream` is the tracked branch
   (`origin/main`) or `null`. On a branch without commits that tracks an upstream, `behind` is the number of commits of
-  the upstream.
+  the upstream (0 while the upstream has none either, e.g. a freshly cloned, completely empty remote).
 - Table Workspaces (Directory text primary key, DisplayName text, CreatedAt timestamptz): the list joins the directories
   with the rows. A row whose directory is gone is ignored and kept (the name comes back with the directory) and is
   taken over by a new workspace with the same directory. Creating runs under one process-wide lock: the name must be
@@ -717,8 +717,12 @@ Workspaces and git (`Workspaces/`, `Git/`):
   --name-only --no-renames -z <old HEAD> HEAD` (on a branch that had no commits, `git ls-tree -r --name-only -z HEAD`).
 - Push: a detached HEAD → `400`; an upstream with nothing ahead → "Nic do wypchnięcia." without the network; with an
   upstream `git push --porcelain <remote> HEAD:<its branch>` (explicit, so `push.default` does not matter); without one
-  but with `origin`, `git push --porcelain -u origin HEAD`; neither → `400`. A porcelain line `!…[rejected]` → `409`; any
-  other failure → `502`. A message that repeats the repository's resolved path (e.g. a stale lock file) has it replaced
+  but with `origin`, `git push --porcelain -u origin HEAD`; neither → `400`. When ahead cannot be computed (the
+  upstream has no tip yet, e.g. a freshly cloned empty remote, or there is no common history) the shortcut is skipped
+  and the push runs regardless, so git's own porcelain output decides `200`/`409`/`502` as for any push; its success
+  message then counts HEAD's own commits, since there is nothing ahead can be compared against. A porcelain line
+  `!…[rejected]` → `409`; any other failure → `502`. A message that repeats the repository's resolved path (e.g. a
+  stale lock file) has it replaced
   with the API path, as clone's destination name does for its own message.
 
 Commands (`dotnet run --project src/Claushh.Api -- <command>`, on the server `./Claushh.Api <command>`):

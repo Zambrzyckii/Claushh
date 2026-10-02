@@ -1,7 +1,7 @@
 import os from 'node:os';
 
 import { expect, test } from './fixtures';
-import { USER, mockState, resetMock } from './helpers';
+import { USER, mockState, resetMock, setRepoState } from './helpers';
 
 /** Mock backend: tests of the mock itself (it has unprotected /__test/*) and of contract rules that the frontend does not let through. */
 
@@ -95,6 +95,29 @@ test('the mock refuses workspace, repo and path parameters that are not valid pa
   expect(clone.status()).toBe(400);
   // A binary file in HEAD is 415 (the files API's rule), not "not in HEAD".
   expect((await request.get(`/api/git/show?repo=${lab}&path=${encodeURIComponent('studia/lab-3-sieci/logo.png')}`)).status()).toBe(415);
+});
+
+test('push and pull follow the contract\'s ahead/behind rule (docs/ARCHITECTURE.md, "Workspaces and git")', async ({ request }) => {
+  await request.get('/api/auth/me');
+  const xsrf = (await request.storageState()).cookies.find((c) => c.name === 'XSRF-TOKEN')!.value;
+  await request.post('/api/auth/login', { headers: { 'X-XSRF-TOKEN': xsrf }, data: USER });
+  await request.get('/api/auth/me');
+  const sessionXsrf = (await request.storageState()).cookies.find((c) => c.name === 'XSRF-TOKEN')!.value;
+  const repo = 'studia/bazy-danych-lab'; // ahead 0 / behind 2 by default.
+  const push = (headers: Record<string, string>) =>
+    request.post(`/api/git/push?repo=${encodeURIComponent(repo)}`, { headers });
+  const pull = (headers: Record<string, string>) =>
+    request.post(`/api/git/pull?repo=${encodeURIComponent(repo)}`, { headers });
+
+  // Nothing ahead: nothing to push, even though behind is non-zero (the contract's rule the frontend never exercises
+  // on its own, since it only pushes a repository the panel shows with ↑ > 0).
+  const nothingToPush = await push({ 'X-XSRF-TOKEN': sessionXsrf });
+  expect(nothingToPush.status()).toBe(200);
+  expect(await nothingToPush.json()).toEqual({ message: 'Nic do wypchnięcia.' });
+
+  // Ahead and behind both non-zero: diverged, so pull cannot fast-forward.
+  await setRepoState(request, repo, { ahead: 1 });
+  expect((await pull({ 'X-XSRF-TOKEN': sessionXsrf })).status()).toBe(409);
 });
 
 test('a token issued before logging in is refused afterwards (XSRF bound to the identity)', async ({ request }) => {

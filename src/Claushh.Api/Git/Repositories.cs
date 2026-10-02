@@ -128,9 +128,9 @@ public sealed class Repositories(ProjectPaths paths, ILogger<Repositories> log)
         return results;
     }
 
-    // null when libgit2 cannot read the repository (a ref format or an extension it does not know, a broken .git), or
-    // when it is open but does not point here (a logged repository is left out silently: it is a configuration, not
-    // a read, problem).
+    // null when libgit2 cannot read the repository (a ref format or an extension it does not know, a broken .git):
+    // that is logged, and the repository is left out. Also null, without a log, when it opens but does not point
+    // here (a configuration problem, not a read failure): then it is simply not a repository here.
     private T? Open<T>(ProjectPath directory, Func<Repository, ProjectPath, T> read) where T : class
     {
         try
@@ -185,7 +185,7 @@ public sealed class Repositories(ProjectPaths paths, ILogger<Repositories> log)
         var tracked = branch is null ? null : head.TrackedBranch;
         // Unknown (no common ancestor, or the tracked branch has no tip yet, e.g. a freshly cloned empty remote):
         // AheadBy is null. That must not become 0, or push would believe there is nothing to send.
-        var aheadKnown = tracked is not null && head.Tip is not null && head.TrackingDetails.AheadBy is not null;
+        var aheadKnown = tracked is not null && tracked.Tip is not null && head.TrackingDetails.AheadBy is not null;
         return new HeadState(
             branch,
             tracked?.FriendlyName,

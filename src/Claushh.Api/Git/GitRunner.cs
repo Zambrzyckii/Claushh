@@ -39,7 +39,7 @@ public sealed class GitDeadline : IDisposable
     public CancellationToken Aborted { get; }
     public CancellationToken Token => _any.Token;
     // The deadline alone, without the caller going away: a local step (e.g. `git merge --ff-only`) is linked to this
-    // instead of `Token`, so it keeps running under its own cap when the client disconnects (M-a).
+    // instead of `Token`, so it keeps running under its own cap when the client disconnects.
     public CancellationToken TimeoutToken => _timeout.Token;
     public bool Expired => _timeout.IsCancellationRequested;
 
@@ -64,7 +64,7 @@ public sealed class GitRunner(ILogger<GitRunner> log, IOptionsMonitor<GitOptions
 
     // `git <arguments>` in `directory`, stopped when the deadline passes or, for a local step, after `stepLimit`. Throws
     // GitTimeoutException at a time limit and OperationCanceledException when the deadline was aborted. A local step
-    // (`stepLimit` given) is not stopped when the caller goes away (M-a): only a network step is.
+    // (`stepLimit` given) is not stopped when the caller goes away: only a network step is.
     public async Task<GitResult> RunAsync(string directory, IReadOnlyList<string> arguments, GitDeadline deadline, TimeSpan? stepLimit = null)
     {
         using var step = CancellationTokenSource.CreateLinkedTokenSource(stepLimit is null ? deadline.Token : deadline.TimeoutToken);

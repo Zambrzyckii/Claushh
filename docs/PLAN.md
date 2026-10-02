@@ -279,7 +279,7 @@ Backend decisions (stage 4):
   `DBUS_SESSION_BUS_ADDRESS` passed through, then `Git:Environment:*`, then git's own variables) are layered on top of
   the allowlist, in that order. Rejected: the previous denylist (missed `GIT_ALLOW_PROTOCOL`,
   `GIT_CONFIG_PARAMETERS`, `GIT_CONFIG_COUNT`/`KEY_n`/`VALUE_n`, `GIT_SSL_NO_VERIFY`, `GIT_TRACE*` and
-  `ConnectionStrings__*`, found in review).
+  `ConnectionStrings__*`).
 - Time limits: one deadline per clone, pull or push request, `Git:NetworkTimeout` (100 s) from its start, covering the
   lock wait and every git step, which keeps the answer under Cloudflare's 125 s; local steps also at most 30 s each. On
   a timeout the process tree is killed, a partial clone is removed, and the answer is `502` with
