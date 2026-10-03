@@ -323,7 +323,7 @@ Backend decisions (stage 4):
   origin. No XSRF token on hubs: the upgrade is a GET outside `/api`. Rejected: `WebSocketOptions.AllowedOrigins` (a
   request without `Origin` passes it).
 - A global hub filter checks the session on connect and on every call (one indexed query) and never extends it; an
-  ended session aborts the connection and fails the call with "Sesja wygasła". Rejected: remembering the check per
+  ended session aborts the connection, so the client sees the call cancelled. Rejected: remembering the check per
   connection (a revocation by `create-user` in another process would pass) and `CloseOnAuthenticationExpiration` (the
   session ticket has no expiry).
 - Open connections are registered by session; a sweep aborts those of sessions that are no longer active, every 5 s and
