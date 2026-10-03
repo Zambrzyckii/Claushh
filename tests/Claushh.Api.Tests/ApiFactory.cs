@@ -93,6 +93,22 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     // Bare repositories that stand in for GitHub, and clones of them "on another computer"; emptied before every test.
     public string RemotesRoot { get; } = Directory.CreateTempSubdirectory("claushh-remotes-").FullName;
 
+    // A stand-in for the Angular build (Frontend:Root): index.html with a known policy in its <meta>, one file of each
+    // type the build has, and decoys under api/ and hubs/ that must never be served (those paths belong to endpoints).
+    public const string FrontendPolicy = "default-src 'none'; script-src 'self'";
+    public static readonly string FrontendIndex = $"""
+        <!doctype html>
+        <html lang="pl">
+        <head>
+          <meta charset="utf-8">
+          <meta http-equiv="Content-Security-Policy" content="{FrontendPolicy}">
+          <title>Workspace</title>
+        </head>
+        <body><app-root></app-root></body>
+        </html>
+        """;
+    public string FrontendRoot { get; } = Directory.CreateTempSubdirectory("claushh-frontend-").FullName;
+
     public TestGit Git { get; }
 
     // The global git configuration of the test run: https://git.test/<name>.git leads to RemotesRoot, and the file
@@ -118,11 +134,28 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
             GlobalSettings.SetConfigSearchPaths(level, GitHome);
         }
         WriteGitConfig();
+        WriteFrontend();
     }
 
     public void WriteGitConfig(bool allowFileTransport = true) =>
         File.WriteAllText(GitConfig, $"[url \"{RemotesRoot}/\"]\n\tinsteadOf = https://git.test/\n"
             + (allowFileTransport ? "[protocol \"file\"]\n\tallow = always\n" : ""));
+
+    // Each file holds its own relative path, so a test can tell which file it got.
+    private void WriteFrontend()
+    {
+        File.WriteAllText(Path.Join(FrontendRoot, "index.html"), FrontendIndex);
+        foreach (var file in new[]
+                 {
+                     "main-TEST.js", "worker-TEST.js", "monaco.css", "favicon.ico", "media/codicon-TEST.ttf",
+                     "api/decoy.js", "hubs/decoy.js",
+                 })
+        {
+            var path = Path.Join(FrontendRoot, file);
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.WriteAllText(path, file);
+        }
+    }
 
     // The API reads Git:NetworkTimeout through IOptionsMonitor, so emptying its cache applies a new value at once.
     public void SetNetworkTimeout(TimeSpan? timeout)
@@ -136,6 +169,7 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         builder.UseEnvironment("Testing");
         builder.UseSetting("ConnectionStrings:Claushh", _db.GetConnectionString());
         builder.UseSetting("Projects:Root", ProjectsRoot);
+        builder.UseSetting("Frontend:Root", FrontendRoot);
         builder.UseSetting("Hubs:AllowedOrigins:0", TestHub.Origin);
         builder.UseSetting("Terminal:SocketDirectory", TmuxDirectory);
         builder.UseSetting("Terminal:Environment:SHELL", "/bin/sh");
@@ -243,6 +277,7 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         Directory.Delete(TerminalHome, recursive: true);
         Directory.Delete(RemotesRoot, recursive: true);
         Directory.Delete(GitHome, recursive: true);
+        Directory.Delete(FrontendRoot, recursive: true);
     }
 
     private static void Check(IdentityResult result)

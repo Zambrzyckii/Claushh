@@ -2,6 +2,7 @@
 using Claushh.Api.Auth;
 using Claushh.Api.Data;
 using Claushh.Api.Files;
+using Claushh.Api.Frontend;
 using Claushh.Api.Git;
 using Claushh.Api.Hubs;
 using Claushh.Api.Terminal;
@@ -13,6 +14,7 @@ using Microsoft.AspNetCore.Http.Connections;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 // The backend runs only on Linux (docs/PLAN.md, "Backend decisions (stage 2)"): libc calls and Unix file modes.
 [assembly: System.Runtime.Versioning.SupportedOSPlatform("linux")]
@@ -32,6 +34,13 @@ builder.Services.AddOptions<ProjectsOptions>()
 builder.Services.AddOptions<GitOptions>()
     .Bind(builder.Configuration.GetSection("Git"))
     .Validate(options => options.NetworkTimeout > TimeSpan.Zero, "Git:NetworkTimeout must be a positive time span.")
+    .ValidateOnStart();
+builder.Services.AddOptions<FrontendOptions>()
+    .Bind(builder.Configuration.GetSection("Frontend"))
+    .Validate(options => options.Root.Length == 0 || Path.IsPathFullyQualified(options.Root),
+        "Frontend:Root must be empty or an absolute path (README.md, \"Running the built frontend\").")
+    .Validate(options => !Path.IsPathFullyQualified(options.Root) || FrontendFiles.ReadPolicy(options.Root) is not null,
+        "Frontend:Root must hold the frontend build: an index.html with a Content-Security-Policy <meta> (README.md, \"Running the built frontend\").")
     .ValidateOnStart();
 builder.Services.AddDbContext<ClaushhDbContext>((services, options) => options.UseNpgsql(
     services.GetRequiredService<IConfiguration>().GetConnectionString("Claushh")
@@ -87,6 +96,8 @@ builder.Services.AddOptions<AntiforgeryOptions>().Configure<AuthCookies>((option
     options.Cookie.Path = "/";
     options.Cookie.SameSite = SameSiteMode.Strict;
     options.Cookie.SecurePolicy = cookies.SecureRequired ? CookieSecurePolicy.Always : CookieSecurePolicy.SameAsRequest;
+    // X-Frame-Options comes from SecurityHeaders as DENY on every response; antiforgery would add SAMEORIGIN.
+    options.SuppressXFrameOptionsHeader = true;
 });
 builder.Services.AddSingleton<IAntiforgeryAdditionalDataProvider, SessionAntiforgeryData>();
 builder.Services.AddProblemDetails();
@@ -114,20 +125,17 @@ if (args is ["create-user", .. var flags])
         : await command.RunAsync(flags is ["--reset-totp"], ConsoleTerminal.Instance, CancellationToken.None);
 }
 
-// First, so that also 401 from authorization and 500 from the error handler get the header.
-app.Use((context, next) =>
-{
-    if (context.Request.Path.StartsWithSegments("/api"))
-    {
-        context.Response.OnStarting(() =>
-        {
-            context.Response.Headers.CacheControl = "no-store";
-            return Task.CompletedTask;
-        });
-    }
-    return next(context);
-});
+// The built frontend (docs/ARCHITECTURE.md, "Backend" → "Frontend"); null when Frontend:Root is empty. Read here, after
+// create-user, because the static files and the fallback need it when they are mapped.
+var frontend = FrontendFiles.Options(app.Services.GetRequiredService<IOptions<FrontendOptions>>().Value);
+
+// Before the error handler and authorization, so their 500 and 401 and the Origin check's 403 get the headers too.
+app.UseSecurityHeaders();
 app.UseExceptionHandler();
+// Explicit, so that endpoint matching runs before the static files: a request that matched /api, /hubs or the fallback
+// is never answered with a file.
+app.UseRouting();
+app.UseFrontendFiles(frontend);
 // Before authentication: a foreign or missing Origin never reaches the session lookup.
 app.UseHubOriginCheck();
 app.UseAuthentication();
@@ -141,6 +149,9 @@ api.Map("{**path}", () => Results.NotFound());
 // WebSocket only: the frontend skips negotiation, and other transports would only add ways in.
 app.MapHub<TerminalHub>("/hubs/terminal", options => options.Transports = HttpTransportType.WebSockets)
     .RequireAuthorization();
+// Unknown /hubs paths: 401 without a session, 404 with one, never the page. The MapHub routes are more specific.
+app.Map("/hubs/{**path}", () => Results.NotFound());
+app.MapFrontendFallback(frontend);
 
 app.Run();
 return 0;

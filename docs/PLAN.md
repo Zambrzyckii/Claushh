@@ -109,8 +109,9 @@ Backend decisions (stage 1):
   end a single session).
 - The XSRF token is bound to the session, not only to the user (`IAntiforgeryAdditionalDataProvider`), and one filter on
   `/api` validates it for POST/PUT/PATCH/DELETE: the built-in antiforgery middleware skips DELETE and does not stop the request.
-- Closed by default: `FallbackPolicy` requires a session; anonymous are only `/api/health`, `GET /api/auth/me` and
-  `POST /api/auth/login`.
+- Closed by default: `FallbackPolicy` requires a session; anonymous are only `/api/health`, `GET /api/auth/me`,
+  `POST /api/auth/login` and the built frontend (static files and the `index.html` fallback, the same files for
+  everyone, no data).
 - Development runs over plain http, where ASP.NET antiforgery refuses `Secure`-only cookies, so there the cookies have no
   `__Host-` prefix (`Sessions:SecureCookies=false`). Behind Cloudflare Tunnel requests also reach the API as HTTP,
   so production needs `ForwardedHeaders` (stage 1, part C) first.
@@ -147,6 +148,25 @@ Backend decisions (stage 1):
   owner could not unlock it while away).
 - Login attempts and ended sessions are deleted 90 days after they ended, by a background cleanup at start and every
   hour. A cleanup error is only logged: by default a failing background service stops the whole API.
+
+Backend decisions (stage 1, part C):
+- The API serves the built frontend when `Frontend:Root` holds the absolute path of `web/dist/web/browser`: static
+  files before authentication, and `index.html` as the fallback for every path that does not look like a file. Without
+  the key there is no frontend, and development keeps `ng serve`. Rejected: building the frontend inside `dotnet build`
+  (a Node step in every backend build) and `MapStaticAssets` (it needs a manifest written at build time).
+- `index.html` is `no-store`, every other file `no-cache` (one rule, never stale; ETags keep the revalidation cheap).
+  Rejected: `no-cache` for `index.html`, and `immutable` for the hashed names (a possible later step).
+- The CSP header is read at start from the `<meta>` of the served `index.html`, plus `frame-ancestors 'none'`; without
+  the `<meta>` the API does not start, so the header cannot drift from the page. It goes only with the page: the Monaco
+  workers take their CSP from their own response, and the mock never sent one there. Rejected: a copy of the policy in
+  C# and the CSP on every response (untested for the workers).
+- `X-Frame-Options: DENY` and the other headers of `ARCHITECTURE.md`, "Security headers", go on every response, set at
+  the start of the pipeline; antiforgery's own `SAMEORIGIN` is suppressed. HSTS (12 months, `includeSubDomains`) and the
+  redirect from plain http come from Cloudflare's settings. Rejected: `UseHsts` and `UseHttpsRedirection` in the API
+  (Cloudflare covers both at the edge, before a request reaches the tunnel).
+- No path under `/hubs` falls back to the page: unknown ones are `401` without a session and `404` with one. The
+  catch-all stays when more hubs arrive, since `MapHub` routes are more specific.
+- The Kestrel URL and `AllowedHosts` are left to the deployment.
 
 Backend decisions (stage 2):
 - The projects directory is the configuration key `Projects:Root` (`/srv/projects` in `appsettings.json`, a user-secret

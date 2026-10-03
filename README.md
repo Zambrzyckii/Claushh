@@ -56,6 +56,21 @@ credentials (also for a public repository), and the server's GitHub token is set
 Lost phone or leaked password: `create-user --reset-totp` gives the account a new TOTP key,
 `create-user --reset-password` a new password; both end all sessions (commands in `docs/ARCHITECTURE.md`).
 
+## Running the built frontend
+
+The API serves the production build itself when `Frontend:Root` points at it, as on the server (one process, one
+origin):
+
+```bash
+npm --prefix web run build    # the build in web/dist/web/browser
+dotnet user-secrets set --project src/Claushh.Api Frontend:Root <absolute path>/web/dist/web/browser
+dotnet run --project src/Claushh.Api
+```
+
+Then open `http://localhost:5080`, which is already one of the hubs' allowed origins (`appsettings.Development.json`).
+The API takes the Content-Security-Policy header from `index.html` once at start, so restart it after a build that
+changes the policy. Without `Frontend:Root` the API serves no frontend, and development uses `npm start` as above.
+
 ## Frontend tests
 
 ```bash

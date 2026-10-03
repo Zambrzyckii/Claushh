@@ -5,8 +5,9 @@ Goals and decisions are in [`PLAN.md`](PLAN.md). After every change to the struc
 or dependency, update the relevant section.
 
 Status: frontend done (login, session countdown and the "Bezpieczeństwo" (Security) window, explorer, editor with diff view,
-console, workspaces and git, terminal). The backend has login, sessions, login protection, the files API (listing,
-reading and saving), the workspaces and git API and the terminal hub (section "Backend"); the console hub is still only in the mock.
+console, workspaces and git, terminal). The backend has login, sessions, login protection, the built frontend with the
+security headers, the files API (listing, reading and saving), the workspaces and git API and the terminal hub
+(section "Backend"); the console hub is still only in the mock.
 The frontend is tested against a mock backend (`web/e2e/mock-api/`) that follows the contracts below.
 
 ## Flow
@@ -25,6 +26,8 @@ ASP.NET Core API (src/Claushh.Api)
 
 In development mode, Angular (`npm start`, port 4200) proxies `/api` and `/hubs`
 to the API at `http://localhost:5080` (`web/proxy.conf.json`).
+With `Frontend:Root` set (README.md, "Running the built frontend"), the API serves the built frontend itself, as on the
+server: one process and one origin.
 
 ## Repository map
 
@@ -43,6 +46,7 @@ to the API at `http://localhost:5080` (`web/proxy.conf.json`).
 | `src/Claushh.Api/Hubs/` | SignalR hubs and what they share: `HubsOptions` (`Hubs:AllowedOrigins`), `HubOrigins` (the Origin check for `/hubs`), `HubSessionFilter` (the session on connect and on every call, never extended), `HubConnections` (open connections by session), `HubSessionSweep` (closes the connections of ended sessions every 5 s and right after a logout or revocation), `TerminalHub` (`/hubs/terminal`) |
 | `src/Claushh.Api/Terminal/` | terminal: `TerminalOptions` (`Terminal:SocketDirectory`, `Terminal:Environment`), `TmuxServer` (the API's own tmux server: version check, socket and configuration, tmux processes with the allowlisted environment), `TmuxControlClient` (one `tmux -C`: its output read as bytes, replies matched to commands), `TerminalSession` (one terminal: output with `seq`, Attach, Input, Resize), `TerminalSnapshot` (the Attach text), `Terminals` (the terminals in creation order, titles, the limit; prepares and ends the tmux server) |
 | `src/Claushh.Api/Processes/` | `ChildEnvironment` (a clean, allowlisted environment for a child process: `GitRunner` and the terminal) |
+| `src/Claushh.Api/Frontend/` | the built frontend and the response headers: `FrontendOptions` (`Frontend:Root`), `FrontendFiles` (the files of the build, the `index.html` fallback, the CSP read from the page, cache rules), `SecurityHeaders` (the headers of every response, `no-store` on `/api`) |
 | `dotnet-tools.json` | local .NET tools: `dotnet-ef` (`dotnet tool restore`) |
 | `tests/Claushh.Api.Tests/` | backend integration tests: xUnit, the API in memory (`WebApplicationFactory`), PostgreSQL 17 from Testcontainers (`ApiFactory`) |
 | `global.json` | `dotnet test` runs on Microsoft.Testing.Platform (required by xUnit v3 on the .NET 10 SDK) |
@@ -218,7 +222,8 @@ Backend requirements that follow from the frontend:
 - validation of the `X-XSRF-TOKEN` header on every POST/PUT/PATCH/DELETE, including login. The token is bound
   to the identity it was issued for (the backend adds the session ID through `IAntiforgeryAdditionalDataProvider`; ASP.NET alone binds it only to the user): a token issued for a session will not pass
   without it and vice versa (the mock does the same),
-- every endpoint except `/api/health` and the three above returns `401` without a session,
+- every endpoint except `/api/health`, the three above and the built frontend (static files and the `index.html`
+  fallback, the same files for everyone, no data) returns `401` without a session,
 - the session expires after an idle time counted from the last `keepalive` (or login) and after the hard limit,
 - all `/api/*` responses with `Cache-Control: no-store`,
 - `index.html` with the `Cache-Control: no-store` header,
@@ -248,16 +253,19 @@ the portal in a frame of a foreign page (clickjacking).
 - `main.ts` does not start the app inside a frame (`window.top !== window.self`). This is only a safeguard in case the
   `frame-ancestors` header is missing.
 
-Backend requirements (the mock in `web/e2e/mock-api/` does the same, and the e2e tests check in every test that the page
-reports no CSP violations):
-- `index.html`: a `Content-Security-Policy` header with the same policy as `<meta>` plus `frame-ancestors 'none'`
-  (it does not work in `<meta>`), `X-Frame-Options: DENY`,
-- all responses: `X-Content-Type-Options: nosniff` (and a correct `Content-Type`), `Referrer-Policy: no-referrer`,
-  `Cross-Origin-Opener-Policy: same-origin`, `Cross-Origin-Resource-Policy: same-origin`,
+Backend requirements, as the API sends them (`Frontend/`). The mock in `web/e2e/mock-api/` sends a subset: the
+`X-Frame-Options` and the CSP only with `index.html`, and no `Cache-Control` on the other files. The e2e tests check in
+every test that the page reports no CSP violations.
+- `index.html` (also as the fallback for the app's paths): a `Content-Security-Policy` header with the policy of its
+  `<meta>` plus `frame-ancestors 'none'` (it does not work in `<meta>`). The API reads the policy from the served
+  `index.html` once at start (it does not start without the `<meta>`), as the mock reads it on every request, so a
+  change of the policy is made only in `<meta>`; the API needs a restart after such a build. Other files get no CSP
+  header (the Monaco workers take their policy from their own response),
+- all responses: `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff` (and a correct `Content-Type`),
+  `Referrer-Policy: no-referrer`, `Cross-Origin-Opener-Policy: same-origin`, `Cross-Origin-Resource-Policy: same-origin`,
   `Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()`. No `clipboard-read=()`:
   "Paste" from Monaco's context menu and command palette reads the clipboard via `navigator.clipboard` (with the user's permission),
-- `Strict-Transport-Security: max-age=31536000; includeSubDomains` (in the backend or in the Cloudflare settings).
-- A change of the policy in `<meta>` requires the same change in the backend header (the mock reads it from `index.html`).
+- `Strict-Transport-Security: max-age=31536000; includeSubDomains` comes from Cloudflare's HSTS setting, not from the API.
 
 ## Files and editor
 
@@ -332,9 +340,9 @@ Reading and saving:
   `400`. The endpoints' own error responses other than `409` have no body.
 
 Common to all: `400` when the path is invalid, has a `.git` segment (before or after resolution) or, after resolution
-(including symlinks), goes outside the projects directory. The `index.html` and `monaco.css` files are served with
-`Cache-Control: no-cache` (the name `monaco.css` has no hash, so after a Monaco update the browser must download the
-new version).
+(including symlinks), goes outside the projects directory. `index.html` is served with `Cache-Control: no-store`, and
+the other files of the build, `monaco.css` among them, with `Cache-Control: no-cache` (the name `monaco.css` has no
+hash, so after a Monaco update the browser must download the new version).
 
 ## Console
 
@@ -612,16 +620,22 @@ Endpoints:
 | POST | `/api/git/pull?repo=<repo>` | fetch and fast-forward merge under the repository's lock; 400 no upstream; 404 not a repository; 409 the merge failed; 502 the fetch failed or ran out of time | session, XSRF token |
 | POST | `/api/git/push?repo=<repo>` | push to the upstream (or -u origin HEAD) under the repository's lock; 400 detached HEAD or no origin; 404 not a repository; 409 [rejected]; 502 any other failure or the time limit | session, XSRF token |
 | GET (WebSocket) | `/hubs/terminal` | the terminal hub (contract: "Terminal"); WebSocket only, without negotiation | session, Origin |
+| GET | `/*` other paths that do not look like a file (no `.` in the last segment) | the built frontend's `index.html` (Angular's routes), `no-store`, with the CSP header; only with `Frontend:Root` | none |
+| GET | `/<file>` of the build, e.g. `/main-<hash>.js`, `/monaco.css` | the file, `no-cache`; only with `Frontend:Root` | none |
+| any | `/hubs/*` other than the hubs above | 401 without a session, 404 with one | session, Origin |
 
-Every other endpoint requires a session (`FallbackPolicy`), and every POST/PUT/PATCH/DELETE under `/api` a valid
-`X-XSRF-TOKEN` (filter `RequireXsrfToken` in `Auth/AuthEndpoints.cs`, 400 otherwise).
+Every other endpoint requires a session (`FallbackPolicy`), and so does a path that matches nothing: a missing file such
+as `/chunk-x.js` gives 401 without a session and 404 with one, never `index.html`. Every POST/PUT/PATCH/DELETE under
+`/api` needs a valid `X-XSRF-TOKEN` (filter `RequireXsrfToken` in `Auth/AuthEndpoints.cs`, 400 otherwise).
 
 Hubs (`/hubs/*`) need a session and an Origin header equal to one of `Hubs:AllowedOrigins`: otherwise 403 with an empty
 body, also when Origin is missing. They are outside `/api`, so no XSRF token (the WebSocket upgrade is a GET; the
-Origin check and the `SameSite=Strict` cookie cover cross-site requests).
+Origin check and the `SameSite=Strict` cookie cover cross-site requests). An unknown path under `/hubs` gives 401
+without a session and 404 with one, never `index.html`.
 
-All `/api/*` responses have `Cache-Control: no-store`. An unknown `/api/*` path gives 401 without a session and 404
-with one. Unhandled errors give 500 as `application/problem+json`, without details outside Development.
+Every response has the headers of "Security headers" (`Frontend/SecurityHeaders.cs`), and all `/api/*` responses have
+`Cache-Control: no-store`. An unknown `/api/*` path (also `/api` itself) gives 401 without a session and 404 with one,
+never `index.html`. Unhandled errors give 500 as `application/problem+json`, without details outside Development.
 
 Configuration:
 
@@ -636,6 +650,19 @@ Configuration:
 | `Git:Environment:*` | not set by default | extra variables for the git CLI's environment (`ChildEnvironment`'s overrides in `GitRunner.StartInfo`), e.g. for a credential helper's configuration |
 | `Terminal:SocketDirectory` | not set: `$XDG_RUNTIME_DIR/claushh`; server: `/run/claushh` (deployment) | the directory of the API's tmux socket and configuration, created with mode 0700; the socket path must fit in 107 bytes. Without it and without `XDG_RUNTIME_DIR` the terminal is unavailable |
 | `Terminal:Environment:<NAME>` | none (tests: `SHELL`, `HOME`) | variables for tmux and the shell on top of the allowlisted environment |
+| `Frontend:Root` | not set (development uses `ng serve`); to try the build: `dotnet user-secrets`; server: variable `Frontend__Root` | the absolute path of the Angular build (`web/dist/web/browser`) the API serves at `/`; when set, its `index.html` must carry the CSP `<meta>`, checked at start (the API does not start otherwise). Read once: restart the API after a build that changes the policy |
+
+Frontend (`Frontend/`; decisions: `PLAN.md`, "Backend decisions (stage 1, part C)"):
+- With `Frontend:Root` set, the API serves the Angular build:
+  - the files under that directory before authentication (the same files for everyone, no data);
+  - `index.html` for every other path that does not look like a file (`MapFallbackToFile`, `{*path:nonfile}`), so a
+    reload on `/login` or another app route works.
+- Endpoint matching (`UseRouting`) runs before the files, so `/api` and `/hubs` paths never get a file or the page. A
+  missing file is 401 or 404 like any unknown path. Without the key there is no frontend: development uses `ng serve`.
+- Content types come from the framework's list, except `.ttf` as `font/ttf`; unknown types are not served. `index.html`
+  is `no-store`, every other file `no-cache` (revalidated with its ETag).
+- `SecurityHeaders` sets the headers of "Security headers" on every response; the CSP goes only with the page.
+  Antiforgery's own `X-Frame-Options` is suppressed.
 
 Sessions (`Auth/`):
 - Table `Sessions`: public `Id` (the `sessionId` of `/me`, constant for the life of the session), `SecretHash`
@@ -844,7 +871,8 @@ Migrations: `dotnet tool restore`, then
 Folders in `src/Claushh.Api/` (each is created together with the code it concerns). Existing: `Auth/` (Identity, TOTP,
 sessions), `Data/` (DbContext, migrations), `Files/` (files API and path protection), `Workspaces/` (workspaces),
 `Git/` (repositories and git), `Processes/` (a clean child environment, shared by git and the terminal),
-`Hubs/` (SignalR hubs: the Origin check, the session check, the terminal hub), `Terminal/` (tmux, the terminals).
+`Hubs/` (SignalR hubs: the Origin check, the session check, the terminal hub), `Terminal/` (tmux, the terminals),
+`Frontend/` (the built frontend and the security headers).
 Planned: `Console/` (the `claude` process, MCP for permissions).
 
 ## Frontend
@@ -869,7 +897,7 @@ Rules: `CLAUDE.md`, section "Tests" (new code: only integration and e2e tests).
 |---|---|---|
 | Integration + older unit | `cd web && npm test` | Vitest (jsdom). Integration: `console.integration.spec.ts` (panel + store + editor, SignalR and HTTP stubbed; also permission requests: hidden characters, button delay, "tak, zawsze", and a double Enter), `workspaces.integration.spec.ts` (Workspace panel + router + git status + explorer + editor, HTTP stubbed; also the strict clone URL validation), `security.integration.spec.ts` (AuthService + interceptor + SessionTimer + the "Bezpieczeństwo" window, HTTP, reload and clock stubbed; also expiry without a server response), `logout-confirmation.integration.spec.ts` (routes with guards + AuthService + login screen after an unconfirmed logout, also with a newer session from another tab). Older unit tests: auth, files API, paths, explorer, `EditorStore` |
 | E2E | `cd web && npm run e2e` | build + Playwright in Chromium on `e2e/mock-api/server.mjs`: login and sessions (including unconfirmed logout with "Back", a new tab and logging in again, embedding in a frame, Trusted Types), explorer and Monaco, console (steps, options, permissions, "tak, zawsze", interrupt, replay, multiple tabs, file changes), workspaces (opening a repo, git status, pull, push, create, clone, a conversation per repo), terminal (commands, keys, reload without duplicates, multiple terminals, `exit`, Ctrl+S, resizing, pasting with the decision panel, characters on a dropped connection without loss or duplication, also after closing the tab, queue limit, focus, OSC 8 links, no answers to terminal queries, closing a terminal that another tab already closed), session (countdown, "Przedłuż", activity once a minute on a fake clock, expiry, also without a server response and hubs closed by the server), the "Bezpieczeństwo" window with a second device (a separate browser context), diff view, Monaco worker startup, mock robustness and the contract rules that the frontend does not let through (clone URL, XSRF token bound to the identity, saving like the files API: `absent`, 5 MB, a NUL character, workspace, repo and path parameters). **Every test** (`fixtures.ts`) fails when the page reports a CSP or Trusted Types violation, an unhandled exception (including one caught by Angular's ErrorHandler, `console.error('ERROR', …)`) or Monaco does not create a worker |
-| Backend | `dotnet test` (needs Docker) | xUnit integration tests over HTTP (`WebApplicationFactory`, PostgreSQL 17 from Testcontainers, a test clock): login and its failures, `me`, `keepalive` and both deadlines, logout and 409, ending another session, XSRF token bound to the session, `no-store`, closed `/api/*`, `create-user`, TOTP codes used once, the limit per IP, the account lockout and its growth, session list, `revoke-others`, login history, cleanup, the password reset, the files API (listing, symlinks, `.git`, reading, saving, conflicts, re-creating a deleted file, limits, text rules, file modes, long names, two saves at once, empty error bodies), workspaces and git (the repository list and its order, what is and is not a repository, every git status, ahead and behind, HEAD content with a checkout's line endings and the files API's limits), workspaces (the list and its order, names and directories, creating, a stale row), cloning (every refused URL, git's own errors, the time limit against a server that never answers, only https), pull and push (every answer, both paths of a rename, a branch without commits, two pulls at once, a hook that refuses, only https), the background fetch (every 5 minutes by the test clock, a pull or push taking the repository from a fetch that hangs), the hubs (session and Origin on the WebSocket, WebSockets only, connections closed on logout, ending a session, revoke-others, expiry and a revocation by another process, hub calls never extending the session), the terminal (opening in a directory by its real path, titles, refused paths, the limit, output seq without gaps, the allowlisted environment, exit, close, the start routine), attach and input (snapshot with CRLF, every line exactly once when attaching during output, bracketed paste restored, a batch sent twice typed once, Input only after Attach on the same connection, inputSeq after a reconnect, batch limits, UTF-8 across send-keys commands, resize limits, an exited terminal, an unknown id, the history and normal screen before the switch to the alternate screen and the program's own text after it); needs the git CLI ≥ 2.45 (`--ref-format=reftable`) |
+| Backend | `dotnet test` (needs Docker) | xUnit integration tests over HTTP (`WebApplicationFactory`, PostgreSQL 17 from Testcontainers, a test clock): login and its failures, `me`, `keepalive` and both deadlines, logout and 409, ending another session, XSRF token bound to the session, `no-store`, closed `/api/*`, the built frontend (the page for app paths with its CSP and `no-store`, file types and `no-cache`, `/api` and `/hubs` paths and missing files never the page, the security headers on every response, the start check of `Frontend:Root`), `create-user`, TOTP codes used once, the limit per IP, the account lockout and its growth, session list, `revoke-others`, login history, cleanup, the password reset, the files API (listing, symlinks, `.git`, reading, saving, conflicts, re-creating a deleted file, limits, text rules, file modes, long names, two saves at once, empty error bodies), workspaces and git (the repository list and its order, what is and is not a repository, every git status, ahead and behind, HEAD content with a checkout's line endings and the files API's limits), workspaces (the list and its order, names and directories, creating, a stale row), cloning (every refused URL, git's own errors, the time limit against a server that never answers, only https), pull and push (every answer, both paths of a rename, a branch without commits, two pulls at once, a hook that refuses, only https), the background fetch (every 5 minutes by the test clock, a pull or push taking the repository from a fetch that hangs), the hubs (session and Origin on the WebSocket, WebSockets only, connections closed on logout, ending a session, revoke-others, expiry and a revocation by another process, hub calls never extending the session), the terminal (opening in a directory by its real path, titles, refused paths, the limit, output seq without gaps, the allowlisted environment, exit, close, the start routine), attach and input (snapshot with CRLF, every line exactly once when attaching during output, bracketed paste restored, a batch sent twice typed once, Input only after Attach on the same connection, inputSeq after a reconnect, batch limits, UTF-8 across send-keys commands, resize limits, an exited terminal, an unknown id, the history and normal screen before the switch to the alternate screen and the program's own text after it); needs the git CLI ≥ 2.45 (`--ref-format=reftable`) |
 
 Backend tests make repositories with the git CLI (`tests/Claushh.Api.Tests/TestGit.cs`): a fixed identity and date,
 `HOME` set to a temporary directory so the machine's `~/.gitconfig` stays out (libgit2's configuration search paths
@@ -883,6 +911,8 @@ starts directly, independently of this. Tests shorten `Git:NetworkTimeout` with 
 (`BackgroundFetch.ResetAsync`).
 Hub tests connect with the SignalR .NET client over the in-memory server's WebSocket (`tests/Claushh.Api.Tests/TestHub.cs`):
 WebSocket only, no negotiation, the browser's cookies and Origin: `https://localhost` (`Hubs:AllowedOrigins` in the tests).
+`ApiFactory` also writes a stand-in frontend build to a temporary `Frontend:Root`: `index.html` with a known CSP `<meta>`,
+one file of each type, and decoys under `api/` and `hubs/` that must never be served.
 From the terminal on, `dotnet test` needs tmux 3.7 or later on PATH. `ApiFactory` gives the API a tmux directory and a
 HOME in temporary directories and `/bin/sh` as the shell, and sets `CLAUSHH_TEST_CANARY` and `ConnectionStrings__Canary`
 in the test process (the terminal tests check that they never reach the shell). `ApiFactory.ResetAsync` closes every
