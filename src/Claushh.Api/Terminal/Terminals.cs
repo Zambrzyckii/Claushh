@@ -13,11 +13,18 @@ public sealed class Terminals(TmuxServer tmux, ProjectPaths paths, IHubContext<T
     public const int Limit = 20;
 
     private readonly List<TerminalSession> _terminals = [];
+    // Guarded by the list lock: set at the start of StopAsync, so an OpenAsync racing it never starts a terminal
+    // after CloseAllAsync's snapshot, which would create a session nobody closes (kill-server already ran by then).
+    private bool _stopped;
 
     public Task StartAsync(CancellationToken cancellationToken) => tmux.PrepareAsync(cancellationToken);
 
     public async Task StopAsync(CancellationToken cancellationToken)
     {
+        lock (_terminals)
+        {
+            _stopped = true;
+        }
         await CloseAllAsync();
         await tmux.KillServerAsync();
     }
@@ -41,6 +48,10 @@ public sealed class Terminals(TmuxServer tmux, ProjectPaths paths, IHubContext<T
         TerminalSession terminal;
         lock (_terminals)
         {
+            if (_stopped)
+            {
+                throw new HubException(TmuxServer.Unavailable);
+            }
             if (_terminals.Count >= Limit)
             {
                 throw new HubException("Za dużo terminali");
@@ -104,7 +115,8 @@ public sealed class Terminals(TmuxServer tmux, ProjectPaths paths, IHubContext<T
         }
     }
 
-    // When the API stops, and in the tests before every test.
+    // When the API stops, and in the tests before every test. One terminal's close failing is logged and does not
+    // stop the others, so StopAsync always reaches KillServerAsync.
     public async Task CloseAllAsync()
     {
         TerminalSession[] all;
@@ -115,7 +127,14 @@ public sealed class Terminals(TmuxServer tmux, ProjectPaths paths, IHubContext<T
         }
         foreach (var terminal in all)
         {
-            await terminal.CloseAsync();
+            try
+            {
+                await terminal.CloseAsync();
+            }
+            catch (Exception e)
+            {
+                log.LogWarning(e, "Closing terminal {Id} failed", terminal.Id);
+            }
         }
     }
 

@@ -761,7 +761,8 @@ Terminal (`Terminal/`; the contract is in "Terminal"):
   `ListTerminals` is empty and the other methods answer "Terminal niedostępny"; the rest of the API works.
 - Every tmux process gets only HOME, USER, LOGNAME, SHELL, PATH, LANG, LANGUAGE, LC_* and TZ of the API's environment
   (`Processes/ChildEnvironment`), `LANG=C.UTF-8` when no locale variable is set, `COLORTERM=truecolor`, then
-  `Terminal:Environment`: the shell never sees the connection string, `ASPNETCORE_*`, `DOTNET_*` or `CLAUDECODE*`. The
+  `Terminal:Environment`: none of the API's own variables reach tmux or the shell (the connection string,
+  `ASPNETCORE_*`, `DOTNET_*`, `CLAUDECODE*`); the login shell's profile may still set its own, e.g. `DOTNET_ROOT`. The
   shell is the login shell from SHELL and runs as the API's user.
 - A terminal is the tmux session `claushh-<id>` (`id`: a new GUID as 32 hex digits) in the real path of `projectPath`,
   which must be a directory (`ProjectPaths`), and one control client for its whole life. Its title is the last segment
@@ -775,8 +776,10 @@ Terminal (`Terminal/`; the contract is in "Terminal"):
   order; inside a block a line starting with `%` is pane text. Each command has 10 s ("Terminal nie odpowiada"); a late
   reply still takes its own command's place.
 - The end of the control client's output (the shell exited and its session closed, or tmux went away) marks the
-  terminal exited and sends `TerminalExited` with `exitCode: null`; it stays listed until closed. `CloseTerminal` takes
-  it off the list first (no event), then runs `kill-session`; an unknown id is no error.
+  terminal exited and sends `TerminalExited` with `exitCode: null`; it stays listed until closed. It also runs a
+  best-effort `kill-session`, so a shell detached from inside the pane (`tmux detach`; `TMUX` there points at the
+  API's own socket) does not keep running unlisted. `CloseTerminal` takes it off the list first (no event), then runs
+  `kill-session`; an unknown id is no error.
 
 Commands (`dotnet run --project src/Claushh.Api -- <command>`, on the server `./Claushh.Api <command>`):
 

@@ -20,6 +20,9 @@ public sealed class TerminalSession(string id, string title, string cwd, TmuxSer
     private volatile string _pane = "";
     private long _seq;
     private volatile bool _exited;
+    // Guarded by _lock: set once, by StartAsync (when it finds it already set) or by CloseAsync (which then runs),
+    // so a close racing a start neither misses the session nor disposes the client twice.
+    private bool _closed;
 
     public string Id => id;
     public string Title => title;
@@ -35,6 +38,10 @@ public sealed class TerminalSession(string id, string title, string cwd, TmuxSer
         await _lock.WaitAsync();
         try
         {
+            if (_closed)
+            {
+                throw new HubException(TmuxServer.Unavailable);
+            }
             var start = tmux.StartInfo(["-C", "new-session", "-s", SessionName, "-c", directory.Replace("#", "##"),
                 "-x", $"{cols}", "-y", $"{rows}"]);
             _client = new TmuxControlClient(start, OnOutputAsync, () => Interlocked.Read(ref _seq), log);
@@ -64,9 +71,23 @@ public sealed class TerminalSession(string id, string title, string cwd, TmuxSer
         }
     }
 
-    // Called after the terminal left the list, so its end sends no TerminalExited.
+    // Called after the terminal left the list, so its end sends no TerminalExited. Idempotent, and safe while a start
+    // is in progress: it waits for the same lock, so it never misses a session that is still being created.
     public async Task CloseAsync()
     {
+        await _lock.WaitAsync();
+        try
+        {
+            if (_closed)
+            {
+                return;
+            }
+            _closed = true;
+        }
+        finally
+        {
+            _lock.Release();
+        }
         try
         {
             await tmux.RunAsync(["kill-session", "-t", $"={SessionName}"], CancellationToken.None);
@@ -122,6 +143,17 @@ public sealed class TerminalSession(string id, string title, string cwd, TmuxSer
     {
         await client.Ended;
         _exited = true;
+        // Best effort: a client detached from inside the pane (`tmux detach`; TMUX points at the API's own socket)
+        // ends the control client's output without ending the session, which would otherwise keep the shell running
+        // unlisted.
+        try
+        {
+            await tmux.RunAsync(["kill-session", "-t", $"={SessionName}"], CancellationToken.None);
+        }
+        catch (Exception e) when (e is HubException or IOException or System.ComponentModel.Win32Exception)
+        {
+            log.LogWarning(e, "Ending tmux session {Session} failed", SessionName);
+        }
         try
         {
             await exited(this);

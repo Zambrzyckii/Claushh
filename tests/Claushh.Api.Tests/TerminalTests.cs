@@ -151,6 +151,40 @@ public sealed class TerminalTests(ApiFactory api) : ApiTest(api)
     }
 
     [Fact]
+    public async Task Closing_the_same_terminal_twice_does_not_throw()
+    {
+        await using var tab = await TestTerminal.ConnectAsync(Api, Client);
+        var terminal = await tab.OpenAsync();
+        var session = Api.Services.GetRequiredService<Terminals>().Find(terminal.Id);
+
+        await session.CloseAsync();
+        await session.CloseAsync();
+    }
+
+    [Fact]
+    public async Task Opening_while_closing_all_leaves_no_session_running()
+    {
+        var terminals = Api.Services.GetRequiredService<Terminals>();
+
+        // Called directly (not through the hub), so this runs synchronously up to OpenAsync's first real await
+        // (inside StartAsync), by which time the terminal is already in the list: CloseAllAsync below is guaranteed
+        // to race the start, not merely follow it.
+        var opening = terminals.OpenAsync("", 80, 24);
+        await terminals.CloseAllAsync();
+
+        string? id = null;
+        try
+        {
+            id = (await opening).Id;
+        }
+        catch (HubException)
+        {
+            // Refused because the close raced the start: as valid as returning.
+        }
+        Assert.NotEqual(0, Api.Tmux("has-session", "-t", id is null ? "=none" : $"=claushh-{id}").ExitCode);
+    }
+
+    [Fact]
     public async Task The_start_routine_ends_a_server_left_by_a_previous_run()
     {
         Assert.Equal(0, Api.Tmux("-f", "/dev/null", "new-session", "-d", "-s", "leftover").ExitCode);

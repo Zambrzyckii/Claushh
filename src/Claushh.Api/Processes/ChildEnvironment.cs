@@ -1,6 +1,6 @@
 // A clean environment for every process the API starts (docs/ARCHITECTURE.md, "Backend" → "Workspaces and git"): an
 // allowlist, not a denylist, because a denylist misses whatever the API's own process picks up next (a secret from a
-// systemd unit, a variable a future dependency reads). `GitRunner` is the first caller; the terminal, still to come,
+// systemd unit, a variable a future dependency reads). `GitRunner` is the first caller; `TmuxServer` (the terminal)
 // reuses it with its own overrides.
 using System.Diagnostics;
 

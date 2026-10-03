@@ -217,13 +217,26 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         tmux.ErrorDataReceived += (_, _) => { };
         tmux.BeginErrorReadLine();
         var output = tmux.StandardOutput.ReadToEnd();
-        tmux.WaitForExit();
+        if (!tmux.WaitForExit(TmuxServer.CommandTimeout))
+        {
+            tmux.Kill();
+            tmux.WaitForExit();
+        }
         return (tmux.ExitCode, output);
     }
 
     public override async ValueTask DisposeAsync()
     {
         await base.DisposeAsync();
+        // Best effort: the host's own shutdown (Terminals.StopAsync) already did this; a server that somehow
+        // survived it must not outlive the test run.
+        try
+        {
+            Tmux("kill-server");
+        }
+        catch (Exception e) when (e is IOException or System.ComponentModel.Win32Exception)
+        {
+        }
         await _db.DisposeAsync();
         Directory.Delete(ProjectsRoot, recursive: true);
         Directory.Delete(TmuxDirectory, recursive: true);
