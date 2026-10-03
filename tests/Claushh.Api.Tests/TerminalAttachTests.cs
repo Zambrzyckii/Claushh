@@ -177,13 +177,46 @@ public sealed class TerminalAttachTests(ApiFactory api) : ApiTest(api)
         await tab.TypeAsync(id, "stty size; echo kon''iec1");
         Assert.Contains("40 120\r\n", await tab.WaitForAsync(id, "koniec1"), StringComparison.Ordinal);
         await tab.Hub.SendAsync("Resize", new { id, cols = 3, rows = 1 });
-        await tab.TypeAsync(id, "stty size; echo kon''iec2");
-        Assert.Contains("2 10\r\n", await tab.WaitForAsync(id, "koniec2"), StringComparison.Ordinal);
+        await AssertSizeEventuallyAsync(tab, id, "2 10", "2");
         await tab.Hub.SendAsync("Resize", new { id, cols = 5000, rows = 5000 });
-        await tab.TypeAsync(id, "stty size; echo kon''iec3");
-        Assert.Contains("500 1000\r\n", await tab.WaitForAsync(id, "koniec3"), StringComparison.Ordinal);
+        await AssertSizeEventuallyAsync(tab, id, "500 1000", "3");
         await tab.Hub.SendAsync("Resize", new { id = "unknown", cols = 80, rows = 24 });
         Assert.Single(await tab.ListAsync());
+    }
+
+    // tmux applies a pane's new size on its own ~250 ms timer, so `stty size` right after Resize can still report the
+    // old size; retype it with a fresh marker until it catches up, or 5 s pass.
+    private static async Task AssertSizeEventuallyAsync(TestTerminal tab, string id, string size, string marker)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        for (var attempt = 0; ; attempt++)
+        {
+            var tag = $"koniec{marker}-{attempt}";
+            var before = tab.Text(id).Length;
+            await tab.TypeAsync(id, $"stty size; echo kon''iec{marker}-{attempt}");
+            var output = (await tab.WaitForAsync(id, tag))[before..];
+            if (output.Contains(size + "\r\n", StringComparison.Ordinal))
+            {
+                return;
+            }
+            Assert.True(DateTime.UtcNow < deadline, $"stty size did not report \"{size}\" within 5 s; last attempt:\n{output}");
+            await Task.Delay(50, TestContext.Current.CancellationToken);
+        }
+    }
+
+    [Fact]
+    public async Task A_64_character_client_and_a_4096_character_batch_are_accepted()
+    {
+        await using var tab = await TestTerminal.ConnectAsync(Api, Client);
+        var id = (await tab.OpenAsync()).Id;
+        var client = new string('c', 64);
+        await tab.AttachAsync(id, client: client);
+
+        await tab.InputAsync(id, new string('a', 4096), seq: 1, client: client);
+        await tab.InputAsync(id, "\u0003", seq: 2, client: client);
+        await tab.InputAsync(id, "echo kon''iec\r", seq: 3, client: client);
+
+        await tab.WaitForAsync(id, "koniec");
     }
 
     [Fact]
@@ -230,6 +263,8 @@ public sealed class TerminalAttachTests(ApiFactory api) : ApiTest(api)
         var switchIndex = snapshot.IndexOf("\e[?1049h", StringComparison.Ordinal);
 
         Assert.True(switchIndex > 0, $"No switch to the alternate screen in:\n{snapshot}");
+        // -N keeps the trailing spaces tmux pads a history line with, so this matches around them.
+        Assert.Matches(@"\r\n2 *\r\n3 *\r\n", snapshot[..switchIndex]);
         Assert.Contains("\r\n60", snapshot[..switchIndex], StringComparison.Ordinal);
         Assert.Contains("NAME=", snapshot[switchIndex..], StringComparison.Ordinal);
 

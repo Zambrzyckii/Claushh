@@ -83,7 +83,8 @@ public static class TerminalSnapshot
     }
 
     // Where the normal screen's cursor was when the program switched, so leaving the alternate screen puts it back.
-    private static string AlternateStart(Display d) => $"\e[{d.SavedY + 1};{d.SavedX + 1}H\e[?1049h\e[H";
+    // ESC[0m first, so the normal screen's last colour does not leak into the alternate screen.
+    private static string AlternateStart(Display d) => $"\e[0m\e[{d.SavedY + 1};{d.SavedX + 1}H\e[?1049h\e[H";
 
     private static string Tail(Display d)
     {

@@ -828,17 +828,27 @@ async function invokeTerminal(target, args, ws) {
       terminalEmit(created, promptFor(created));
       return terminalInfo(created);
     }
-    case 'Attach':
+    case 'Attach': {
       if (!terminal) throw new Error('Nieznany terminal');
       if (state.faults.attachDelayMs) await sleep(state.faults.attachDelayMs);
       terminal.sizes.push([request.cols, request.rows]);
-      if (request.client) terminal.inputOwner.set(String(request.client), ws);
-      return { snapshot: terminal.history, seq: terminal.seq, inputSeq: terminal.inputSeq.get(String(request.client ?? '')) ?? 0 };
+      const client = String(request.client ?? '');
+      // A client outside 1-64 characters (the hub's limit) gets the snapshot, but takes no Input ownership.
+      if (client.length >= 1 && client.length <= 64) terminal.inputOwner.set(client, ws);
+      return {
+        snapshot: terminal.exited ? '' : terminal.history,
+        seq: terminal.seq,
+        inputSeq: terminal.inputSeq.get(client) ?? 0
+      };
+    }
     case 'Input': {
       // An already accepted batch (retried after a dropped connection) is skipped: characters must not be duplicated.
       const client = String(request.client ?? '');
       const seq = Number(request.seq);
-      if (!client || !Number.isSafeInteger(seq) || seq < 1) throw new Error('Nieprawidłowa paczka');
+      const data = String(request.data ?? '');
+      if (client.length < 1 || client.length > 64 || !Number.isSafeInteger(seq) || seq < 1 || data.length > 4096) {
+        throw new Error('Nieprawidłowa paczka');
+      }
       if (!terminal || terminal.exited) return null;
       // Batches are accepted only from the connection that last performed Attach for this sender. Late batches from the
       // old connection are rejected (`inputSeq` from Attach is final, and "Porzuć" (Discard) really discards),
@@ -846,7 +856,7 @@ async function invokeTerminal(target, args, ws) {
       if (terminal.inputOwner.get(client) !== ws) throw new Error('Najpierw Attach na tym połączeniu');
       if (seq <= (terminal.inputSeq.get(client) ?? 0)) return null;
       terminal.inputSeq.set(client, seq);
-      terminalInput(terminal, String(request.data ?? ''));
+      terminalInput(terminal, data);
       if (state.faults.dropInputAck > 0) {
         state.faults.dropInputAck--;
         state.hubDownUntil = Date.now() + state.faults.downAfterDropMs;

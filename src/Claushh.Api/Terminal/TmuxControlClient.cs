@@ -53,8 +53,10 @@ public sealed class TmuxControlClient : IAsyncDisposable
     public Task Ended { get; }
 
     // Sends `commands` tmux commands, as one line joined by " ; " or as lines joined by "\n", and returns a reply per
-    // command: tmux answers each command of a line with a block of its own.
-    public async Task<TmuxReply[]> RunAsync(string text, int commands = 1)
+    // command: tmux answers each command of a line with a block of its own. onWritten, if given, runs once the write
+    // has succeeded (tmux has read the line) but before the replies are awaited, so a caller can record state that
+    // must survive a reply that arrives late or never; it never runs for a failed or cut-off write.
+    public async Task<TmuxReply[]> RunAsync(string text, int commands = 1, Action? onWritten = null)
     {
         var replies = new TaskCompletionSource<TmuxReply>[commands];
         if (!await _write.WaitAsync(TmuxServer.CommandTimeout))
@@ -98,6 +100,7 @@ public sealed class TmuxControlClient : IAsyncDisposable
                 }
                 throw new HubException(TmuxServer.Unresponsive);
             }
+            onWritten?.Invoke();
         }
         catch (Exception e) when (e is IOException or ObjectDisposedException)
         {
@@ -125,7 +128,7 @@ public sealed class TmuxControlClient : IAsyncDisposable
         {
             _process.StandardInput.Close();
         }
-        catch (IOException)
+        catch (Exception e) when (e is IOException or InvalidOperationException)
         {
         }
         using var wait = new CancellationTokenSource(TimeSpan.FromSeconds(2));

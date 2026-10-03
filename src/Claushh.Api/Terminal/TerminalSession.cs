@@ -80,6 +80,10 @@ public sealed class TerminalSession(string id, string title, string cwd, TmuxSer
         }
     }
 
+    // Treated like an exited terminal: Attach gives an empty snapshot, Input is skipped, Resize is ignored, never a
+    // NullReferenceException. Read only under _lock, like _closed and _client.
+    private bool Unavailable => _exited || _closed || _client is null;
+
     // client null: the view gets the snapshot, but no Input of it is accepted.
     public async Task<Attachment> AttachAsync(int cols, int rows, string? client, string connection)
     {
@@ -91,15 +95,15 @@ public sealed class TerminalSession(string id, string title, string cwd, TmuxSer
                 _owners[client] = connection;
             }
             var inputSeq = client is null ? 0 : _inputSeq.GetValueOrDefault(client);
-            if (!_exited)
+            if (!Unavailable)
             {
                 try
                 {
                     return await SnapshotAsync(cols, rows, inputSeq);
                 }
-                catch (HubException) when (_exited)
+                catch (HubException) when (_exited || _client?.Ended.IsCompleted == true)
                 {
-                    // The shell ended meanwhile.
+                    // The shell ended meanwhile (WatchAsync may not have set _exited yet).
                 }
             }
             return new Attachment("", Interlocked.Read(ref _seq), inputSeq);
@@ -115,7 +119,7 @@ public sealed class TerminalSession(string id, string title, string cwd, TmuxSer
         await _lock.WaitAsync();
         try
         {
-            if (_exited)
+            if (Unavailable)
             {
                 return;
             }
@@ -128,19 +132,35 @@ public sealed class TerminalSession(string id, string title, string cwd, TmuxSer
                 return;
             }
             var bytes = Encoding.UTF8.GetBytes(data);
-            if (bytes.Length > 0)
+            if (bytes.Length == 0)
             {
-                // Every byte as it is: keys, paste markers and control characters reach the program unchanged.
-                var commands = bytes.Chunk(InputChunk)
-                    .Select(chunk => $"send-keys -t {_pane} -H " + string.Join(' ', chunk.Select(b => b.ToString("x2", CultureInfo.InvariantCulture))))
-                    .ToArray();
-                var replies = await _client!.RunAsync(string.Join('\n', commands), commands.Length);
+                _inputSeq[client] = seq;
+                return;
+            }
+            // Every byte as it is: keys, paste markers and control characters reach the program unchanged.
+            var commands = bytes.Chunk(InputChunk)
+                .Select(chunk => $"send-keys -t {_pane} -H " + string.Join(' ', chunk.Select(b => b.ToString("x2", CultureInfo.InvariantCulture))))
+                .ToArray();
+            // Recorded as soon as tmux has read the line, not after its reply: with heavy output the reply waits
+            // behind the output read before it and can arrive past the 10 s deadline, and a batch the caller then
+            // retries with the same seq must still be typed once, not twice.
+            var written = false;
+            try
+            {
+                var replies = await _client!.RunAsync(string.Join('\n', commands), commands.Length,
+                    onWritten: () => { written = true; _inputSeq[client] = seq; });
                 if (!Array.TrueForAll(replies, reply => reply.Succeeded))
                 {
                     throw new HubException(TmuxServer.Unresponsive);
                 }
             }
-            _inputSeq[client] = seq;
+            catch (HubException) when (written)
+            {
+                // The write succeeded (seq already recorded) but the reply was late (past the 10 s deadline, behind
+                // the output read before it) or lost, or tmux answered %error.
+                log.LogWarning("The reply to a send-keys batch for terminal {Id} was late or lost", id);
+                throw;
+            }
         }
         finally
         {
@@ -153,7 +173,7 @@ public sealed class TerminalSession(string id, string title, string cwd, TmuxSer
         await _lock.WaitAsync();
         try
         {
-            if (!_exited)
+            if (!Unavailable)
             {
                 await RunAsync($"refresh-client -C {cols}x{rows}");
             }

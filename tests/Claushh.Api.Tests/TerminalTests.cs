@@ -29,7 +29,8 @@ public sealed class TerminalTests(ApiFactory api) : ApiTest(api)
         var output = await tab.WaitForAsync(terminal.Id, "koniec");
         // No leading "\n" check: systemd's prompt hook (/etc/profile.d/80-systemd-osc-context.sh) writes an OSC 3008
         // sequence between the echoed command and its output.
-        Assert.Contains(Path.Join(Api.Services.GetRequiredService<ProjectPaths>().Root, "studia", "lab") + "\r\n", output);
+        Assert.Contains(Path.Join(Api.Services.GetRequiredService<ProjectPaths>().Root, "studia", "lab") + "\r\n", output,
+            StringComparison.Ordinal);
         Assert.Equal(new[] { terminal }, await tab.ListAsync());
     }
 
@@ -97,7 +98,7 @@ public sealed class TerminalTests(ApiFactory api) : ApiTest(api)
         var output = await tab.WaitForAsync(terminal.Id, "koniec");
         var seqs = tab.Outputs(terminal.Id).Select(o => o.Seq).ToArray();
         Assert.Equal(Enumerable.Range(1, seqs.Length).Select(i => (long)i), seqs);
-        Assert.Contains("\r\n3000\r\n", output);
+        Assert.Contains("\r\n3000\r\n", output, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -111,9 +112,9 @@ public sealed class TerminalTests(ApiFactory api) : ApiTest(api)
         var output = await tab.WaitForAsync(terminal.Id, "koniec");
         Assert.DoesNotContain("CLAUSHH_TEST_CANARY", output);
         Assert.DoesNotContain("ConnectionStrings", output);
-        Assert.Contains("COLORTERM=truecolor\r\n", output);
-        Assert.Contains($"HOME={Api.TerminalHome}\r\n", output);
-        Assert.Contains("TERM=tmux-256color\r\n", output);
+        Assert.Contains("COLORTERM=truecolor\r\n", output, StringComparison.Ordinal);
+        Assert.Contains($"HOME={Api.TerminalHome}\r\n", output, StringComparison.Ordinal);
+        Assert.Contains("TERM=tmux-256color\r\n", output, StringComparison.Ordinal);
     }
 
     [Fact]
