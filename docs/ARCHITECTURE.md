@@ -809,8 +809,10 @@ Terminal (`Terminal/`; the contract is in "Terminal"):
 - `Input`: `client` 1-64 characters, `seq` ≥ 1, `data` at most 4096 UTF-16 units, otherwise "Nieprawidłowa paczka";
   an unknown or exited terminal is skipped. Under the lock: a `client` whose last `Attach` was on another connection
   gets "Najpierw Attach na tym połączeniu"; a `seq` not above the last accepted is skipped; otherwise the UTF-8 bytes
-  go to the pane with `send-keys -H` (each byte as it is), at most 1024 per command, and `seq` is recorded. The last
-  `seq` and `Attach` connection of every `client` stay until the terminal is closed.
+  go to the pane with `send-keys -H` (each byte as it is), at most 1024 per command, and `seq` is recorded as soon as
+  the batch is written to tmux, before its replies: a reply can wait behind heavy output past the 10 s deadline, and the
+  batch the frontend then sends again with the same `seq` is not typed twice. The last `seq` and `Attach` connection of
+  every `client` stay until the terminal is closed.
 - `Resize`: clamped, then `refresh-client -C`; an unknown terminal is ignored; the last view to resize sets the size.
   tmux applies a pane's new size on its own timer, so the shell may still see the old size for up to about a quarter
   second after `Resize` returns.
