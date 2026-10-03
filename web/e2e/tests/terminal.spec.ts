@@ -320,6 +320,16 @@ test('OSC 8 links in the output are plain text that opens nothing', async ({ pag
   expect(opened).toBe(0);
 });
 
+test('the view does not answer terminal queries, tmux on the server does', async ({ page, request }) => {
+  await openTerminalTab(page);
+  await typeInTerminal(page, 'query');
+  await expectTerminalToContain(page, 'zapytano');
+  // A reply would be queued (onData) before these keys, so the inputs show it.
+  await typeInTerminal(page, 'echo po');
+  await expect.poll(() => terminalText(page)).toMatch(/^po\s*$/m);
+  expect(await terminalInputs(request)).toBe('query\recho po\r');
+});
+
 test('keys typed during an outage survive closing and reopening the terminal tab', async ({ page, request }) => {
   await openTerminalTab(page);
   await activeTerminal(page).locator('.xterm-screen').click();

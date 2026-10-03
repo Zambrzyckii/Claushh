@@ -360,6 +360,11 @@ Backend decisions (stage 4):
   quotes and control characters).
 - `Resize` of an unknown id and `CloseTerminal` of an unknown id are silent. Rejected: errors there (`Resize` is a
   `send`, and a second tab would keep a dead tab with "Nie udało się zamknąć terminala.").
+- The terminal view does not answer terminal queries; tmux answers the cursor position report, the mode report and
+  the colour queries in the pane and passes every query on to every view, so an answer from xterm would reach the
+  program once per open tab. The device attributes queries (DA1, DA2) get no answer at all: neither the view nor
+  tmux answers them. Rejected: filtering replies out of `Input` on the server (a cursor report and Ctrl+F3 are the
+  same bytes) and letting xterm answer them (garbage with two tabs).
 
 ### Limiting damage
 
@@ -420,7 +425,7 @@ The order is chosen so that only already secured things reach the internet.
         by the console, SignalR connection with session control.
   - [ ] Backend: hub `/hubs/console` from the contract in `ARCHITECTURE.md`, `claude` process with stream-json,
         permission requests through MCP (`--permission-prompt-tool`), storing conversations, resuming (`--resume`).
-- [ ] **Stage 4: git, terminal, workspaces.**
+- [x] **Stage 4: git, terminal, workspaces.**
   - [x] Frontend: Workspace panel (workspaces, repository table, Otwórz (open) / Pull / Push, creating a
         workspace, cloning), open repo in the URL, path and branch in the top bar, branch and number of changes
         in the status bar, git markers in the explorer, a separate console conversation for each repo.
@@ -428,7 +433,7 @@ The order is chosen so that only already secured things reach the internet.
         or duplicating output, size fitting, `exit`, Ctrl+S for the program in the terminal.
   - [x] Backend: workspaces and git API from the contract in `ARCHITECTURE.md` (LibGit2Sharp locally, the `git` CLI
         for the network, display names in the database, a background fetch at most every 5 minutes).
-  - [ ] Backend: hub `/hubs/terminal` from the contract in `ARCHITECTURE.md` (terminal: PTY + tmux).
+  - [x] Backend: hub `/hubs/terminal` from the contract in `ARCHITECTURE.md` (terminal: tmux in control mode).
 - [ ] **Stage 5: polish.**
   - [x] Frontend: session countdown with extension on activity, "Bezpieczeństwo" (security) dialog (active sessions,
         login history, "Wyloguj pozostałe sesje" (log out other sessions) and "Wyloguj wszędzie" (log out

@@ -759,6 +759,11 @@ function runCommand(terminal, line) {
     case 'link':
       // An OSC 8 link whose text pretends to be a different URL (the frontend disables such links).
       return '\x1b]8;;https://github-login.example/\x1b\\https://github.com/org/repo\x1b]8;;\x1b\\\r\n';
+    case 'query':
+      // Terminal queries, as a program sends them: a device attributes query (DA1), which gets no answer at all, and
+      // a cursor position query, which tmux answers on the server; the view must not answer either
+      // (docs/ARCHITECTURE.md, "Terminal").
+      return '\x1b[c\x1b[6n' + 'zapytano\r\n';
     default:
       return `bash: ${command}: command not found\r\n`;
   }

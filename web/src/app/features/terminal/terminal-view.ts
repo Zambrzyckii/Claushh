@@ -53,6 +53,7 @@ const PASTE_MARGIN = 16;
  * - questions are panels on the page, not `confirm` windows: those stop the page (including the session timer), and Chrome
  *   truncates long text in them without warning,
  * - OSC 8 links are disabled (the link text could pretend to be a different address),
+ * - terminal queries are left to tmux on the server, which answers some of them (an answer from every open view would reach the program),
  * - focus after attaching only when the user is not typing somewhere else at that time.
  */
 @Component({
@@ -253,6 +254,28 @@ export class TerminalView {
     // OSC 8 links disabled: the visible text ("https://github.com/…") could lead somewhere else.
     // A handler that returns `true` takes over the sequence, so xterm does not create a link. The text itself is displayed.
     term.parser.registerOscHandler(8, () => true);
+    // Terminal queries (device attributes, cursor position, modes, colours) are left to tmux on the server: it
+    // answers the cursor position report, the mode report and the colour queries, and passes every query on to every
+    // view, so xterm answering too would type one more reply per open tab into the program (e.g. "^[[<row>;<col>R"
+    // in vim). Device attributes get no answer at all (tmux does not answer them either), which is accepted: an
+    // answer from the view would have the same per-tab duplication problem. A handler that returns `true` takes the
+    // sequence over, so xterm sends nothing.
+    const queries = [
+      { final: 'c' },
+      { prefix: '>', final: 'c' },
+      { final: 'n' },
+      { prefix: '?', final: 'n' },
+      { intermediates: '$', final: 'p' },
+      { prefix: '?', intermediates: '$', final: 'p' }
+    ];
+    for (const query of queries) {
+      term.parser.registerCsiHandler(query, () => true);
+    }
+    term.parser.registerDcsHandler({ intermediates: '$', final: 'q' }, () => true);
+    // Colour queries ("?") only: setting a colour still works.
+    for (const colour of [4, 10, 11, 12]) {
+      term.parser.registerOscHandler(colour, (data) => data.split(';').includes('?'));
+    }
     term.open(host);
     this.term = term;
     this.fit = fit;

@@ -5,8 +5,8 @@ terminal and git in the browser. Runs on a home computer (EndeavourOS), access t
 login with a password and a TOTP code. One user.
 
 Status: **frontend ready (login and sessions, editor with a diff view, console, workspaces and git, terminal);
-backend: login, sessions and login protection (stage 1, parts A and B), the files API (stage 2), the workspaces and git
-API (stage 4).** Nothing is fit to be exposed to the internet.
+backend: login, sessions and login protection (stage 1, parts A and B), the files API (stage 2), the workspaces and
+git API and the terminal hub (stage 4).** Nothing is fit to be exposed to the internet.
 Progress: [`docs/PLAN.md`](docs/PLAN.md), section "Stages".
 
 ## Documentation
@@ -42,6 +42,12 @@ npm start
 
 The backend reads repositories with libgit2, which comes with the build. Repositories in the projects directory must
 belong to the user the API runs as: libgit2 refuses others, like git's safe.directory.
+
+The Terminal tab runs your login shell (your `SHELL`) as you, on a tmux server of the API's own (socket in
+`$XDG_RUNTIME_DIR/claushh`, apart from your own tmux), with only a few variables of the API's environment (HOME, USER,
+PATH, the locale): no connection string and no `ASPNETCORE_*`, `DOTNET_*` or `CLAUDECODE*`. Terminals end when the API
+stops, also on Ctrl+C. Open the portal at `http://localhost:4200`: hubs accept only the origins in
+`Hubs:AllowedOrigins` (`appsettings.Development.json`), so `http://127.0.0.1:4200` gets no terminal or console.
 
 Cloning, fetching and pulling a public repository needs no credential helper in development; pushing always needs
 credentials (also for a public repository), and the server's GitHub token is set up with the deployment.
