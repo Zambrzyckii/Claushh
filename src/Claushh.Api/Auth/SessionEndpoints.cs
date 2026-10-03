@@ -27,15 +27,26 @@ public static class SessionEndpoints
             s.Id, s.Id == current.Id, DeviceName.From(s.Device), s.Ip, s.CreatedAt, s.LastActivityAt)));
     }
 
-    private static async Task<IResult> RevokeOthers(HttpContext http, SessionService sessions, HubSessionSweep sweep)
+    private static async Task<IResult> RevokeOthers(HttpContext http, SessionService sessions, HubSessionSweep sweep,
+        ILoggerFactory loggers)
     {
         await sessions.RevokeOthersAsync(SessionAuthenticationHandler.Current(http), http.RequestAborted);
-        await sweep.RunOnceAsync(CancellationToken.None);
+        // A failure here must not turn the already-committed revocation into a 500: the 5 s timer closes the
+        // connections anyway.
+        try
+        {
+            await sweep.RunOnceAsync(CancellationToken.None);
+        }
+        catch (Exception e)
+        {
+            loggers.CreateLogger("Claushh.Api.Auth.RevokeOthers").LogError(e, "Closing hub connections after revoke-others failed");
+        }
         return Results.NoContent();
     }
 
     // 404 also for ended and expired sessions: the frontend reads it as "already gone" (auth.service.ts, endSession).
-    private static async Task<IResult> EndSession(Guid id, HttpContext http, SessionService sessions, HubSessionSweep sweep)
+    private static async Task<IResult> EndSession(Guid id, HttpContext http, SessionService sessions, HubSessionSweep sweep,
+        ILoggerFactory loggers)
     {
         var current = SessionAuthenticationHandler.Current(http);
         if (id == current.Id)
@@ -46,7 +57,15 @@ public static class SessionEndpoints
         {
             return Results.NotFound();
         }
-        await sweep.RunOnceAsync(CancellationToken.None);
+        // Same as above: a failure here must not turn the already-committed revocation into a 500.
+        try
+        {
+            await sweep.RunOnceAsync(CancellationToken.None);
+        }
+        catch (Exception e)
+        {
+            loggers.CreateLogger("Claushh.Api.Auth.EndSession").LogError(e, "Closing hub connections after ending a session failed");
+        }
         return Results.NoContent();
     }
 

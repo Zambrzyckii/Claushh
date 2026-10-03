@@ -1,5 +1,5 @@
 // The only place with session rules: a random secret with only its SHA-256 in the database, the idle and the absolute
-// deadline (docs/ARCHITECTURE.md, "Backend"). Endpoints, the handler and later the hubs call it.
+// deadline (docs/ARCHITECTURE.md, "Backend"). Endpoints, the handler and the hubs call it.
 using System.Buffers.Text;
 using System.Security.Cryptography;
 using Claushh.Api.Data;

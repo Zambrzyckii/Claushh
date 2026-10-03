@@ -9,6 +9,7 @@ using LibGit2Sharp;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -132,6 +133,9 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
             services.AddSingleton<TimeProvider>(Clock);
             services.AddSingleton<IStartupFilter, TestRemoteIp>();
             services.PostConfigure<GitOptions>(options => options.NetworkTimeout = _networkTimeout ?? options.NetworkTimeout);
+            // Nested inside HubSessionFilter (registered after it here), so HubConnectionTests can make the connect
+            // pipeline fail once the session check has passed (TestHubThrow).
+            services.Configure<HubOptions>(options => options.AddFilter<TestHubThrow>());
         });
     }
 

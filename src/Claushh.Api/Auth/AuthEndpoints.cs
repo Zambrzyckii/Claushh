@@ -100,7 +100,8 @@ public static class AuthEndpoints
     // so a late retry does not end a newer session (docs/ARCHITECTURE.md, "Authentication" → "Rules").
     // The body is read by hand: an inferred JSON body makes routing skip this endpoint for a POST without Content-Type,
     // and the catch-all /api route would answer 404.
-    private static async Task<IResult> Logout(HttpContext http, SessionService sessions, AuthCookies cookies, HubSessionSweep sweep)
+    private static async Task<IResult> Logout(HttpContext http, SessionService sessions, AuthCookies cookies, HubSessionSweep sweep,
+        ILoggerFactory loggers)
     {
         var session = SessionAuthenticationHandler.Current(http);
         LogoutRequest? body;
@@ -119,8 +120,17 @@ public static class AuthEndpoints
             return Results.Conflict();
         }
         await sessions.RevokeAsync(session.Id, session.UserId, http.RequestAborted);
-        // Its hub connections close now, not at the next sweep; also when the client has gone meanwhile.
-        await sweep.RunOnceAsync(CancellationToken.None);
+        // Its hub connections close now, not at the next sweep; also when the client has gone meanwhile. A failure
+        // here must not turn the already-committed revocation into a 500, or skip expiring the cookies: the 5 s timer
+        // closes the connections anyway.
+        try
+        {
+            await sweep.RunOnceAsync(CancellationToken.None);
+        }
+        catch (Exception e)
+        {
+            loggers.CreateLogger("Claushh.Api.Auth.Logout").LogError(e, "Closing hub connections after logout failed");
+        }
         cookies.ExpireAll(http.Response);
         return Results.NoContent();
     }

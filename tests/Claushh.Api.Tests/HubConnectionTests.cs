@@ -38,6 +38,15 @@ public sealed class HubConnectionTests(ApiFactory api) : ApiTest(api)
     }
 
     [Fact]
+    public async Task A_foreign_origin_without_a_session_is_403_not_401()
+    {
+        // The Origin check runs before authentication, so a request with neither still fails on the origin first.
+        var response = await SendHubAsync(HttpMethod.Get, "/hubs/terminal", "https://evil.example");
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
     public async Task A_session_and_an_allowed_origin_connect_over_a_websocket()
     {
         await Client.LoginAsOwnerAsync();
@@ -129,10 +138,48 @@ public sealed class HubConnectionTests(ApiFactory api) : ApiTest(api)
         // Past the idle deadline (Sessions:IdleTimeout, 30 minutes), with no sweep run by the test.
         Api.Clock.Advance(TimeSpan.FromMinutes(31));
 
-        // The text ("Sesja wygasła") or a closed connection: the abort and the error race (and so may the 5 s sweep).
+        // caller.Abort() in InvokeMethodAsync (HubSessionFilter.cs) runs before the HubException is written back, so
+        // the client observes a cancelled call rather than "Sesja wygasła": any exception, not a particular type.
         await Assert.ThrowsAnyAsync<Exception>(() => hub.InvokeAsync<JsonElement[]>("ListTerminals"));
 
         await closed.WaitAsync(CloseWait, TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task A_call_right_after_a_revocation_in_another_process_fails_and_closes_the_connection()
+    {
+        await Client.LoginAsOwnerAsync();
+        await using var hub = await TestHub.ConnectAsync(Api, Client);
+        var closed = TestHub.WhenClosed(hub);
+
+        // As create-user --reset-totp does in its own process: only the database changes, before any sweep runs.
+        await using (var scope = Api.Services.CreateAsyncScope())
+        {
+            var owner = await scope.ServiceProvider.GetRequiredService<UserManager<IdentityUser>>().FindByNameAsync(ApiFactory.UserName);
+            await scope.ServiceProvider.GetRequiredService<SessionService>().RevokeAllAsync(owner!.Id, TestContext.Current.CancellationToken);
+        }
+
+        // Same as above: the client sees the connection close, not the "Sesja wygasła" text.
+        await Assert.ThrowsAnyAsync<Exception>(() => hub.InvokeAsync<JsonElement[]>("ListTerminals"));
+
+        await closed.WaitAsync(CloseWait, TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task A_connection_that_fails_during_OnConnectedAsync_is_not_leaked_in_the_registry()
+    {
+        await Client.LoginAsOwnerAsync();
+        await using var hub = TestHub.Build(Api, Client, $"/hubs/terminal?{TestHubThrow.QueryParam}=1");
+        var closed = TestHub.WhenClosed(hub);
+
+        // The handshake (StartAsync) succeeds: SignalR runs OnConnectedAsync only after it. The server then closes the
+        // connection without ever calling OnDisconnectedAsync, which is exactly the leak this test pins.
+        await hub.StartAsync();
+        await closed.WaitAsync(CloseWait, TestContext.Current.CancellationToken);
+
+        Assert.Empty(Api.Services.GetRequiredService<HubConnections>().Sessions());
+        await Api.Services.GetRequiredService<HubSessionSweep>().RunOnceAsync(TestContext.Current.CancellationToken);
+        Assert.Empty(Api.Services.GetRequiredService<HubConnections>().Sessions());
     }
 
     [Fact]

@@ -738,11 +738,13 @@ Hubs (`Hubs/`, shared by every hub):
 - `HubSessionFilter`, a global hub filter: on connect it registers the connection under its session (claim
   `session_id`) and checks the session once; on every call it checks it again (`SessionService.IsActiveAsync`, one
   indexed query). An ended session: the connection is aborted (the client does not reconnect and checks the session
-  over HTTP) and the call fails with "Sesja wygasła". It never extends the session.
+  over HTTP) and the call fails with "Sesja wygasła". It never extends the session. A connection whose connect fails
+  (the check or the hub's own `OnConnectedAsync`) is removed from the registry right away, so it is not kept forever.
 - `HubSessionSweep` asks which registered sessions are still active (`SessionService.ActiveIdsAsync`, one query) and
   aborts the connections of the others: every 5 s (expiry, `create-user` in another process) and right after logout,
   ending another session and revoke-others in this process. Events sent to clients are not checked, so a connection of
-  an ended session can receive them until it is aborted: at once for an end in this process, within 5 s otherwise.
+  an ended session can receive them until it is aborted: at once for an end in this process, within 5 s otherwise. A
+  failure of that in-request sweep is logged and left to the 5 s timer, instead of failing the request.
 
 Commands (`dotnet run --project src/Claushh.Api -- <command>`, on the server `./Claushh.Api <command>`):
 

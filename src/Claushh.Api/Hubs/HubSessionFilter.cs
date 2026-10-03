@@ -18,13 +18,26 @@ public sealed class HubSessionFilter(HubConnections connections) : IHubFilter
             // Registered before the check: a session that ends between the two is still seen by the next sweep.
             connections.Add(id, context.Context);
         }
-        if (session is not { } active
-            || !await IsActiveAsync(context.ServiceProvider, active, context.Context.ConnectionAborted))
+        try
         {
-            context.Context.Abort();
-            return;
+            if (session is not { } active
+                || !await IsActiveAsync(context.ServiceProvider, active, context.Context.ConnectionAborted))
+            {
+                context.Context.Abort();
+                return;
+            }
+            await next(context);
         }
-        await next(context);
+        catch
+        {
+            // The check or next(context) failed (cancellation, a database error, the hub's own OnConnectedAsync):
+            // SignalR never calls OnDisconnectedAsync in that case, so the entry would otherwise stay forever.
+            if (session is { } registered)
+            {
+                connections.Remove(registered, context.Context);
+            }
+            throw;
+        }
     }
 
     public async ValueTask<object?> InvokeMethodAsync(HubInvocationContext invocationContext,
