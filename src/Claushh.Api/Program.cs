@@ -4,6 +4,7 @@ using Claushh.Api.Data;
 using Claushh.Api.Files;
 using Claushh.Api.Git;
 using Claushh.Api.Hubs;
+using Claushh.Api.Terminal;
 using Claushh.Api.Workspaces;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
@@ -68,6 +69,11 @@ builder.Services.AddSingleton<HubSessionSweep>();
 builder.Services.AddHostedService(services => services.GetRequiredService<HubSessionSweep>());
 // For every hub: the session on connect and on every call (docs/ARCHITECTURE.md, "Backend" → "Hubs").
 builder.Services.AddSignalR(options => options.AddFilter<HubSessionFilter>());
+builder.Services.Configure<TerminalOptions>(builder.Configuration.GetSection("Terminal"));
+builder.Services.AddSingleton<TmuxServer>();
+builder.Services.AddSingleton<Terminals>();
+// Prepares the tmux server at start and ends it on a stop; create-user never starts the host, so it never runs this.
+builder.Services.AddHostedService(services => services.GetRequiredService<Terminals>());
 builder.Services.AddAuthentication(SessionAuthenticationHandler.SchemeName)
     .AddScheme<AuthenticationSchemeOptions, SessionAuthenticationHandler>(SessionAuthenticationHandler.SchemeName, _ => { });
 // Closed by default: an endpoint without .AllowAnonymous() requires a session.

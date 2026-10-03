@@ -49,7 +49,7 @@ Devices: mainly laptop and PC. The phone is secondary.
 | Database | PostgreSQL 17 in Docker (pinned version, only `127.0.0.1`), EF Core + Npgsql |
 | Frontend | Angular, Monaco (`ngx-monaco-editor-v2`), xterm.js, `@microsoft/signalr` |
 | Console | process `claude -p --output-format stream-json --input-format stream-json` |
-| Terminal | PTY (Pty.Net) + tmux, so that sessions survive closing the tab |
+| Terminal | tmux in control mode (`tmux -C`), no PTY package; terminals end with the API |
 | Git | LibGit2Sharp for everything local (status, branches, HEAD content), the git CLI for clone, fetch, pull and push |
 | Access from outside | Cloudflare Tunnel (+ optionally Cloudflare Access) |
 
@@ -331,6 +331,27 @@ Backend decisions (stage 4):
   ended session receives them until it is aborted (at once, or within 5 s for an end in another process). Rejected: a
   timer per connection (blind to another process) and `SessionService` calling the hubs (the session rules would depend
   on the hubs).
+- Terminal engine: tmux in control mode (`tmux -C` over pipes), one tmux session and one control client per terminal,
+  all on the API's own tmux server; tmux 3.7 or later (control clients size their sessions from 3.3,
+  `bracket_paste_flag` from 3.7). Rejected: a PTY package attaching a normal tmux client (its output is tmux's
+  re-render, so a snapshot and `seq` cannot be taken together; `Pty.Net` is a 2018 prerelease) and one control client
+  for all terminals (one stuck terminal would stall the others).
+- Terminals end with the API: at start the API ends what is left of its tmux server, on a graceful stop it ends it.
+  Rejected for now: surviving restarts (a tmux server in its own unit, sessions adopted at start, `seq` restarting);
+  restarts are rare, and it can come later without a contract change.
+- The tmux server's socket and configuration live in `Terminal:SocketDirectory` (mode 0700, default
+  `$XDG_RUNTIME_DIR/claushh`), with the API's own configuration. Rejected: tmux's default socket (shared with the
+  owner's own tmux, which the start-time `kill-server` would end).
+- Only an allowlist of the API's environment reaches tmux and the shell (HOME, USER, LOGNAME, SHELL, PATH, LANG,
+  LANGUAGE, LC_*, TZ), plus `COLORTERM=truecolor` and `Terminal:Environment`. Rejected: removing a denylist (any new
+  variable would leak). The shell runs as the API's user; a separate user for it is left to the deployment stage.
+- The shell starts in the real path of `projectPath` (a directory checked by `ProjectPaths`); the shell itself is not
+  confined, which is the sandbox's job. Ids are new GUIDs, titles unique with the smallest free " (k)", at most 20
+  terminals. Rejected: the mock's `t<n>` ids and count-based titles (they repeat after a restart or a close).
+- Output gets `seq` in the API, one per non-empty decoded piece of `%output`, and the reader waits for each send.
+  Rejected: a queue per terminal (unbounded memory, or a second kind of back-pressure).
+- `exitCode` is always `null`: the end of the control client's output marks the exit. Rejected: `remain-on-exit on`
+  with a subscription for the code (it relies on notifications a tmux bug sent inside command replies).
 
 ### Limiting damage
 
@@ -353,7 +374,7 @@ and do not save the password in the browser. The password alone without the TOTP
 
 ## Deployment on EndeavourOS
 
-- Packages: `dotnet-sdk`, `aspnet-runtime`, `cloudflared`, `docker`, `git`, `tmux`, the `claude` CLI.
+- Packages: `dotnet-sdk`, `aspnet-runtime`, `cloudflared`, `docker`, `git`, `tmux` (3.7 or later), the `claude` CLI.
 - A `workspace` user with its own home directory, cloned dotfiles, a logged-in `claude`
   and a configured `git`. Projects in `/srv/projects`.
 - API as a systemd service (self-contained build, so that system updates do not break it).

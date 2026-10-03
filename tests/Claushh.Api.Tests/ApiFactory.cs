@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Text;
 using Claushh.Api.Data;
 using Claushh.Api.Git;
+using Claushh.Api.Terminal;
 using Claushh.Api.Workspaces;
 using LibGit2Sharp;
 using Microsoft.AspNetCore.Hosting;
@@ -84,6 +85,11 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     // ~/.gitconfig (signing, hooks, autocrlf) reaches neither the test repositories nor the API.
     public string GitHome { get; } = Directory.CreateTempSubdirectory("claushh-git-home-").FullName;
 
+    // The API's tmux directory (Terminal:SocketDirectory) and the shell's HOME, both temporary, so the owner's own tmux
+    // and dotfiles stay out of the tests.
+    public string TmuxDirectory { get; } = Directory.CreateTempSubdirectory("claushh-tmux-").FullName;
+    public string TerminalHome { get; } = Directory.CreateTempSubdirectory("claushh-home-").FullName;
+
     // Bare repositories that stand in for GitHub, and clones of them "on another computer"; emptied before every test.
     public string RemotesRoot { get; } = Directory.CreateTempSubdirectory("claushh-remotes-").FullName;
 
@@ -102,6 +108,10 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     public ApiFactory()
     {
         Git = new TestGit(this);
+        // Never read by the API: the terminal tests check that they do not reach a shell. In production the API's
+        // environment holds ConnectionStrings__Claushh.
+        Environment.SetEnvironmentVariable("CLAUSHH_TEST_CANARY", "leak");
+        Environment.SetEnvironmentVariable("ConnectionStrings__Canary", "leak");
         // libgit2 keeps these per process, and the API runs in this one.
         foreach (var level in new[] { ConfigurationLevel.Global, ConfigurationLevel.Xdg, ConfigurationLevel.System })
         {
@@ -127,6 +137,9 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         builder.UseSetting("ConnectionStrings:Claushh", _db.GetConnectionString());
         builder.UseSetting("Projects:Root", ProjectsRoot);
         builder.UseSetting("Hubs:AllowedOrigins:0", TestHub.Origin);
+        builder.UseSetting("Terminal:SocketDirectory", TmuxDirectory);
+        builder.UseSetting("Terminal:Environment:SHELL", "/bin/sh");
+        builder.UseSetting("Terminal:Environment:HOME", TerminalHome);
         builder.UseSetting("Git:Environment:GIT_CONFIG_GLOBAL", GitConfig);
         builder.ConfigureTestServices(services =>
         {
@@ -145,6 +158,8 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     // default) the owner with TOTP enabled.
     public async Task ResetAsync(bool withUser = true)
     {
+        // The previous test's terminals end, and with the last one the tmux server.
+        await Services.GetRequiredService<Terminals>().CloseAllAsync();
         // A fetch the previous test started in the background must not touch this test's repositories.
         await Services.GetRequiredService<BackgroundFetch>().ResetAsync();
         // Directory.Delete removes symlinks without following them, so link targets outside stay untouched.
@@ -185,11 +200,34 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         await db.SaveChangesAsync();
     }
 
+    // tmux on the test run's server, for what the hub does not offer (typing without Input, has-session). Its environment
+    // is minimal, so nothing of this process reaches a server such a command might start.
+    public (int ExitCode, string Output) Tmux(params string[] arguments)
+    {
+        var start = new ProcessStartInfo("tmux") { RedirectStandardOutput = true, RedirectStandardError = true };
+        foreach (var argument in new[] { "-S", Path.Join(TmuxDirectory, "tmux.sock") }.Concat(arguments))
+        {
+            start.ArgumentList.Add(argument);
+        }
+        start.Environment.Clear();
+        start.Environment["PATH"] = Environment.GetEnvironmentVariable("PATH");
+        start.Environment["HOME"] = TerminalHome;
+        start.Environment["LANG"] = "C.UTF-8";
+        using var tmux = Process.Start(start)!;
+        tmux.ErrorDataReceived += (_, _) => { };
+        tmux.BeginErrorReadLine();
+        var output = tmux.StandardOutput.ReadToEnd();
+        tmux.WaitForExit();
+        return (tmux.ExitCode, output);
+    }
+
     public override async ValueTask DisposeAsync()
     {
         await base.DisposeAsync();
         await _db.DisposeAsync();
         Directory.Delete(ProjectsRoot, recursive: true);
+        Directory.Delete(TmuxDirectory, recursive: true);
+        Directory.Delete(TerminalHome, recursive: true);
         Directory.Delete(RemotesRoot, recursive: true);
         Directory.Delete(GitHome, recursive: true);
     }

@@ -20,7 +20,7 @@ Progress: [`docs/PLAN.md`](docs/PLAN.md), section "Stages".
 ## Running in development
 
 Requirements: Linux for the backend, .NET 10 SDK, Node.js 22.12+ (npm 11), Docker, git (the API runs it for clone,
-fetch, pull and push).
+fetch, pull and push), tmux 3.7 or later (the terminal; dotnet test needs it too).
 
 ```bash
 # database

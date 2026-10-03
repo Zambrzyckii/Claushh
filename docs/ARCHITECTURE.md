@@ -19,7 +19,7 @@ Cloudflare Tunnel                       [stage 1]
 ASP.NET Core API (src/Claushh.Api)
    ├─ PostgreSQL (deploy/docker-compose.yml, localhost only)    [stage 1]
    ├─ files / git  → /srv/projects                              [stage 2, 4]
-   ├─ terminal     → PTY + tmux                                 [stage 4]
+   ├─ terminal     → tmux in control mode (tmux -C)              [stage 4]
    └─ console      → `claude` process (stream-json)             [stage 3]
 ```
 
@@ -41,7 +41,8 @@ to the API at `http://localhost:5080` (`web/proxy.conf.json`).
 | `src/Claushh.Api/Workspaces/` | workspaces: `Workspace` (entity: display name and creation time), `WorkspaceNames` (the name rule and the directory made from a name), `CloneUrl` (the frontend's clone URL rule in .NET terms), `WorkspaceStore` (what a workspace is, the list in display order, creating one), `WorkspaceEndpoints` (`/api/workspaces`, `/api/repos`, `/api/repos/clone`) |
 | `src/Claushh.Api/Git/` | git: `Repositories` (what a repository is and its state, read with LibGit2Sharp: the repository list, the status, HEAD content), `GitOptions` (`Git:NetworkTimeout`, `Git:Environment:*`), `GitRunner` (the git CLI: safety options, environment through `ChildEnvironment`, output, time limits, killing the process tree), `RepoLocks` (one lock per repository), `BackgroundFetch` (the fetch after `GET /api/repos`, at most every 5 minutes per repository), `GitEndpoints` (`/api/git/*`: status, show, pull, push) |
 | `src/Claushh.Api/Hubs/` | SignalR hubs and what they share: `HubsOptions` (`Hubs:AllowedOrigins`), `HubOrigins` (the Origin check for `/hubs`), `HubSessionFilter` (the session on connect and on every call, never extended), `HubConnections` (open connections by session), `HubSessionSweep` (closes the connections of ended sessions every 5 s and right after a logout or revocation), `TerminalHub` (`/hubs/terminal`) |
-| `src/Claushh.Api/Processes/` | `ChildEnvironment` (a clean, allowlisted environment for a child process: `GitRunner` today, the terminal's PTY still to come) |
+| `src/Claushh.Api/Terminal/` | terminal: `TerminalOptions` (`Terminal:SocketDirectory`, `Terminal:Environment`), `TmuxServer` (the API's own tmux server: version check, socket and configuration, tmux processes with the allowlisted environment), `TmuxControlClient` (one `tmux -C`: its output read as bytes, replies matched to commands), `TerminalSession` (one terminal: output with `seq`), `Terminals` (the terminals in creation order, titles, the limit; prepares and ends the tmux server) |
+| `src/Claushh.Api/Processes/` | `ChildEnvironment` (a clean, allowlisted environment for a child process: `GitRunner` and the terminal) |
 | `dotnet-tools.json` | local .NET tools: `dotnet-ef` (`dotnet tool restore`) |
 | `tests/Claushh.Api.Tests/` | backend integration tests: xUnit, the API in memory (`WebApplicationFactory`), PostgreSQL 17 from Testcontainers (`ApiFactory`) |
 | `global.json` | `dotnet test` runs on Microsoft.Testing.Platform (required by xUnit v3 on the .NET 10 SDK) |
@@ -611,6 +612,8 @@ Configuration:
 | `Git:NetworkTimeout` | `appsettings.json` (`00:01:40`) | the one deadline of a clone, pull or push request, lock wait included, and of a background fetch; at it the git process tree is killed (502) |
 | `Hubs:AllowedOrigins` | `appsettings.json` (empty: every hub request is refused), `appsettings.Development.json` (`http://localhost:4200`, `http://localhost:5080`) | the exact Origin values (scheme, host, port) a hub request may carry, compared ordinally |
 | `Git:Environment:*` | not set by default | extra variables for the git CLI's environment (`ChildEnvironment`'s overrides in `GitRunner.StartInfo`), e.g. for a credential helper's configuration |
+| `Terminal:SocketDirectory` | not set: `$XDG_RUNTIME_DIR/claushh`; server: `/run/claushh` (deployment) | the directory of the API's tmux socket and configuration, created with mode 0700; the socket path must fit in 107 bytes. Without it and without `XDG_RUNTIME_DIR` the terminal is unavailable |
+| `Terminal:Environment:<NAME>` | none (tests: `SHELL`, `HOME`) | variables for tmux and the shell on top of the allowlisted environment |
 
 Sessions (`Auth/`):
 - Table `Sessions`: public `Id` (the `sessionId` of `/me`, constant for the life of the session), `SecretHash`
@@ -747,6 +750,34 @@ Hubs (`Hubs/`, shared by every hub):
   an ended session can receive them until it is aborted: at once for an end in this process, within 5 s otherwise. A
   failure of that in-request sweep is logged and left to the 5 s timer, instead of failing the request.
 
+Terminal (`Terminal/`; the contract is in "Terminal"):
+- tmux 3.7 or later in control mode (`tmux -C`, stdin and stdout as pipes), no PTY. The API runs its own tmux server on
+  `<Terminal:SocketDirectory>/tmux.sock` with its own `tmux.conf` there (`history-limit 5000`, as the xterm scrollback;
+  `remain-on-exit off`; `detach-on-destroy on`; `status off`; `default-terminal tmux-256color`), so the user's
+  `~/.tmux.conf` and own tmux sessions stay apart. At start (a hosted service, so `create-user` never runs it) the API
+  checks `tmux -V`, writes the configuration and ends a server a previous run left (`kill-server`); on a graceful stop
+  (also Ctrl+C on `dotnet run`) it closes every terminal and ends the server. Terminals do not survive a restart.
+  Without tmux 3.7, or without `Terminal:SocketDirectory` and `XDG_RUNTIME_DIR`, the error log says so,
+  `ListTerminals` is empty and the other methods answer "Terminal niedostępny"; the rest of the API works.
+- Every tmux process gets only HOME, USER, LOGNAME, SHELL, PATH, LANG, LANGUAGE, LC_* and TZ of the API's environment
+  (`Processes/ChildEnvironment`), `LANG=C.UTF-8` when no locale variable is set, `COLORTERM=truecolor`, then
+  `Terminal:Environment`: the shell never sees the connection string, `ASPNETCORE_*`, `DOTNET_*` or `CLAUDECODE*`. The
+  shell is the login shell from SHELL and runs as the API's user.
+- A terminal is the tmux session `claushh-<id>` (`id`: a new GUID as 32 hex digits) in the real path of `projectPath`,
+  which must be a directory (`ProjectPaths`), and one control client for its whole life. Its title is the last segment
+  of `projectPath` or "projekty", plus " (k)" with the smallest free k from 2. At most 20 terminals, exited ones
+  included; sizes are clamped to 10..1000 columns and 2..500 rows.
+- Output: the `%output` lines of the terminal's pane, tmux's octal escapes undone, one UTF-8 decoder per terminal (a
+  character split between lines is kept, invalid bytes become U+FFFD). Every non-empty piece is a `TerminalOutput` to
+  all connections with `seq` + 1 from 1. The reader waits for each send, so every connection gets the order and a slow
+  browser slows the terminal instead of filling memory.
+- Commands go to the control client one line at a time and are matched to tmux's `%begin`…`%end`/`%error` blocks in
+  order; inside a block a line starting with `%` is pane text. Each command has 10 s ("Terminal nie odpowiada"); a late
+  reply still takes its own command's place.
+- The end of the control client's output (the shell exited and its session closed, or tmux went away) marks the
+  terminal exited and sends `TerminalExited` with `exitCode: null`; it stays listed until closed. `CloseTerminal` takes
+  it off the list first (no event), then runs `kill-session`; an unknown id is no error.
+
 Commands (`dotnet run --project src/Claushh.Api -- <command>`, on the server `./Claushh.Api <command>`):
 
 | Command | What it does |
@@ -763,9 +794,9 @@ Migrations: `dotnet tool restore`, then
 
 Folders in `src/Claushh.Api/` (each is created together with the code it concerns). Existing: `Auth/` (Identity, TOTP,
 sessions), `Data/` (DbContext, migrations), `Files/` (files API and path protection), `Workspaces/` (workspaces),
-`Git/` (repositories and git), `Processes/` (a clean child environment, shared by git and, later, the terminal),
-`Hubs/` (SignalR hubs: the Origin check, the session check, the terminal hub).
-Planned: `Console/` (the `claude` process, MCP for permissions), `Terminal/` (PTY, tmux).
+`Git/` (repositories and git), `Processes/` (a clean child environment, shared by git and the terminal),
+`Hubs/` (SignalR hubs: the Origin check, the session check, the terminal hub), `Terminal/` (tmux, the terminals).
+Planned: `Console/` (the `claude` process, MCP for permissions).
 
 ## Frontend
 
@@ -789,7 +820,7 @@ Rules: `CLAUDE.md`, section "Tests" (new code: only integration and e2e tests).
 |---|---|---|
 | Integration + older unit | `cd web && npm test` | Vitest (jsdom). Integration: `console.integration.spec.ts` (panel + store + editor, SignalR and HTTP stubbed; also permission requests: hidden characters, button delay, "tak, zawsze", and a double Enter), `workspaces.integration.spec.ts` (Workspace panel + router + git status + explorer + editor, HTTP stubbed; also the strict clone URL validation), `security.integration.spec.ts` (AuthService + interceptor + SessionTimer + the "Bezpieczeństwo" window, HTTP, reload and clock stubbed; also expiry without a server response), `logout-confirmation.integration.spec.ts` (routes with guards + AuthService + login screen after an unconfirmed logout, also with a newer session from another tab). Older unit tests: auth, files API, paths, explorer, `EditorStore` |
 | E2E | `cd web && npm run e2e` | build + Playwright in Chromium on `e2e/mock-api/server.mjs`: login and sessions (including unconfirmed logout with "Back", a new tab and logging in again, embedding in a frame, Trusted Types), explorer and Monaco, console (steps, options, permissions, "tak, zawsze", interrupt, replay, multiple tabs, file changes), workspaces (opening a repo, git status, pull, push, create, clone, a conversation per repo), terminal (commands, keys, reload without duplicates, multiple terminals, `exit`, Ctrl+S, resizing, pasting with the decision panel, characters on a dropped connection without loss or duplication, also after closing the tab, queue limit, focus, OSC 8 links), session (countdown, "Przedłuż", activity once a minute on a fake clock, expiry, also without a server response and hubs closed by the server), the "Bezpieczeństwo" window with a second device (a separate browser context), diff view, Monaco worker startup, mock robustness and the contract rules that the frontend does not let through (clone URL, XSRF token bound to the identity, saving like the files API: `absent`, 5 MB, a NUL character, workspace, repo and path parameters). **Every test** (`fixtures.ts`) fails when the page reports a CSP or Trusted Types violation, an unhandled exception (including one caught by Angular's ErrorHandler, `console.error('ERROR', …)`) or Monaco does not create a worker |
-| Backend | `dotnet test` (needs Docker) | xUnit integration tests over HTTP (`WebApplicationFactory`, PostgreSQL 17 from Testcontainers, a test clock): login and its failures, `me`, `keepalive` and both deadlines, logout and 409, ending another session, XSRF token bound to the session, `no-store`, closed `/api/*`, `create-user`, TOTP codes used once, the limit per IP, the account lockout and its growth, session list, `revoke-others`, login history, cleanup, the password reset, the files API (listing, symlinks, `.git`, reading, saving, conflicts, re-creating a deleted file, limits, text rules, file modes, long names, two saves at once, empty error bodies), workspaces and git (the repository list and its order, what is and is not a repository, every git status, ahead and behind, HEAD content with a checkout's line endings and the files API's limits), workspaces (the list and its order, names and directories, creating, a stale row), cloning (every refused URL, git's own errors, the time limit against a server that never answers, only https), pull and push (every answer, both paths of a rename, a branch without commits, two pulls at once, a hook that refuses, only https), the background fetch (every 5 minutes by the test clock, a pull or push taking the repository from a fetch that hangs), the hubs (session and Origin on the WebSocket, WebSockets only, connections closed on logout, ending a session, revoke-others, expiry and a revocation by another process, hub calls never extending the session); needs the git CLI ≥ 2.45 (`--ref-format=reftable`) |
+| Backend | `dotnet test` (needs Docker) | xUnit integration tests over HTTP (`WebApplicationFactory`, PostgreSQL 17 from Testcontainers, a test clock): login and its failures, `me`, `keepalive` and both deadlines, logout and 409, ending another session, XSRF token bound to the session, `no-store`, closed `/api/*`, `create-user`, TOTP codes used once, the limit per IP, the account lockout and its growth, session list, `revoke-others`, login history, cleanup, the password reset, the files API (listing, symlinks, `.git`, reading, saving, conflicts, re-creating a deleted file, limits, text rules, file modes, long names, two saves at once, empty error bodies), workspaces and git (the repository list and its order, what is and is not a repository, every git status, ahead and behind, HEAD content with a checkout's line endings and the files API's limits), workspaces (the list and its order, names and directories, creating, a stale row), cloning (every refused URL, git's own errors, the time limit against a server that never answers, only https), pull and push (every answer, both paths of a rename, a branch without commits, two pulls at once, a hook that refuses, only https), the background fetch (every 5 minutes by the test clock, a pull or push taking the repository from a fetch that hangs), the hubs (session and Origin on the WebSocket, WebSockets only, connections closed on logout, ending a session, revoke-others, expiry and a revocation by another process, hub calls never extending the session), the terminal (opening in a directory by its real path, titles, refused paths, the limit, output seq without gaps, the allowlisted environment, exit, close, the start routine); needs the git CLI ≥ 2.45 (`--ref-format=reftable`) |
 
 Backend tests make repositories with the git CLI (`tests/Claushh.Api.Tests/TestGit.cs`): a fixed identity and date,
 `HOME` set to a temporary directory so the machine's `~/.gitconfig` stays out (libgit2's configuration search paths
@@ -803,6 +834,11 @@ starts directly, independently of this. Tests shorten `Git:NetworkTimeout` with 
 (`BackgroundFetch.ResetAsync`).
 Hub tests connect with the SignalR .NET client over the in-memory server's WebSocket (`tests/Claushh.Api.Tests/TestHub.cs`):
 WebSocket only, no negotiation, the browser's cookies and Origin: `https://localhost` (`Hubs:AllowedOrigins` in the tests).
+From the terminal on, `dotnet test` needs tmux 3.7 or later on PATH. `ApiFactory` gives the API a tmux directory and a
+HOME in temporary directories and `/bin/sh` as the shell, and sets `CLAUSHH_TEST_CANARY` and `ConnectionStrings__Canary`
+in the test process (the terminal tests check that they never reach the shell). `ApiFactory.ResetAsync` closes every
+terminal. `TestTerminal` is a browser tab on `/hubs/terminal`; tests that type before `Input` exists in them use the
+tmux CLI on the test server (`ApiFactory.Tmux`).
 
 Notes on e2e:
 - The mock has one shared state, the tests run sequentially and start with `POST /__test/reset`. It listens only on
