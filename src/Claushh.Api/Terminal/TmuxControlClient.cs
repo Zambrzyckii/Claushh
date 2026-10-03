@@ -57,7 +57,10 @@ public sealed class TmuxControlClient : IAsyncDisposable
     public async Task<TmuxReply[]> RunAsync(string text, int commands = 1)
     {
         var replies = new TaskCompletionSource<TmuxReply>[commands];
-        await _write.WaitAsync();
+        if (!await _write.WaitAsync(TmuxServer.CommandTimeout))
+        {
+            throw new HubException(TmuxServer.Unresponsive);
+        }
         try
         {
             // Queued under the write lock, so the queue has the order in which tmux reads the commands.
@@ -72,8 +75,29 @@ public sealed class TmuxControlClient : IAsyncDisposable
                     _waiting.Enqueue(replies[i] = NewReply());
                 }
             }
-            await _process.StandardInput.WriteAsync(text + "\n");
-            await _process.StandardInput.FlushAsync();
+            try
+            {
+                await _process.StandardInput.WriteAsync(text + "\n").WaitAsync(TmuxServer.CommandTimeout);
+                await _process.StandardInput.FlushAsync().WaitAsync(TmuxServer.CommandTimeout);
+            }
+            catch (TimeoutException)
+            {
+                // Cut off mid-line: tmux would read a corrupt command, so the control channel is no longer usable.
+                // Killing the process ends the reader, which fails every waiting command (including this one).
+                lock (_waiting)
+                {
+                    _ended = true;
+                }
+                try
+                {
+                    _process.Kill();
+                }
+                catch (InvalidOperationException)
+                {
+                    // It exited in the meantime.
+                }
+                throw new HubException(TmuxServer.Unresponsive);
+            }
         }
         catch (Exception e) when (e is IOException or ObjectDisposedException)
         {

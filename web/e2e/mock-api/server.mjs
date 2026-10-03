@@ -777,7 +777,7 @@ function terminalInput(terminal, data) {
         terminalEmit(terminal, '\r\nlogout\r\n');
         terminal.exited = true;
         for (const ws of state.terminalSockets) {
-          send(ws, { type: 1, target: 'TerminalExited', arguments: [{ id: terminal.id, exitCode: 0 }] });
+          send(ws, { type: 1, target: 'TerminalExited', arguments: [{ id: terminal.id, exitCode: null }] });
         }
         return;
       }
@@ -858,7 +858,8 @@ async function invokeTerminal(target, args, ws) {
       terminal?.sizes.push([request.cols, request.rows]);
       return null;
     case 'CloseTerminal':
-      if (!terminal) throw new Error('Nieznany terminal');
+      // An unknown id is not an error: another tab may have closed the terminal already (contract, "Terminal").
+      if (!terminal) return null;
       state.terminals.delete(request.id);
       state.log.push({ path: 'terminal-close', id: request.id });
       return null;

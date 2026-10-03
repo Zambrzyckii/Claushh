@@ -93,6 +93,25 @@ test('several terminals can be opened, switched and closed', async ({ page, requ
   expect((await mockState(request)).log.filter((l) => l.path === 'terminal-close')).toHaveLength(1);
 });
 
+test('a terminal already closed in another tab closes there without an error', async ({ page, request }) => {
+  await openTerminalTab(page);
+  await expect(tabs(page)).toHaveText(['projekty']);
+  const other = await page.context().newPage();
+  await other.goto('/');
+  await openTerminalTab(other);
+  await expect(tabs(other)).toHaveText(['projekty']);
+
+  page.once('dialog', (dialog) => dialog.accept());
+  await page.getByRole('button', { name: 'Zamknij terminal projekty' }).click();
+  await expect(tabs(page)).toHaveCount(0);
+
+  other.once('dialog', (dialog) => dialog.accept());
+  await other.getByRole('button', { name: 'Zamknij terminal projekty' }).click();
+  await expect(tabs(other)).toHaveCount(0);
+  await expect(other.locator('app-terminal-panel').getByRole('alert')).toHaveCount(0);
+  expect((await mockState(request)).log.filter((l) => l.path === 'terminal-close')).toHaveLength(1);
+});
+
 test('exit ends the shell and the tab closes without asking', async ({ page }) => {
   await openTerminalTab(page);
   await typeInTerminal(page, 'exit');

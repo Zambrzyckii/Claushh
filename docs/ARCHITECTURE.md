@@ -6,7 +6,7 @@ or dependency, update the relevant section.
 
 Status: frontend done (login, session countdown and the "Bezpieczeństwo" (Security) window, explorer, editor with diff view,
 console, workspaces and git, terminal). The backend has login, sessions, login protection, the files API (listing,
-reading and saving) and the workspaces and git API (section "Backend"); the console and terminal hubs are still only in the mock.
+reading and saving), the workspaces and git API and the terminal hub (section "Backend"); the console hub is still only in the mock.
 The frontend is tested against a mock backend (`web/e2e/mock-api/`) that follows the contracts below.
 
 ## Flow
@@ -41,7 +41,7 @@ to the API at `http://localhost:5080` (`web/proxy.conf.json`).
 | `src/Claushh.Api/Workspaces/` | workspaces: `Workspace` (entity: display name and creation time), `WorkspaceNames` (the name rule and the directory made from a name), `CloneUrl` (the frontend's clone URL rule in .NET terms), `WorkspaceStore` (what a workspace is, the list in display order, creating one), `WorkspaceEndpoints` (`/api/workspaces`, `/api/repos`, `/api/repos/clone`) |
 | `src/Claushh.Api/Git/` | git: `Repositories` (what a repository is and its state, read with LibGit2Sharp: the repository list, the status, HEAD content), `GitOptions` (`Git:NetworkTimeout`, `Git:Environment:*`), `GitRunner` (the git CLI: safety options, environment through `ChildEnvironment`, output, time limits, killing the process tree), `RepoLocks` (one lock per repository), `BackgroundFetch` (the fetch after `GET /api/repos`, at most every 5 minutes per repository), `GitEndpoints` (`/api/git/*`: status, show, pull, push) |
 | `src/Claushh.Api/Hubs/` | SignalR hubs and what they share: `HubsOptions` (`Hubs:AllowedOrigins`), `HubOrigins` (the Origin check for `/hubs`), `HubSessionFilter` (the session on connect and on every call, never extended), `HubConnections` (open connections by session), `HubSessionSweep` (closes the connections of ended sessions every 5 s and right after a logout or revocation), `TerminalHub` (`/hubs/terminal`) |
-| `src/Claushh.Api/Terminal/` | terminal: `TerminalOptions` (`Terminal:SocketDirectory`, `Terminal:Environment`), `TmuxServer` (the API's own tmux server: version check, socket and configuration, tmux processes with the allowlisted environment), `TmuxControlClient` (one `tmux -C`: its output read as bytes, replies matched to commands), `TerminalSession` (one terminal: output with `seq`), `Terminals` (the terminals in creation order, titles, the limit; prepares and ends the tmux server) |
+| `src/Claushh.Api/Terminal/` | terminal: `TerminalOptions` (`Terminal:SocketDirectory`, `Terminal:Environment`), `TmuxServer` (the API's own tmux server: version check, socket and configuration, tmux processes with the allowlisted environment), `TmuxControlClient` (one `tmux -C`: its output read as bytes, replies matched to commands), `TerminalSession` (one terminal: output with `seq`, Attach, Input, Resize), `TerminalSnapshot` (the Attach text), `Terminals` (the terminals in creation order, titles, the limit; prepares and ends the tmux server) |
 | `src/Claushh.Api/Processes/` | `ChildEnvironment` (a clean, allowlisted environment for a child process: `GitRunner` and the terminal) |
 | `dotnet-tools.json` | local .NET tools: `dotnet-ef` (`dotnet tool restore`) |
 | `tests/Claushh.Api.Tests/` | backend integration tests: xUnit, the API in memory (`WebApplicationFactory`), PostgreSQL 17 from Testcontainers (`ApiFactory`) |
@@ -541,11 +541,13 @@ Security requirements for the backend:
 - Font: first `JetBrainsMono Nerd Font` (icons from the dotfiles prompt, if the font is installed
   on the device), then `JetBrains Mono` and monospace.
 
-### `/hubs/terminal` hub contract (to be implemented in the backend)
+### `/hubs/terminal` hub contract
 
 Connection as in the console: SignalR, WebSocket only, no negotiation, JSON, requires a session and an `Origin` check,
 the session is checked on every call, and connections are closed when the session ends (including expiry). This is the most powerful part of the portal (a full shell), so the rules from "Security"
 in `PLAN.md` (a separate user, systemd sandbox) are especially important here.
+
+Implemented in the backend (section "Backend" → "Terminal").
 
 | Method | Arguments | Result |
 |---|---|---|
@@ -562,6 +564,20 @@ Server events to all of the user's connections to this hub:
 |---|---|---|
 | `TerminalOutput` | `{ id, seq, data }` | an output fragment, `seq` grows by 1 for each fragment of a given terminal |
 | `TerminalExited` | `{ id, exitCode }` | the shell exited. The terminal stays on the list with `exited: true` until it is closed |
+
+Backend rules the tables do not show:
+- `exitCode` is `null` (the backend does not report it).
+- `Attach` of an unknown id fails with "Nieznany terminal"; `Attach` of an exited terminal gives an empty `snapshot`.
+  `Attach` without a valid `client` (1-64 characters) gives the snapshot, and none of that view's `Input` is accepted.
+- `CloseTerminal` of an unknown id succeeds without an error (another tab may have closed it); no event is sent.
+- `Resize` of an unknown id is ignored.
+- Limits: 20 terminals (exited ones included); sizes clamped to 10..1000 columns and 2..500 rows; history 5000 lines;
+  a snapshot of at most 1,000,000 characters, the oldest lines left out first.
+- Terminals end when the API stops.
+- Hubs refuse a missing or foreign `Origin` with `403`.
+- Error texts: "Nieznany terminal", "Nieprawidłowa paczka", "Najpierw Attach na tym połączeniu", "Nieprawidłowa
+  ścieżka", "Za dużo terminali", "Terminal niedostępny", "Terminal nie odpowiada", "Sesja wygasła". The frontend shows
+  its own texts instead.
 
 ## Backend
 
@@ -774,7 +790,23 @@ Terminal (`Terminal/`; the contract is in "Terminal"):
   browser slows the terminal instead of filling memory.
 - Commands go to the control client one line at a time and are matched to tmux's `%begin`…`%end`/`%error` blocks in
   order; inside a block a line starting with `%` is pane text. Each command has 10 s ("Terminal nie odpowiada"); a late
-  reply still takes its own command's place.
+  reply still takes its own command's place. Waiting for and writing a command's line also has the 10 s limit; a write
+  cut off by that deadline ends the control client, so the terminal reports its exit.
+- `Attach` (one at a time with `Input` and `Resize` of the same terminal, under its lock): `refresh-client -C` to the
+  view's size, then one line of tmux commands, so screen, modes and `seq` agree: `display-message` (cursor, modes,
+  alternate screen, scroll region, history size) and `capture-pane -p -e -J -S - -E -` (history and screen with
+  colours, wrapped lines joined). `seq` is that of the last fragment read before the capture's reply. The text is the
+  lines joined by CRLF (xterm has no `convertEol`), then `ESC[0m`, the scroll region, the cursor and the modes the
+  view's `reset()` cleared (hidden cursor, application cursor keys and keypad, bracketed paste, mouse reporting). While
+  a program shows the alternate screen, a second line takes the capture line by line plus the normal screen tmux keeps,
+  and the text is history and normal screen, `ESC[?1049h`, then the alternate screen. Over 1,000,000 characters the
+  oldest lines are left out (a single longer line is left out whole).
+- `Input`: `client` 1-64 characters, `seq` ≥ 1, `data` at most 4096 UTF-16 units, otherwise "Nieprawidłowa paczka";
+  an unknown or exited terminal is skipped. Under the lock: a `client` whose last `Attach` was on another connection
+  gets "Najpierw Attach na tym połączeniu"; a `seq` not above the last accepted is skipped; otherwise the UTF-8 bytes
+  go to the pane with `send-keys -H` (each byte as it is), at most 1024 per command, and `seq` is recorded. The last
+  `seq` and `Attach` connection of every `client` stay until the terminal is closed.
+- `Resize`: clamped, then `refresh-client -C`; an unknown terminal is ignored; the last view to resize sets the size.
 - The end of the control client's output (the shell exited and its session closed, or tmux went away) marks the
   terminal exited and sends `TerminalExited` with `exitCode: null`; it stays listed until closed. It also runs a
   best-effort `kill-session`, so a shell detached from inside the pane (`tmux detach`; `TMUX` there points at the
@@ -822,8 +854,8 @@ Rules: `CLAUDE.md`, section "Tests" (new code: only integration and e2e tests).
 | Kind | Command | What it covers |
 |---|---|---|
 | Integration + older unit | `cd web && npm test` | Vitest (jsdom). Integration: `console.integration.spec.ts` (panel + store + editor, SignalR and HTTP stubbed; also permission requests: hidden characters, button delay, "tak, zawsze", and a double Enter), `workspaces.integration.spec.ts` (Workspace panel + router + git status + explorer + editor, HTTP stubbed; also the strict clone URL validation), `security.integration.spec.ts` (AuthService + interceptor + SessionTimer + the "Bezpieczeństwo" window, HTTP, reload and clock stubbed; also expiry without a server response), `logout-confirmation.integration.spec.ts` (routes with guards + AuthService + login screen after an unconfirmed logout, also with a newer session from another tab). Older unit tests: auth, files API, paths, explorer, `EditorStore` |
-| E2E | `cd web && npm run e2e` | build + Playwright in Chromium on `e2e/mock-api/server.mjs`: login and sessions (including unconfirmed logout with "Back", a new tab and logging in again, embedding in a frame, Trusted Types), explorer and Monaco, console (steps, options, permissions, "tak, zawsze", interrupt, replay, multiple tabs, file changes), workspaces (opening a repo, git status, pull, push, create, clone, a conversation per repo), terminal (commands, keys, reload without duplicates, multiple terminals, `exit`, Ctrl+S, resizing, pasting with the decision panel, characters on a dropped connection without loss or duplication, also after closing the tab, queue limit, focus, OSC 8 links), session (countdown, "Przedłuż", activity once a minute on a fake clock, expiry, also without a server response and hubs closed by the server), the "Bezpieczeństwo" window with a second device (a separate browser context), diff view, Monaco worker startup, mock robustness and the contract rules that the frontend does not let through (clone URL, XSRF token bound to the identity, saving like the files API: `absent`, 5 MB, a NUL character, workspace, repo and path parameters). **Every test** (`fixtures.ts`) fails when the page reports a CSP or Trusted Types violation, an unhandled exception (including one caught by Angular's ErrorHandler, `console.error('ERROR', …)`) or Monaco does not create a worker |
-| Backend | `dotnet test` (needs Docker) | xUnit integration tests over HTTP (`WebApplicationFactory`, PostgreSQL 17 from Testcontainers, a test clock): login and its failures, `me`, `keepalive` and both deadlines, logout and 409, ending another session, XSRF token bound to the session, `no-store`, closed `/api/*`, `create-user`, TOTP codes used once, the limit per IP, the account lockout and its growth, session list, `revoke-others`, login history, cleanup, the password reset, the files API (listing, symlinks, `.git`, reading, saving, conflicts, re-creating a deleted file, limits, text rules, file modes, long names, two saves at once, empty error bodies), workspaces and git (the repository list and its order, what is and is not a repository, every git status, ahead and behind, HEAD content with a checkout's line endings and the files API's limits), workspaces (the list and its order, names and directories, creating, a stale row), cloning (every refused URL, git's own errors, the time limit against a server that never answers, only https), pull and push (every answer, both paths of a rename, a branch without commits, two pulls at once, a hook that refuses, only https), the background fetch (every 5 minutes by the test clock, a pull or push taking the repository from a fetch that hangs), the hubs (session and Origin on the WebSocket, WebSockets only, connections closed on logout, ending a session, revoke-others, expiry and a revocation by another process, hub calls never extending the session), the terminal (opening in a directory by its real path, titles, refused paths, the limit, output seq without gaps, the allowlisted environment, exit, close, the start routine); needs the git CLI ≥ 2.45 (`--ref-format=reftable`) |
+| E2E | `cd web && npm run e2e` | build + Playwright in Chromium on `e2e/mock-api/server.mjs`: login and sessions (including unconfirmed logout with "Back", a new tab and logging in again, embedding in a frame, Trusted Types), explorer and Monaco, console (steps, options, permissions, "tak, zawsze", interrupt, replay, multiple tabs, file changes), workspaces (opening a repo, git status, pull, push, create, clone, a conversation per repo), terminal (commands, keys, reload without duplicates, multiple terminals, `exit`, Ctrl+S, resizing, pasting with the decision panel, characters on a dropped connection without loss or duplication, also after closing the tab, queue limit, focus, OSC 8 links, closing a terminal that another tab already closed), session (countdown, "Przedłuż", activity once a minute on a fake clock, expiry, also without a server response and hubs closed by the server), the "Bezpieczeństwo" window with a second device (a separate browser context), diff view, Monaco worker startup, mock robustness and the contract rules that the frontend does not let through (clone URL, XSRF token bound to the identity, saving like the files API: `absent`, 5 MB, a NUL character, workspace, repo and path parameters). **Every test** (`fixtures.ts`) fails when the page reports a CSP or Trusted Types violation, an unhandled exception (including one caught by Angular's ErrorHandler, `console.error('ERROR', …)`) or Monaco does not create a worker |
+| Backend | `dotnet test` (needs Docker) | xUnit integration tests over HTTP (`WebApplicationFactory`, PostgreSQL 17 from Testcontainers, a test clock): login and its failures, `me`, `keepalive` and both deadlines, logout and 409, ending another session, XSRF token bound to the session, `no-store`, closed `/api/*`, `create-user`, TOTP codes used once, the limit per IP, the account lockout and its growth, session list, `revoke-others`, login history, cleanup, the password reset, the files API (listing, symlinks, `.git`, reading, saving, conflicts, re-creating a deleted file, limits, text rules, file modes, long names, two saves at once, empty error bodies), workspaces and git (the repository list and its order, what is and is not a repository, every git status, ahead and behind, HEAD content with a checkout's line endings and the files API's limits), workspaces (the list and its order, names and directories, creating, a stale row), cloning (every refused URL, git's own errors, the time limit against a server that never answers, only https), pull and push (every answer, both paths of a rename, a branch without commits, two pulls at once, a hook that refuses, only https), the background fetch (every 5 minutes by the test clock, a pull or push taking the repository from a fetch that hangs), the hubs (session and Origin on the WebSocket, WebSockets only, connections closed on logout, ending a session, revoke-others, expiry and a revocation by another process, hub calls never extending the session), the terminal (opening in a directory by its real path, titles, refused paths, the limit, output seq without gaps, the allowlisted environment, exit, close, the start routine), attach and input (snapshot with CRLF, every line exactly once when attaching during output, bracketed paste restored, a batch sent twice typed once, Input only after Attach on the same connection, inputSeq after a reconnect, batch limits, UTF-8 across send-keys commands, resize limits, an exited terminal); needs the git CLI ≥ 2.45 (`--ref-format=reftable`) |
 
 Backend tests make repositories with the git CLI (`tests/Claushh.Api.Tests/TestGit.cs`): a fixed identity and date,
 `HOME` set to a temporary directory so the machine's `~/.gitconfig` stays out (libgit2's configuration search paths

@@ -352,6 +352,14 @@ Backend decisions (stage 4):
   Rejected: a queue per terminal (unbounded memory, or a second kind of back-pressure).
 - `exitCode` is always `null`: the end of the control client's output marks the exit. Rejected: `remain-on-exit on`
   with a subscription for the code (it relies on notifications a tmux bug sent inside command replies).
+- The snapshot is tmux's screen (`capture-pane` with colours, history and screen) plus cursor and modes from
+  `display-message`, taken on one line of tmux commands, so screen and `seq` agree (tmux sends a reply only after the
+  output read before it). Rejected: the mock's raw output tail (it can start inside an escape sequence and loses the
+  modes a program set).
+- `Input` goes to the pane as bytes (`send-keys -H`, 1024 per command). Rejected: `send-keys -l` (tmux quoting of `;`,
+  quotes and control characters).
+- `Resize` of an unknown id and `CloseTerminal` of an unknown id are silent. Rejected: errors there (`Resize` is a
+  `send`, and a second tab would keep a dead tab with "Nie udało się zamknąć terminala.").
 
 ### Limiting damage
 
