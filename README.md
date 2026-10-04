@@ -108,8 +108,8 @@ home network's address (e.g. `192.168.1.0`).
    ```
    `compose.env`: the password and `POSTGRES_PORT=5435`. `claushh.env`: the same password, `<domain>` (twice) and the
    ntfy topic URL (`docs/PLAN.md`, "Deployment on EndeavourOS").
-6. Build as you, install as root. `install` checks steps 2-5 and copies the files and the units; the first time it
-   starts nothing:
+6. Build as you, install as root. `install` checks steps 2, 4 and 5 and copies the files and the units; the first time
+   it starts nothing:
    ```bash
    deploy/install.sh build ~/claushh-build
    sudo deploy/install.sh install ~/claushh-build
@@ -152,15 +152,15 @@ home network's address (e.g. `192.168.1.0`).
    `sudo systemctl enable --now claushh`.
 10. The account. It asks for the name, the password and a TOTP code, so it needs a terminal:
     ```bash
-    sudo systemd-run --pty --wait --collect --uid=workspace -p EnvironmentFile=/etc/claushh/claushh.env \
+    sudo systemd-run --pty --wait --collect --uid=workspace -p EnvironmentFile=/etc/claushh/claushh.env -p LimitCORE=0 \
       -E ASPNETCORE_ENVIRONMENT=Production -E DOTNET_EnableDiagnostics=0 --working-directory=/opt/claushh/api \
       /opt/claushh/api/Claushh.Api create-user
     ```
     `create-user --reset-totp` and `--reset-password` run the same way. If `systemd-run` refuses `EnvironmentFile=`:
     ```bash
-    sudo env ASPNETCORE_ENVIRONMENT=Production DOTNET_EnableDiagnostics=0 bash -c 'set -a; . /etc/claushh/claushh.env; set +a; cd /opt/claushh/api && exec runuser -u workspace -- ./Claushh.Api create-user'
+    sudo env ASPNETCORE_ENVIRONMENT=Production DOTNET_EnableDiagnostics=0 bash -c 'ulimit -c 0; set -a; . /etc/claushh/claushh.env; set +a; cd /opt/claushh/api && exec runuser -u workspace -- ./Claushh.Api create-user'
     ```
-11. Phase A below. It must pass before step 17.
+11. Phase A below (its "Backup and restore" and "Reboot" items after step 12). It must pass before step 17.
 12. Backups: `sudo systemctl enable --now claushh-backup.timer`, then the backup and restore of phase A.
 13. The firewall. Read `sudo firewall-cmd --list-all` first, then:
     ```bash
@@ -246,6 +246,13 @@ for a given version); then `sudo systemctl restart claushh`, which ends the open
   `sudo docker compose -p claushh-prod -f /opt/claushh/deploy/docker-compose.yml --env-file /etc/claushh/compose.env exec postgres psql -U claushh -d claushh_restore_check -c 'select count(*) from "Sessions"'`
   and the same with `-d claushh`; then the same command with `dropdb -U claushh claushh_restore_check` instead of
   `psql …`.
+  Then the live restore, as a rollback runs it:
+  ```bash
+  sudo systemctl stop claushh
+  sudo /opt/claushh/deploy/backup.sh restore /var/backups/claushh/<that file>
+  sudo systemctl start claushh
+  ```
+  A login works afterwards; then drop the replaced database `before_restore_<time>` as in "Rollback".
 - **Trial options.** `sudo systemctl edit --drop-in=trial claushh`, with:
   ```ini
   [Service]
@@ -259,8 +266,9 @@ for a given version); then `sudo systemctl restart claushh`, which ends the open
   Then `sudo systemctl restart claushh`, repeat "Terminal" and "Containers", and run `npm test` and `npm run e2e` in
   the clone. Keep the lines whose work passes, remove the others from `trial.conf`, and note what failed and why. This
   does not hold up step 17.
-- **Reboot.** After a restart of the computer the portal answers, `docker` works in a terminal, the database runs and
-  `systemctl list-timers` lists `claushh-backup.timer`.
+- **Reboot.** After a restart of the computer the portal answers, `docker` works in a terminal, the database runs,
+  `systemctl list-timers` lists `claushh-backup.timer`, and `sudo coredumpctl list /opt/claushh/api/Claushh.Api` shows
+  no entry, or only entries whose COREFILE is `none` (the API may fail a start or two while the database comes up).
 
 ### Phase B: through the tunnel
 
@@ -287,19 +295,25 @@ On the commit to install, in your checkout:
 deploy/install.sh build ~/claushh-build
 sudo deploy/install.sh install ~/claushh-build
 ```
-`install` takes a dump first (when the database runs), stops the API, keeps the installed files as
-`/opt/claushh/*.previous`, installs the new ones and the units, starts the API again when it was running and waits up
-to 60 s for `/api/health`. The restart ends the open terminals and console processes; conversations come back. Build
-and install again also when .NET publishes a security patch: the API is a self-contained build, which `pacman -Syu`
-does not update.
+`install` copies the new build next to the installed one while the API still runs, takes a dump (when the database
+runs), stops the API, swaps the directories (the installed files stay as `/opt/claushh/*.previous`), installs the
+units, starts the API again when it is enabled and waits up to 60 s for `/api/health`. The restart ends the open
+terminals and console processes; conversations come back. Build and install again also when .NET publishes a security
+patch: the API is a self-contained build, which `pacman -Syu` does not update.
 
 ### Rollback
 
 An older build does not undo database migrations, so a rollback also restores the dump that `install` took before the
-update (the newest file in `/var/backups/claushh` from before it):
+update (the newest file in `/var/backups/claushh` from before it). First check that the three earlier copies exist;
+if one is missing (after the first install, or after a rollback), there is nothing to go back to: build and install
+the commit you want instead.
 ```bash
+sudo ls -d /opt/claushh/api.previous /opt/claushh/web.previous /opt/claushh/deploy.previous
 sudo systemctl stop claushh
-sudo rm -rf /opt/claushh/api /opt/claushh/web /opt/claushh/deploy
+sudo rm -rf /opt/claushh/api.failed /opt/claushh/web.failed /opt/claushh/deploy.failed
+sudo mv /opt/claushh/api /opt/claushh/api.failed
+sudo mv /opt/claushh/web /opt/claushh/web.failed
+sudo mv /opt/claushh/deploy /opt/claushh/deploy.failed
 sudo mv /opt/claushh/api.previous /opt/claushh/api
 sudo mv /opt/claushh/web.previous /opt/claushh/web
 sudo mv /opt/claushh/deploy.previous /opt/claushh/deploy
@@ -308,6 +322,7 @@ sudo systemctl daemon-reload
 sudo /opt/claushh/deploy/backup.sh restore /var/backups/claushh/<the dump from before the update>
 sudo systemctl start claushh
 ```
+The build you left stays as `/opt/claushh/*.failed` until the next rollback.
 The database the restore replaced stays as `before_restore_<time>`; once the portal works, drop it:
 ```bash
 sudo docker compose -p claushh-prod -f /opt/claushh/deploy/docker-compose.yml --env-file /etc/claushh/compose.env exec postgres dropdb -U claushh before_restore_<time>
@@ -315,12 +330,12 @@ sudo docker compose -p claushh-prod -f /opt/claushh/deploy/docker-compose.yml --
 
 ### Restoring a dump
 
-`sudo /opt/claushh/deploy/backup.sh restore <file>` loads a dump into a new database in one transaction and then
-gives it the live database's name; the replaced database stays as `before_restore_<time>` (drop it as in "Rollback"
-once the portal works), and a load that fails leaves only a new database `restore_<time>`, dropped the same way. It
-refuses while the API runs (`sudo systemctl stop claushh` first, `start` after). With a database name as a second
-argument it loads the dump into a new database of that name instead, as in phase A. The daily run:
-`systemctl list-timers claushh-backup.timer` and `journalctl -u claushh-backup`.
+`sudo /opt/claushh/deploy/backup.sh restore <file>` loads a dump into a new database in one transaction and then gives
+it the live database's name; the replaced database stays as `before_restore_<time>` (drop it as in "Rollback" once the
+portal works), and a load or a rename that fails leaves the live database as it was, plus a new database
+`restore_<time>`, dropped the same way. It refuses while the API runs (`sudo systemctl stop claushh` first, `start`
+after). With a database name as a second argument it loads the dump into a new database of that name instead, as in
+phase A. The daily run: `systemctl list-timers claushh-backup.timer` and `journalctl -u claushh-backup`.
 
 ## Frontend tests
 

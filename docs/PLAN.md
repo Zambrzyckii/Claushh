@@ -169,7 +169,7 @@ Backend decisions (stage 1, part C):
   (Cloudflare covers both at the edge, before a request reaches the tunnel).
 - No path under `/hubs` falls back to the page: unknown ones are `401` without a session and `404` with one. The
   catch-all stays when more hubs arrive, since `MapHub` routes are more specific.
-- The Kestrel URL and `AllowedHosts` are left to the deployment.
+- The server's Kestrel URL and `AllowedHosts` are in "Deployment decisions".
 - `ForwardedHeaders` runs first in every environment and reads `CF-Connecting-IP` (as the client address) and
   `X-Forwarded-Proto` only from a loopback peer, one entry each; a loopback request without `CF-Connecting-IP` keeps the
   peer's address. Rejected: `X-Forwarded-For` (its left part comes from the client),
@@ -424,7 +424,8 @@ Backend decisions (stage 4):
 - GitHub token with access only to selected repositories.
 - Secrets in `/etc/claushh/claushh.env` (root, `600`), which systemd reads before the service starts, and the tunnel
   token as a systemd credential (`LoadCredential=`); never in the repo.
-- The .NET diagnostic port is off on the server (`DOTNET_EnableDiagnostics=0`).
+- The .NET diagnostic port is off on the server (`DOTNET_EnableDiagnostics=0`), and the service writes no core dumps
+  (`LimitCORE=0`).
 - In Production the API makes its process non-dumpable as soon as it has started: other processes of `workspace` can
   neither read its `/proc` files (its environment holds the secrets) nor attach to it.
 - By default the console asks for permission before edits and commands such as `git push`. The request shows the command with all
@@ -512,7 +513,9 @@ Deployment decisions:
     (containers whose image runs as another user could not read their bind mounts; `/srv/projects` and the home are
     `0700` anyway), `ProcSubset=pid` (tools read `/proc/meminfo` and the like) and `PrivateNetwork=` (the tunnel and
     the terminal need the network).
-- `DOTNET_EnableDiagnostics=0`: the API opens no .NET diagnostic socket.
+- `DOTNET_EnableDiagnostics=0`: the API opens no .NET diagnostic socket. `LimitCORE=0`: the API and its children
+  write no core dumps (a crash before the start, e.g. in the migrations while PostgreSQL is not up yet, would leave
+  the process's memory on disk); `create-user` runs with the same limit.
 - Containers in the terminal come from the rootless Podman of `workspace`. A user drop-in
   (`deploy/podman-socket.conf`) moves its `podman.socket` to `~/.local/state/podman/podman.sock`, inside the bound
   home, and the unit points `DOCKER_HOST` and `TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE` of the terminal at it
@@ -549,12 +552,13 @@ Deployment decisions:
   owner updates it on purpose. Rejected: the API's files owned by `workspace`.
 - The computer is a desktop: the BIOS powers it on after a power loss, and `sleep.target`, `suspend.target`,
   `hibernate.target` and `hybrid-sleep.target` are masked.
-- Build and install are two steps: `deploy/install.sh build <dir>` runs as the owner (a self-contained
-  `dotnet publish` for linux-x64 and the frontend build); `sudo deploy/install.sh install <dir>` checks the server,
-  takes a dump before an update, replaces `/opt/claushh/{api,web,deploy}` (the previous copy stays as `*.previous`),
-  installs the units and starts the API again when it was running, with a health check. It never enables the API and
-  never starts `cloudflared`. Rejected: one script run as root (`npm ci` would run dependency scripts as root and
-  leave root-owned files in the checkout) and replacing files under a running process.
+- Build and install are two steps: `deploy/install.sh build <dir>` runs as the owner (a self-contained `dotnet
+  publish` for linux-x64 and the frontend build); `sudo deploy/install.sh install <dir>` checks the server, copies the
+  build next to the installed one while the API still runs, takes a dump before an update, stops the API, swaps in the
+  new `/opt/claushh/{api,web,deploy}` (the previous copy stays as `*.previous`), installs the units and starts the API
+  again when it is enabled, with a health check. It never enables the API and never starts `cloudflared`. Rejected: one
+  script run as root (`npm ci` would run dependency scripts as root and leave root-owned files in the checkout)
+  replacing files under a running process, and copying with the API stopped (a full disk would leave it stopped).
 - A rollback is the `*.previous` copies plus the dump taken before the update, because an older build does not undo
   migrations.
 - Before the tunnel, the first login and a portal terminal are tested on loopback: a temporary drop-in

@@ -3,7 +3,7 @@
 # decisions").
 #   install.sh build <dir>     as you: the self-contained API, the frontend build and deploy/ into <dir>
 #   install.sh install <dir>   as root: checks, a dump before an update, /opt/claushh/{api,web,deploy} replaced (the
-#                              old copy kept as *.previous), the units installed, the API started again if it ran
+#                              old copy kept as *.previous), the units installed, the API started again if it is enabled
 # It never enables claushh.service and never enables or starts cloudflared.service.
 set -euo pipefail
 
@@ -89,7 +89,7 @@ wait_for_health() {
 
 install_build() {
   [[ $EUID -eq 0 ]] || die "install runs as root: sudo $0 install <dir>"
-  local src was_active=no part file
+  local src part file
   src=$(realpath -- "$1")
   [[ -x $src/api/Claushh.Api && -f $src/web/index.html && -f $src/deploy/claushh.service ]] \
     || die "$src is not a build of 'install.sh build'"
@@ -97,24 +97,26 @@ install_build() {
     [[ $(stat -c '%U %a' -- "$file" 2>/dev/null) == 'root 600' ]] \
       || die "$file must exist, owned by root, with mode 600 (README.md, \"Deployment\", step 5)"
   done
+  allowed_host >/dev/null
   id -u workspace >/dev/null 2>&1 || die "the user workspace does not exist (README.md, \"Deployment\", step 2)"
   [[ $(stat -c '%U' -- /srv/projects 2>/dev/null) == workspace ]] \
     || die "/srv/projects must exist and belong to workspace (README.md, \"Deployment\", step 4)"
   check_git_protocols
-  if [[ -f /etc/systemd/system/claushh-backup.service ]] && database_runs; then
-    printf 'install.sh: a dump before the update\n'
-    systemctl start claushh-backup.service
-  fi
-  if systemctl is-active --quiet claushh.service; then
-    was_active=yes
-    systemctl stop claushh.service
-  fi
+  # The copies are made while the API still runs, so a failed copy (a full disk) leaves it running.
   install -d -o root -g root -m 0755 "$prefix"
   for part in api web deploy; do
     rm -rf -- "${prefix:?}/$part.new"
     cp -a --no-preserve=ownership -- "$src/$part" "$prefix/$part.new"
     chmod -R a+rX,go-w -- "$prefix/$part.new"
   done
+  if [[ -f /etc/systemd/system/claushh-backup.service ]] && database_runs; then
+    printf 'install.sh: a dump before the update\n'
+    systemctl start claushh-backup.service
+  fi
+  # Stopped whatever its state, so that an automatic restart cannot start the API in the middle of the swap.
+  if [[ -f /etc/systemd/system/claushh.service ]]; then
+    systemctl stop claushh.service
+  fi
   for part in api web deploy; do
     if [[ -e $prefix/$part ]]; then
       rm -rf -- "${prefix:?}/$part.previous"
@@ -126,11 +128,11 @@ install_build() {
     install -m 0644 -o root -g root -- "$prefix/deploy/$file" /etc/systemd/system/
   done
   systemctl daemon-reload
-  if [[ $was_active == yes ]]; then
+  if systemctl is-enabled --quiet claushh.service; then
     systemctl start claushh.service
     wait_for_health
   else
-    printf 'install.sh: installed into %s; the API was not running and stays stopped (first install: README.md, "Deployment", step 7)\n' "$prefix"
+    printf 'install.sh: installed into %s; the API is not enabled and stays stopped (first install: README.md, "Deployment", step 7)\n' "$prefix"
   fi
 }
 
