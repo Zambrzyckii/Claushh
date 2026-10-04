@@ -1,7 +1,7 @@
 // The only code that turns an API path (relative to the projects directory, "/" separators) into a real path on disk.
 // It refuses everything that leads outside the projects directory or into .git, also through symlinks
 // (docs/ARCHITECTURE.md, "Files and editor"; decisions: docs/PLAN.md, "Backend decisions (stage 2)"). The files API
-// uses it now; workspaces, git and the terminal already do, the console will too.
+// uses it, and so do workspaces, git, the terminal and the console.
 using Microsoft.Extensions.Options;
 
 namespace Claushh.Api.Files;

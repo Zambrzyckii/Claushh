@@ -63,15 +63,18 @@ public sealed class ConversationLog(IServiceScopeFactory scopes, TimeProvider cl
         await Db(scope).Conversations.Where(c => c.Id == id).ExecuteUpdateAsync(s => s.SetProperty(c => c.Resumable, true));
     }
 
-    // Conversations whose last status is working or waiting: a turn that a stop or a crash cut off.
+    // Conversations whose last status is working or waiting: a turn that a stop or a crash cut off. An event that is not
+    // valid jsonb (a \u0000 in a command's output) is skipped, so it cannot fail the query.
     public async Task<List<Guid>> UnfinishedAsync()
     {
         await using var scope = scopes.CreateAsyncScope();
         return await Db(scope).Database.SqlQueryRaw<Guid>("""
             SELECT c."Id" AS "Value" FROM "Conversations" c
-            WHERE (SELECT e."Json"::jsonb ->> 'state' FROM "ConversationEvents" e
-                   WHERE e."ConversationId" = c."Id" AND e."Json"::jsonb ->> 'type' = 'status'
-                   ORDER BY e."Seq" DESC LIMIT 1) IN ('working', 'waiting')
+            WHERE (SELECT events.j ->> 'state'
+                   FROM (SELECT CASE WHEN pg_input_is_valid(e."Json", 'jsonb') THEN e."Json"::jsonb END AS j, e."Seq"
+                         FROM "ConversationEvents" e WHERE e."ConversationId" = c."Id") events
+                   WHERE events.j ->> 'type' = 'status'
+                   ORDER BY events."Seq" DESC LIMIT 1) IN ('working', 'waiting')
             """).ToListAsync();
     }
 

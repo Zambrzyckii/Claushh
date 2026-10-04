@@ -181,6 +181,11 @@ public sealed class Conversations(ClaudeCli cli, ConversationLog store, ProjectP
             await state.Lock.WaitAsync();
             try
             {
+                // The process ended while its options were applied: no reader is left to end a turn.
+                if (state.Process != process)
+                {
+                    throw new HubException(ClaudeProcess.Unresponsive);
+                }
                 state.Turn = new Turn(state.WorkingDirectory) { Before = FileChanges.Status(repositories, state.ProjectPath) };
                 opened = true;
                 await EmitAsync(state, ConsoleEvents.Prompt(state.Key, text));
@@ -190,7 +195,16 @@ public sealed class Conversations(ClaudeCli cli, ConversationLog store, ProjectP
             {
                 state.Lock.Release();
             }
-            await process.SendPromptAsync(text);
+            try
+            {
+                await process.SendPromptAsync(text);
+            }
+            catch (HubException)
+            {
+                // The prompt never reached the CLI: its process goes, and the reader ends the turn with an error.
+                process.KillTree();
+                throw;
+            }
         }
         catch when (!opened)
         {

@@ -970,8 +970,7 @@ Console (`Claude/`, `Hubs/ConsoleHub.cs`; the contract is in "Console"; decision
 - The process's environment: the allowlist of `Processes/ChildEnvironment`, then `XDG_CONFIG_HOME`, `XDG_RUNTIME_DIR`
   and `DBUS_SESSION_BUS_ADDRESS` when the API has them (as for git, so `git push` in a step reaches the credential
   helper), `CLAUDE_CONFIG_DIR`, `DISABLE_UPDATES=1`, `DISABLE_AUTOUPDATER=1`, `TERM=dumb`, then `Console:Environment`.
-  The API's own variables (the connection string, `ANTHROPIC_API_KEY`, `CLAUDECODE*`) never reach the CLI. The CLI
-  also opens a socket under `/tmp/cc-socks/`, outside its config directory.
+  The API's own variables (the connection string, `ANTHROPIC_API_KEY`, `CLAUDECODE*`) never reach the CLI.
 - `initialize` must answer within 30 s. Before every prompt `set_model`, `set_permission_mode` and
   `apply_flag_settings {effortLevel}` are sent and each reply awaited (10 s; then "Konsola nie odpowiada" and the
   process is killed). Then `prompt` and `status working` are stored and sent, and the prompt goes to stdin as a `user`

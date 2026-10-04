@@ -53,8 +53,8 @@ at `http://localhost:4200`: hubs accept only the origins in `Hubs:AllowedOrigins
 `http://127.0.0.1:4200` gets no terminal or console.
 
 The Konsola panel runs the `claude` CLI (`Console:ClaudePath`, by default `claude` on PATH) with a config directory of
-its own, `~/.local/state/claushh/claude` (`Console:ConfigDirectory`): your `~/.claude` settings, CLAUDE.md and plugins
-are not used there. Log in there once:
+its own, `~/.local/state/claushh/claude` (`Console:ConfigDirectory`; `$XDG_STATE_HOME/claushh/claude` when
+`XDG_STATE_HOME` is set): your `~/.claude` settings, CLAUDE.md and plugins are not used there. Log in there once:
 
 ```bash
 CLAUDE_CONFIG_DIR=~/.local/state/claushh/claude claude    # then /login, and /exit when done
@@ -69,8 +69,9 @@ docker compose -p claushh-dev -f deploy/docker-compose.yml --env-file deploy/.en
   psql -U claushh -d claushh -c "DELETE FROM \"ConsoleRules\" WHERE \"ProjectPath\" = '<project>' AND \"Rule\" = '<rule>'"
 ```
 
-The config directory also holds the CLI's transcripts (kept 90 days), plan files and backups of its own state. It may
-be cleaned while the API is stopped; older conversations then cannot be resumed, and "Nowa" starts a new one.
+The config directory also holds the login (`.credentials.json`), the CLI's transcripts (kept 90 days), plan files and
+backups of its own state. Everything but `.credentials.json` may be deleted while the API is stopped; older
+conversations then cannot be resumed, and "Nowa" starts a new one. Without `.credentials.json`, log in again as above.
 
 Cloning, fetching and pulling a public repository needs no credential helper in development; pushing always needs
 credentials (also for a public repository); the server's GitHub token is set up in "Deployment", step 8.
@@ -267,9 +268,8 @@ sudo docker compose -p claushh-prod -f /opt/claushh/deploy/docker-compose.yml --
   `~/.config/containers/registries.conf`. If Testcontainers cannot start its Ryuk container, run the tests with
   `TESTCONTAINERS_RYUK_DISABLED=true` (then `docker container prune` after a crashed run).
 - **Console** (once "The console" above is done). In the Konsola panel, a prompt that runs `pwd` and `env` (answer
-  "tak") shows the repository's directory and no `ConnectionStrings__*`, `Notifications__*`, `ASPNETCORE_*` or
-  `DOTNET_*` variable; `journalctl -u claushh` then shows `The console runs claude <version>`. This does not hold up
-  step 17.
+  "tak") shows the repository's directory and no `ConnectionStrings__*` or `Notifications__*` variable;
+  `journalctl -u claushh` then shows `The console runs claude <version>`. This does not hold up step 17.
 - **Backup and restore:**
   ```bash
   sudo systemctl start claushh-backup.service
