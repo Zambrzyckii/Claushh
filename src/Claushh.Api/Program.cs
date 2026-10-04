@@ -1,5 +1,6 @@
 // API entry point. Stages and decisions: docs/PLAN.md; endpoints, configuration and commands: docs/ARCHITECTURE.md, "Backend".
 using Claushh.Api.Auth;
+using Claushh.Api.Claude;
 using Claushh.Api.Data;
 using Claushh.Api.Files;
 using Claushh.Api.Frontend;
@@ -99,6 +100,12 @@ builder.Services.AddSingleton<TmuxServer>();
 builder.Services.AddSingleton<Terminals>();
 // Prepares the tmux server at start and ends it on a stop; create-user never starts the host, so it never runs this.
 builder.Services.AddHostedService(services => services.GetRequiredService<Terminals>());
+builder.Services.Configure<ConsoleOptions>(builder.Configuration.GetSection("Console"));
+builder.Services.AddSingleton<ClaudeCli>();
+builder.Services.AddSingleton<ConversationLog>();
+builder.Services.AddSingleton<Conversations>();
+// Prepares the claude CLI's config directory at start; create-user never starts the host, so it never runs this.
+builder.Services.AddHostedService(services => services.GetRequiredService<Conversations>());
 builder.Services.AddAuthentication(SessionAuthenticationHandler.SchemeName)
     .AddScheme<AuthenticationSchemeOptions, SessionAuthenticationHandler>(SessionAuthenticationHandler.SchemeName, _ => { });
 // Closed by default: an endpoint without .AllowAnonymous() requires a session.
@@ -173,6 +180,8 @@ api.MapAuthEndpoints().MapSessionEndpoints().MapFileEndpoints().MapWorkspaceEndp
 api.Map("{**path}", () => Results.NotFound());
 // WebSocket only: the frontend skips negotiation, and other transports would only add ways in.
 app.MapHub<TerminalHub>("/hubs/terminal", options => options.Transports = HttpTransportType.WebSockets)
+    .RequireAuthorization();
+app.MapHub<ConsoleHub>("/hubs/console", options => options.Transports = HttpTransportType.WebSockets)
     .RequireAuthorization();
 // Unknown /hubs paths: 401 without a session, 404 with one, never the page. The MapHub routes are more specific.
 app.Map("/hubs/{**path}", () => Results.NotFound());

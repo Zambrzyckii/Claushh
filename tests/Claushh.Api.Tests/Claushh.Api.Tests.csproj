@@ -15,6 +15,8 @@
 
   <ItemGroup>
     <ProjectReference Include="../../src/Claushh.Api/Claushh.Api.csproj" />
+    <!-- The fake claude CLI: a referenced Exe, so its apphost lands next to the tests (ApiFactory, Console:ClaudePath). -->
+    <ProjectReference Include="../Claushh.FakeClaude/Claushh.FakeClaude.csproj" />
   </ItemGroup>
 
   <ItemGroup>
@@ -27,6 +29,10 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="xunit.v3" Version="4.0.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="ConsoleRecordings/*.jsonl" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

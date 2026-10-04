@@ -60,15 +60,15 @@ Devices: mainly laptop and PC. The phone is secondary.
 - Model, effort and permission mode are process launch parameters.
 - Permission requests: the `--permission-prompt-tool` flag and a small MCP server in C# (the official MCP SDK for C#),
   which forwards the request to the browser and waits for the decision.
-- Claude Code stores the conversation history. In the database we keep only session identifiers (`--resume <id>`)
-  assigned to repositories.
+- Claude Code keeps the model's memory for `--resume`; the portal keeps its own log of the console events for replay
+  (kept 90 days).
 - We stay with the official CLI instead of the Agent SDK. Before any change, Anthropic's current
   authentication terms must be checked.
 
 ### Data in the database
 
 Account and 2FA secret, active sessions and login history (date, IP, device), the display names of workspaces,
-console conversation identifiers, settings (default model, effort, mode).
+console conversations with their events, and the console's "always" rules (model, effort and mode live in the browser).
 
 ## Security
 
@@ -266,6 +266,22 @@ Backend decisions (stage 2):
   like the deployment. The API and test assemblies are marked `[SupportedOSPlatform("linux")]` (`Program.cs`,
   `ApiFactory.cs`), so the platform analyzer accepts the Unix-only calls such as `File.SetUnixFileMode`. Rejected: the
   attribute on `FileStore` alone (every caller would get the warning).
+
+Backend decisions (stage 3):
+- The console's code lives in `Claude/` (`Claushh.Api.Claude`) and `Hubs/ConsoleHub.cs`. Rejected: `Console/`, whose
+  namespace would hide `System.Console` in the API's own code.
+- Replay comes from the portal's own event log in PostgreSQL: every event as it was sent, in order, per conversation,
+  text deltas merged per `messageId`. Rejected: reading the CLI's transcripts (an internal format that changes between
+  releases, deleted after 30 days by default, without the server's question ids).
+- The CLI's state and login live in `Console:ConfigDirectory` (`CLAUDE_CONFIG_DIR`, by default
+  `~/.local/state/claushh/claude`, mode 0700), so the owner's own `~/.claude` (settings, CLAUDE.md, plugins, plans) is
+  not used by the console. Rejected: the API user's `~/.claude`.
+- The CLI's version is checked before the first claude process, not at start (`claude --version`, at least
+  2.1.285, logged): the API's start never waits on the CLI, and a failed check is repeated by the next prompt, so a
+  CLI installed while the API runs needs no restart. Without a usable CLI the console answers "Konsola niedostępna"
+  and replay still works. Console processes get `DISABLE_UPDATES=1` and `DISABLE_AUTOUPDATER=1`, so the CLI never
+  updates itself under the API; the server's CLI is the launcher of Anthropic's installer, updated on purpose
+  ("Deployment decisions"). Rejected: a pin without a check (an update in development would break silently).
 
 Backend decisions (stage 4):
 - Git access: LibGit2Sharp in-process for everything local (finding repositories, status, branch, upstream, ahead and

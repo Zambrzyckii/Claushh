@@ -190,17 +190,20 @@ home network's address (e.g. `192.168.1.0`).
 
 ### The console
 
-Once the console hub is part of the API: as `workspace` (`sudo -iu workspace`), install the CLI with Anthropic's
-installer, then log in once in the console's own configuration directory, with updates off:
+As `workspace` (`sudo -iu workspace`), install the CLI with Anthropic's installer, then log in once in the console's
+own configuration directory, with updates off:
 ```bash
 curl -fsSL https://claude.ai/install.sh | bash    # the launcher: /home/workspace/.local/bin/claude
 install -d -m 0700 ~/.local/state/claushh/claude
 CLAUDE_CONFIG_DIR=$HOME/.local/state/claushh/claude DISABLE_UPDATES=1 DISABLE_AUTOUPDATER=1 ~/.local/bin/claude
 ```
-and `/login` in it. The login is kept in `.credentials.json` there; renew it the same way when the CLI warns. The
-console's settings come with it (`deploy/claushh.env.example`). To update the CLI on purpose, as `workspace`:
-`~/.local/bin/claude update`, or the installer again (`curl -fsSL https://claude.ai/install.sh | bash -s <version>`
-for a given version); then `sudo systemctl restart claushh`, which ends the open terminals and console processes.
+and `/login` in it. The login is kept in `.credentials.json` there; renew it the same way when the CLI warns. The unit
+points `Console__ClaudePath` at that launcher, and the API uses that directory by default (`Console:ConfigDirectory`).
+The API checks the CLI before the first console prompt, so the CLI can be installed while the API runs. To use an
+Anthropic API key instead of the login, see `Console__ApiKeyFile` in `deploy/claushh.env.example`. To update the CLI
+on purpose, as `workspace`: `~/.local/bin/claude update`, or the installer again
+(`curl -fsSL https://claude.ai/install.sh | bash -s <version>` for a given version); then
+`sudo systemctl restart claushh`, which ends the open terminals and console processes.
 
 ### Phase A: on loopback, before the tunnel
 

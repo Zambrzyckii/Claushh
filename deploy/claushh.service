@@ -20,6 +20,7 @@ Environment=Frontend__Root=/opt/claushh/web
 Environment=Terminal__SocketDirectory=/run/claushh
 Environment=Terminal__Environment__DOCKER_HOST=unix:///home/workspace/.local/state/podman/podman.sock
 Environment=Terminal__Environment__TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/home/workspace/.local/state/podman/podman.sock
+Environment=Console__ClaudePath=/home/workspace/.local/bin/claude
 Environment=Logging__Console__FormatterName=systemd
 Environment=DOTNET_EnableDiagnostics=0
 SyslogIdentifier=claushh

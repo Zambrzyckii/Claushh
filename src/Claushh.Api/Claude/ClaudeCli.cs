@@ -1,0 +1,182 @@
+// The claude CLI as the console runs it (docs/ARCHITECTURE.md, "Backend" → "Console"; decisions: docs/PLAN.md,
+// "Backend decisions (stage 3)"): its config directory (prepared at start), the version check before the first claude
+// process and the allowlisted environment of every claude process. Without a usable CLI the console answers "Konsola
+// niedostępna" and its conversations can still be read.
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Globalization;
+using System.Text.RegularExpressions;
+using Claushh.Api.Processes;
+using Microsoft.Extensions.Options;
+
+namespace Claushh.Api.Claude;
+
+public sealed partial class ClaudeCli(IOptions<ConsoleOptions> options, ILogger<ClaudeCli> log)
+{
+    public const string Unavailable = "Konsola niedostępna";
+    public static readonly Version Minimum = new(2, 1, 285);
+
+    private static readonly TimeSpan VersionTimeout = TimeSpan.FromSeconds(10);
+    // Passed through when the API has them, as git gets them, so that git push in a step reaches the credential helper.
+    private static readonly string[] Passthrough = ["XDG_CONFIG_HOME", "XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS"];
+
+    // One version check at a time (EnsureAvailableAsync).
+    private readonly SemaphoreSlim _check = new(1, 1);
+
+    public bool Available { get; private set; }
+    public string ConfigDirectory { get; private set; } = "";
+
+    // At start (Conversations.StartAsync): the config directory, created with mode 0700. No claude process runs while
+    // the host starts; the version check waits for the first claude process (EnsureAvailableAsync).
+    public bool PrepareDirectory()
+    {
+        var directory = options.Value.ConfigDirectory ?? DefaultConfigDirectory();
+        if (directory is null || !Path.IsPathFullyQualified(directory))
+        {
+            log.LogError("Console:ConfigDirectory is not an absolute path and neither XDG_STATE_HOME nor HOME is set: the console is unavailable.");
+            return false;
+        }
+        if (options.Value.ApiKeyFile is { } keyFile && !(Path.IsPathFullyQualified(keyFile) && File.Exists(keyFile)))
+        {
+            log.LogError("Console:ApiKeyFile is not the absolute path of an existing file: the console is unavailable.");
+            return false;
+        }
+        try
+        {
+            Directory.CreateDirectory(directory);
+            File.SetUnixFileMode(directory, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            ConfigDirectory = directory;
+            return true;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            log.LogError(e, "The console is unavailable: preparing its config directory failed");
+            return false;
+        }
+    }
+
+    // The config directory, then `claude --version` within 10 s, at least Minimum.
+    public async Task PrepareAsync(CancellationToken ct)
+    {
+        Available = false;
+        if (!PrepareDirectory())
+        {
+            return;
+        }
+        var version = await VersionAsync(ct);
+        if (version is null || version < Minimum)
+        {
+            log.LogError("The console needs the claude CLI {Minimum} or later at Console:ClaudePath; found {Version}.",
+                Minimum, version?.ToString() ?? "none");
+            return;
+        }
+        log.LogInformation("The console runs claude {Version}", version);
+        Available = true;
+    }
+
+    // Before a claude process starts: PrepareAsync, unless a check has passed. A failed check is repeated by the next
+    // prompt, so a CLI installed while the API runs needs no restart.
+    public async Task<bool> EnsureAvailableAsync(CancellationToken ct)
+    {
+        await _check.WaitAsync(ct);
+        try
+        {
+            if (!Available)
+            {
+                await PrepareAsync(ct);
+            }
+            return Available;
+        }
+        finally
+        {
+            _check.Release();
+        }
+    }
+
+    // claude in `directory` with `arguments` (no shell) and the allowlisted environment (ChildEnvironment), then
+    // XDG_CONFIG_HOME, XDG_RUNTIME_DIR and DBUS_SESSION_BUS_ADDRESS when the API has them, CLAUDE_CONFIG_DIR,
+    // DISABLE_UPDATES=1, DISABLE_AUTOUPDATER=1 and TERM=dumb, then Console:Environment. None of the API's own variables
+    // (the connection string, ANTHROPIC_API_KEY, CLAUDECODE*) reach the CLI.
+    public ProcessStartInfo StartInfo(string directory, IEnumerable<string> arguments)
+    {
+        var start = new ProcessStartInfo(options.Value.ClaudePath)
+        {
+            WorkingDirectory = directory,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+        foreach (var argument in arguments)
+        {
+            start.ArgumentList.Add(argument);
+        }
+        var overrides = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var name in Passthrough)
+        {
+            if (Environment.GetEnvironmentVariable(name) is { } value)
+            {
+                overrides[name] = value;
+            }
+        }
+        overrides["CLAUDE_CONFIG_DIR"] = ConfigDirectory;
+        overrides["DISABLE_UPDATES"] = "1";
+        overrides["DISABLE_AUTOUPDATER"] = "1";
+        overrides["TERM"] = "dumb";
+        foreach (var (name, value) in options.Value.Environment)
+        {
+            overrides[name] = value;
+        }
+        ChildEnvironment.Apply(start, overrides);
+        return start;
+    }
+
+    private async Task<Version?> VersionAsync(CancellationToken ct)
+    {
+        try
+        {
+            using var claude = Process.Start(StartInfo(ConfigDirectory, ["--version"]))!;
+            claude.StandardInput.Close();
+            var output = claude.StandardOutput.ReadToEndAsync(ct);
+            var errors = claude.StandardError.ReadToEndAsync(ct);
+            using var limit = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            limit.CancelAfter(VersionTimeout);
+            try
+            {
+                await claude.WaitForExitAsync(limit.Token);
+            }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            {
+                try
+                {
+                    claude.Kill(entireProcessTree: true);
+                }
+                catch (InvalidOperationException)
+                {
+                    // It exited in the meantime.
+                }
+                return null;
+            }
+            await errors;
+            var match = VersionPattern().Match(await output);
+            return claude.ExitCode == 0 && match.Success
+                ? new Version(Number(match, 1), Number(match, 2), Number(match, 3))
+                : null;
+        }
+        catch (Win32Exception)
+        {
+            // No such file, or not executable.
+            return null;
+        }
+    }
+
+    private static string? DefaultConfigDirectory() =>
+        Environment.GetEnvironmentVariable("XDG_STATE_HOME") is { Length: > 0 } state ? Path.Join(state, "claushh", "claude")
+        : Environment.GetEnvironmentVariable("HOME") is { Length: > 0 } home ? Path.Join(home, ".local", "state", "claushh", "claude")
+        : null;
+
+    private static int Number(Match match, int group) => int.Parse(match.Groups[group].Value, CultureInfo.InvariantCulture);
+
+    // "2.1.289 (Claude Code)".
+    [GeneratedRegex(@"^(\d+)\.(\d+)\.(\d+)")]
+    private static partial Regex VersionPattern();
+}

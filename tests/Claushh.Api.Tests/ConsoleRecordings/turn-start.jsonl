@@ -1,0 +1,3 @@
+{"await":"user"}
+{"emit":{"type":"system","subtype":"init","cwd":"{{cwd}}","session_id":"{{session}}","tools":["Task","Bash","Edit","ExitPlanMode","Glob","Grep","NotebookEdit","Read","TaskCreate","TaskGet","TaskList","TaskStop","TaskUpdate","ToolSearch","WebFetch","WebSearch","Write"],"mcp_servers":[],"model":"claude-haiku-4-5-20251001","permissionMode":"default","slash_commands":[],"apiKeySource":"none","claude_code_version":"2.1.289","output_style":"default"}}
+{"emit":{"type":"system","subtype":"status","status":"requesting","session_id":"{{session}}"}}

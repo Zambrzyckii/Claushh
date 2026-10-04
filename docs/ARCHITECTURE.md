@@ -38,6 +38,8 @@ On the server (decisions: `PLAN.md`, "Deployment decisions"):
 - `/opt/claushh` (the API, the frontend build, `deploy/`) belongs to root; `/etc/claushh` (root only) holds
   `claushh.env` (the unit's install-specific settings and secrets) and `compose.env` (the compose variables);
   `/srv/projects` belongs to `workspace`; the tmux socket is in `/run/claushh`.
+- The console runs `/home/workspace/.local/bin/claude` (Anthropic's installer, updates off; `Console__ClaudePath` in the
+  unit), logged in once in `/home/workspace/.local/state/claushh/claude` (`README.md`, "Deployment" → "The console").
 
 ## Repository map
 
@@ -48,18 +50,20 @@ On the server (decisions: `PLAN.md`, "Deployment decisions"):
 | `src/Claushh.Api/` | ASP.NET Core backend |
 | `src/Claushh.Api/Program.cs` | app configuration and endpoint mapping |
 | `src/Claushh.Api/Properties/launchSettings.json` | development profile, port 5080 |
-| `src/Claushh.Api/Data/` | `ClaushhDbContext` (Identity tables, `Sessions`, `LoginAttempts` and `Workspaces`) and EF Core migrations, applied at startup |
+| `src/Claushh.Api/Data/` | `ClaushhDbContext` (Identity tables, `Sessions`, `LoginAttempts`, `Workspaces`, and the console's `Conversations`, `ConversationEvents` and `ConsoleRules`) and EF Core migrations, applied at startup |
 | `src/Claushh.Api/Auth/` | login: `Session`, `AuthSessionOptions`, `AuthCookies` (cookie names), `SessionService` (the only code with session rules), `SessionAuthenticationHandler` (cookie → user, never extends), `SessionAntiforgeryData` (XSRF token bound to the session), `TotpVerifier` (TOTP codes, each accepted once), `LoginGuard` (the client address and its limit key, limit per IP, account lockout, login history), `LoginAttempt`, `DeviceName` (User-Agent for storage and display), `AuthEndpoints` (`me`, `login`, `keepalive`, `logout`, XSRF filter), `SessionEndpoints` (session list, ending sessions, login history), `CreateUserCommand` (`create-user`), `AuthCleanup` (hourly deletion after 90 days) |
 | `src/Claushh.Api/Files/` | files: `ProjectsOptions` (`Projects:Root`), `ProjectPaths` (the only code that turns an API path into a path on disk: syntax, symlinks resolved with `realpath`, `.git` refused, file types from `statx`), `Libc` (the four libc calls: `realpath`, `statx`, `access`, and `prctl` to make the process non-dumpable), `FileStore` (reading and saving: versions, the 5 MB limit, the text rule `DecodeText`, atomic saves under a per-file lock), `FileEndpoints` (`/api/files/*`) |
 | `src/Claushh.Api/Workspaces/` | workspaces: `Workspace` (entity: display name and creation time), `WorkspaceNames` (the name rule and the directory made from a name), `CloneUrl` (the frontend's clone URL rule in .NET terms), `WorkspaceStore` (what a workspace is, the list in display order, creating one), `WorkspaceEndpoints` (`/api/workspaces`, `/api/repos`, `/api/repos/clone`) |
 | `src/Claushh.Api/Git/` | git: `Repositories` (what a repository is and its state, read with LibGit2Sharp: the repository list, the status, HEAD content), `GitOptions` (`Git:NetworkTimeout`, `Git:Environment:*`), `GitRunner` (the git CLI: safety options, environment through `ChildEnvironment`, output, time limits, killing the process tree), `RepoLocks` (one lock per repository), `BackgroundFetch` (the fetch after `GET /api/repos`, at most every 5 minutes per repository), `GitEndpoints` (`/api/git/*`: status, show, pull, push) |
-| `src/Claushh.Api/Hubs/` | SignalR hubs and what they share: `HubsOptions` (`Hubs:AllowedOrigins`), `HubOrigins` (the Origin check for `/hubs`), `HubSessionFilter` (the session on connect and on every call, never extended), `HubConnections` (open connections by session), `HubSessionSweep` (closes the connections of ended sessions every 5 s and right after a logout or revocation), `TerminalHub` (`/hubs/terminal`) |
+| `src/Claushh.Api/Hubs/` | SignalR hubs and what they share: `HubsOptions` (`Hubs:AllowedOrigins`), `HubOrigins` (the Origin check for `/hubs`), `HubSessionFilter` (the session on connect and on every call, never extended), `HubConnections` (open connections by session), `HubSessionSweep` (closes the connections of ended sessions every 5 s and right after a logout or revocation), `TerminalHub` (`/hubs/terminal`), `ConsoleHub` (`/hubs/console`) |
 | `src/Claushh.Api/Terminal/` | terminal: `TerminalOptions` (`Terminal:SocketDirectory`, `Terminal:Environment`), `TmuxServer` (the API's own tmux server: version check, socket and configuration, tmux processes with the allowlisted environment), `TmuxControlClient` (one `tmux -C`: its output read as bytes, replies matched to commands), `TerminalSession` (one terminal: output with `seq`, Attach, Input, Resize), `TerminalSnapshot` (the Attach text), `Terminals` (the terminals in creation order, titles, the limit; prepares and ends the tmux server) |
-| `src/Claushh.Api/Processes/` | `ChildEnvironment` (a clean, allowlisted environment for a child process: `GitRunner` and the terminal) |
+| `src/Claushh.Api/Processes/` | `ChildEnvironment` (a clean, allowlisted environment for a child process: `GitRunner`, the terminal and the console) |
 | `src/Claushh.Api/Frontend/` | the built frontend and the response headers: `FrontendOptions` (`Frontend:Root`), `FrontendFiles` (the files of the build, the `index.html` fallback, the CSP read from the page, cache rules), `SecurityHeaders` (the headers of every response, `no-store` on `/api`) |
 | `src/Claushh.Api/Notifications/` | phone notifications: `NotificationsOptions` (`Notifications:NtfyUrl`, `Notifications:NtfyToken`), `LoginNotifications` (the queue of login and lock messages and the background service that sends them to ntfy) |
+| `src/Claushh.Api/Claude/` | the console ("Backend" → "Console"): `ConsoleOptions` (`Console:*`), `ClaudeCli` (the claude CLI: config directory, version check, allowlisted environment), `Conversation`, `ConversationEvent`, `ConsoleRule` (entities), `ConversationLog` (the console's tables), `ConsoleEvents` (the contract's events as JSON), `Conversations` (the conversations, their lock and event log; prepares the CLI's config directory at start) |
 | `dotnet-tools.json` | local .NET tools: `dotnet-ef` (`dotnet tool restore`) |
 | `tests/Claushh.Api.Tests/` | backend integration tests: xUnit, the API in memory (`WebApplicationFactory`), PostgreSQL 17 from Testcontainers (`ApiFactory`) |
+| `tests/Claushh.FakeClaude/` | a stand-in for the `claude` CLI in the backend tests: replays scripted stream-json lines and logs what the API sent; scripts are made of the recordings in `tests/Claushh.Api.Tests/ConsoleRecordings/` |
 | `global.json` | `dotnet test` runs on Microsoft.Testing.Platform (required by xUnit v3 on the .NET 10 SDK) |
 | `web/` | Angular 21 frontend (standalone components, signals, the new `@if` syntax) |
 | `web/src/index.html` | start page with the Content-Security-Policy in `<meta>` (section "Security headers") |
@@ -637,6 +641,7 @@ Endpoints:
 | POST | `/api/git/pull?repo=<repo>` | fetch and fast-forward merge under the repository's lock; 400 no upstream; 404 not a repository; 409 the merge failed; 502 the fetch failed or ran out of time | session, XSRF token |
 | POST | `/api/git/push?repo=<repo>` | push to the upstream (or -u origin HEAD) under the repository's lock; 400 detached HEAD or no origin; 404 not a repository; 409 [rejected]; 502 any other failure or the time limit | session, XSRF token |
 | GET (WebSocket) | `/hubs/terminal` | the terminal hub (contract: "Terminal"); WebSocket only, without negotiation | session, Origin |
+| GET (WebSocket) | `/hubs/console` | the console hub (contract: "Console"); WebSocket only, without negotiation | session, Origin |
 | any | `/*` other paths that do not look like a file (no `.` in the last segment) | GET and HEAD: the built frontend's `index.html` (Angular's routes), `no-store`, with the CSP header; other methods: 404, also without a session; only with `Frontend:Root` | none |
 | GET | `/<file>` of the build, e.g. `/main-<hash>.js`, `/monaco.css` | the file, `no-cache`; only with `Frontend:Root` | none |
 | any | `/hubs/*` other than the hubs above | 401 without a session, 404 with one | session, Origin |
@@ -675,6 +680,10 @@ Configuration:
 | `Frontend:Root` | not set (development uses `ng serve`); to try the build: `dotnet user-secrets`; server: variable `Frontend__Root` (`/opt/claushh/web`, the unit) | the absolute path of the Angular build (`web/dist/web/browser`) the API serves at `/`; when set, its `index.html` must carry the CSP `<meta>`, checked at start (the API does not start otherwise). Read once: restart the API after a build that changes the policy |
 | `Notifications:NtfyUrl` | server: variable `Notifications__NtfyUrl` (required in Production: the API does not start without it); development: optional, `dotnet user-secrets` | the URL of the ntfy topic (an absolute https URL, checked at start). A secret: whoever knows the topic can read it, so it is never logged. Empty: no notifications |
 | `Notifications:NtfyToken` | server: variable `Notifications__NtfyToken`; optional | an ntfy access token, sent as `Authorization: Bearer` |
+| `Console:ClaudePath` | not set: `claude` on PATH; server: `/home/workspace/.local/bin/claude` (the unit), the launcher of Anthropic's installer | the `claude` CLI the console runs, at least 2.1.285 (checked with `--version` before the first claude process; below that or missing, the console answers "Konsola niedostępna" and conversations can still be read) |
+| `Console:ConfigDirectory` | not set: `$XDG_STATE_HOME/claushh/claude`, else `~/.local/state/claushh/claude` (server: `/home/workspace/.local/state/claushh/claude`) | the CLI's own state and login (`CLAUDE_CONFIG_DIR`), created with mode 0700 at start |
+| `Console:ApiKeyFile` | not set: the login in the config directory; server: optional, variable `Console__ApiKeyFile` in `/etc/claushh/claushh.env` | a file (mode 0600, outside the projects directory, readable by the API's user) with an Anthropic API key, read by the CLI through `apiKeyHelper` |
+| `Console:Environment:<NAME>` | none (tests: `DOTNET_ROOT` for the fake CLI) | variables for the `claude` process on top of its allowlisted environment |
 
 Frontend (`Frontend/`; decisions: `PLAN.md`, "Backend decisions (stage 1, part C)"):
 - With `Frontend:Root` set, the API serves the Angular build:
@@ -908,6 +917,25 @@ Terminal (`Terminal/`; the contract is in "Terminal"):
   API's own socket) does not keep running unlisted. `CloseTerminal` takes it off the list first (no event), then runs
   `kill-session`; an unknown id is no error.
 
+Console (`Claude/`, `Hubs/ConsoleHub.cs`; the contract is in "Console"; decisions: `PLAN.md`, "Backend decisions
+(stage 3)"):
+- `/hubs/console` has the shared hub rules ("Hubs"). `GetConversation` and `StartConversation` need `projectPath` to be
+  a directory in the projects directory (`ProjectPaths`, as for the terminal), otherwise "Nieprawidłowa ścieżka".
+  Conversations are keyed by `projectPath` as sent; a conversation's id is a new GUID.
+- Tables `Conversations` (`Id`, `ProjectPath`, `StartedAt`, `LastEventAt`, `Resumable`; index `ProjectPath` +
+  `StartedAt`), `ConversationEvents` (`ConversationId` with cascade, `Seq`, `Json` as text; key on both) and
+  `ConsoleRules` (`ProjectPath`, `Rule`, `CreatedAt`; key on both).
+- Every event is stored, then sent to all console connections, under the conversation's lock, so every connection and
+  a replay see one order. `Json` is the event as it was sent (text, not `jsonb`). Text deltas are sent at once and
+  stored as one row per `messageId`, written before the next other event; `GetConversation` returns the project's
+  latest conversation (by `StartedAt`) with its rows and the text still open. A failed insert is logged and the event
+  is still sent.
+- At start (a hosted service, so `create-user` never runs it) the API creates `Console:ConfigDirectory` with mode
+  0700. No claude process runs while the host starts: before the first claude process the API runs
+  `<Console:ClaudePath> --version` within 10 s with the console's environment, and a failed check is repeated by
+  the next prompt. Below 2.1.285, or without the CLI, the error log says so and the console answers "Konsola
+  niedostępna"; `GetConversation` and `StartConversation` still work. The version found is logged.
+
 Commands (`dotnet run --project src/Claushh.Api -- <command>`; on the server as `workspace`, with the service's
 environment file and a terminal, through `systemd-run`: README.md, "Deployment", step 10):
 
@@ -925,10 +953,11 @@ Migrations: `dotnet tool restore`, then
 
 Folders in `src/Claushh.Api/` (each is created together with the code it concerns). Existing: `Auth/` (Identity, TOTP,
 sessions), `Data/` (DbContext, migrations), `Files/` (files API and path protection), `Workspaces/` (workspaces),
-`Git/` (repositories and git), `Processes/` (a clean child environment, shared by git and the terminal),
-`Hubs/` (SignalR hubs: the Origin check, the session check, the terminal hub), `Terminal/` (tmux, the terminals),
-`Frontend/` (the built frontend and the security headers), `Notifications/` (phone notifications of logins).
-Planned: `Console/` (the `claude` process, MCP for permissions).
+`Git/` (repositories and git), `Processes/` (a clean child environment, shared by git, the terminal and the console),
+`Hubs/` (SignalR hubs: the Origin check, the session check, the terminal and console hubs), `Terminal/` (tmux, the
+terminals), `Frontend/` (the built frontend and the security headers), `Notifications/` (phone notifications of
+logins), `Claude/` (the console: the claude CLI and its conversations; not `Console/`, whose namespace would hide
+`System.Console`).
 
 ## Frontend
 
@@ -952,7 +981,7 @@ Rules: `CLAUDE.md`, section "Tests" (new code: only integration and e2e tests).
 |---|---|---|
 | Integration + older unit | `cd web && npm test` | Vitest (jsdom). Integration: `console.integration.spec.ts` (panel + store + editor, SignalR and HTTP stubbed; also permission requests: hidden characters, button delay, "tak, zawsze", and a double Enter), `workspaces.integration.spec.ts` (Workspace panel + router + git status + explorer + editor, HTTP stubbed; also the strict clone URL validation), `security.integration.spec.ts` (AuthService + interceptor + SessionTimer + the "Bezpieczeństwo" window, HTTP, reload and clock stubbed; also expiry without a server response), `logout-confirmation.integration.spec.ts` (routes with guards + AuthService + login screen after an unconfirmed logout, also with a newer session from another tab), `login-wait.integration.spec.ts` (routes with guards + AuthService + login screen after a `429`: the wait in seconds, minutes or hours). Older unit tests: auth, files API, paths, explorer, `EditorStore` |
 | E2E | `cd web && npm run e2e` | build + Playwright in Chromium on `e2e/mock-api/server.mjs`: login and sessions (including unconfirmed logout with "Back", a new tab and logging in again, embedding in a frame, Trusted Types), explorer and Monaco, console (steps, options, permissions, "tak, zawsze", interrupt, replay, multiple tabs, file changes), workspaces (opening a repo, git status, pull, push, create, clone, a conversation per repo), terminal (commands, keys, reload without duplicates, multiple terminals, `exit`, Ctrl+S, resizing, pasting with the decision panel, characters on a dropped connection without loss or duplication, also after closing the tab, queue limit, focus, OSC 8 links, no answers to terminal queries, closing a terminal that another tab already closed), session (countdown, "Przedłuż", activity once a minute on a fake clock, expiry, also without a server response and hubs closed by the server), the "Bezpieczeństwo" window with a second device (a separate browser context), diff view, Monaco worker startup, mock robustness and the contract rules that the frontend does not let through (clone URL, XSRF token bound to the identity, saving like the files API: `absent`, 5 MB, a NUL character, workspace, repo and path parameters). **Every test** (`fixtures.ts`) fails when the page reports a CSP or Trusted Types violation, an unhandled exception (including one caught by Angular's ErrorHandler, `console.error('ERROR', …)`) or Monaco does not create a worker |
-| Backend | `dotnet test` (needs Docker) | xUnit integration tests over HTTP (`WebApplicationFactory`, PostgreSQL 17 from Testcontainers, a test clock): login and its failures, `me`, `keepalive` and both deadlines, logout and 409, ending another session, XSRF token bound to the session, `no-store`, closed `/api/*`, the built frontend (the page for app paths with its CSP and `no-store`, file types and `no-cache`, `/api` and `/hubs` paths and missing files never the page, the security headers on every response, the start check of `Frontend:Root`), `create-user`, TOTP codes used once, the limit per IP, the client address behind Cloudflare (`CF-Connecting-IP` and `X-Forwarded-Proto` only from a loopback peer, `X-Forwarded-For` ignored, IPv6 limited per /64, IPv4-mapped peers as IPv4), the account lockout and its growth, a login that cannot start within 10 s, session list, `revoke-others`, login history, cleanup, the password reset, login notifications (content, one for the start of a lock and none for failed attempts, a failing or unreachable ntfy, the start check), the files API (listing, symlinks, `.git`, reading, saving, conflicts, re-creating a deleted file, limits, text rules, file modes, long names, two saves at once, empty error bodies), workspaces and git (the repository list and its order, what is and is not a repository, every git status, ahead and behind, HEAD content with a checkout's line endings and the files API's limits), workspaces (the list and its order, names and directories, creating, a stale row), cloning (every refused URL, git's own errors, the time limit against a server that never answers, only https), pull and push (every answer, both paths of a rename, a branch without commits, two pulls at once, a hook that refuses, only https), the background fetch (every 5 minutes by the test clock, a pull or push taking the repository from a fetch that hangs), the hubs (session and Origin on the WebSocket, WebSockets only, connections closed on logout, ending a session, revoke-others, expiry and a revocation by another process, hub calls never extending the session), the terminal (opening in a directory by its real path, titles, refused paths, the limit, output seq without gaps, the allowlisted environment, exit, close, the start routine), attach and input (snapshot with CRLF, every line exactly once when attaching during output, bracketed paste restored, a batch sent twice typed once, Input only after Attach on the same connection, inputSeq after a reconnect, batch limits, UTF-8 across send-keys commands, resize limits, an exited terminal, an unknown id, the history and normal screen before the switch to the alternate screen and the program's own text after it); needs the git CLI ≥ 2.45 (`--ref-format=reftable`) |
+| Backend | `dotnet test` (needs Docker) | xUnit integration tests over HTTP (`WebApplicationFactory`, PostgreSQL 17 from Testcontainers, a test clock): login and its failures, `me`, `keepalive` and both deadlines, logout and 409, ending another session, XSRF token bound to the session, `no-store`, closed `/api/*`, the built frontend (the page for app paths with its CSP and `no-store`, file types and `no-cache`, `/api` and `/hubs` paths and missing files never the page, the security headers on every response, the start check of `Frontend:Root`), `create-user`, TOTP codes used once, the limit per IP, the client address behind Cloudflare (`CF-Connecting-IP` and `X-Forwarded-Proto` only from a loopback peer, `X-Forwarded-For` ignored, IPv6 limited per /64, IPv4-mapped peers as IPv4), the account lockout and its growth, a login that cannot start within 10 s, session list, `revoke-others`, login history, cleanup, the password reset, login notifications (content, one for the start of a lock and none for failed attempts, a failing or unreachable ntfy, the start check), the files API (listing, symlinks, `.git`, reading, saving, conflicts, re-creating a deleted file, limits, text rules, file modes, long names, two saves at once, empty error bodies), workspaces and git (the repository list and its order, what is and is not a repository, every git status, ahead and behind, HEAD content with a checkout's line endings and the files API's limits), workspaces (the list and its order, names and directories, creating, a stale row), cloning (every refused URL, git's own errors, the time limit against a server that never answers, only https), pull and push (every answer, both paths of a rename, a branch without commits, two pulls at once, a hook that refuses, only https), the background fetch (every 5 minutes by the test clock, a pull or push taking the repository from a fetch that hangs), the hubs (session and Origin on the WebSocket, WebSockets only, connections closed on logout, ending a session, revoke-others, expiry and a revocation by another process, hub calls never extending the session), the terminal (opening in a directory by its real path, titles, refused paths, the limit, output seq without gaps, the allowlisted environment, exit, close, the start routine), attach and input (snapshot with CRLF, every line exactly once when attaching during output, bracketed paste restored, a batch sent twice typed once, Input only after Attach on the same connection, inputSeq after a reconnect, batch limits, UTF-8 across send-keys commands, resize limits, an exited terminal, an unknown id, the history and normal screen before the switch to the alternate screen and the program's own text after it), the console hub (refused paths, the conversation event in every tab, the latest conversation, the stored events as sent, the config directory's mode, session and Origin); needs the git CLI ≥ 2.45 (`--ref-format=reftable`) |
 
 Backend tests make repositories with the git CLI (`tests/Claushh.Api.Tests/TestGit.cs`): a fixed identity and date,
 `HOME` set to a temporary directory so the machine's `~/.gitconfig` stays out (libgit2's configuration search paths
@@ -977,6 +1006,16 @@ HOME in temporary directories and `/bin/sh` as the shell, and sets `CLAUSHH_TEST
 in the test process (the terminal tests check that they never reach the shell). `ApiFactory.ResetAsync` closes every
 terminal. `TestTerminal` is a browser tab on `/hubs/terminal`; tests that type before `Input` exists in them use the
 tmux CLI on the test server (`ApiFactory.Tmux`).
+
+Console tests never run the real `claude`. `ApiFactory` sets `Console:ClaudePath` to the fake CLI next to the tests
+(`tests/Claushh.FakeClaude`; the project reference copies its apphost there), `Console:ConfigDirectory` to a temporary
+directory and `Console:Environment:DOTNET_ROOT` (the fake is a .NET app with only the allowlisted environment). A test
+writes a conversation's script to `<config>/fake/<conversation id>.jsonl` (`TestClaude`): recordings from
+`tests/Claushh.Api.Tests/ConsoleRecordings/` (hand-written or scrubbed CLI output; a test refuses paths under `/home/`,
+`@`, UUIDs, API ids other than the `*_fixtureN` placeholders, the user name and usage data) and inline steps. The fake
+logs every launch (arguments, working directory, environment) and every stdin line. `TestConsole` is a browser tab on
+`/hubs/console`; its calls and waits give up after 20 s. `ApiFactory.ResetAsync` ends every console process, deletes
+the fake's files and empties the console's tables.
 
 Notes on e2e:
 - The mock has one shared state, the tests run sequentially and start with `POST /__test/reset`. It listens only on

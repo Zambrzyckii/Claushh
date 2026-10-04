@@ -1,7 +1,9 @@
 // One PostgreSQL 17 container and one API instance for the whole test run
 // (docs/ARCHITECTURE.md, "Tests"). Tests run one at a time because they share the database.
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Text;
+using Claushh.Api.Claude;
 using Claushh.Api.Data;
 using Claushh.Api.Git;
 using Claushh.Api.Terminal;
@@ -109,6 +111,13 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         """;
     public string FrontendRoot { get; } = Directory.CreateTempSubdirectory("claushh-frontend-").FullName;
 
+    // The claude CLI of the tests is the fake next to them (tests/Claushh.FakeClaude), never a claude from PATH.
+    // Console:ConfigDirectory is ClaudeHome, which the API creates at start; the fake keeps its scripts and logs in
+    // ClaudeHome/fake (TestClaude).
+    public string ClaudeRoot { get; } = Directory.CreateTempSubdirectory("claushh-claude-").FullName;
+    public string ClaudeHome => Path.Join(ClaudeRoot, "config");
+    public TestClaude Claude { get; }
+
     // Stands in for ntfy.sh (Notifications:NtfyUrl in ConfigureWebHost): every notification the API sends arrives here.
     public TestNtfy Ntfy { get; } = new();
 
@@ -127,6 +136,7 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     public ApiFactory()
     {
         Git = new TestGit(this);
+        Claude = new TestClaude(ClaudeHome);
         // Never read by the API: the terminal tests check that they do not reach a shell. In production the API's
         // environment holds ConnectionStrings__Claushh.
         Environment.SetEnvironmentVariable("CLAUSHH_TEST_CANARY", "leak");
@@ -180,6 +190,11 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         builder.UseSetting("Git:Environment:GIT_CONFIG_GLOBAL", GitConfig);
         builder.UseSetting("Notifications:NtfyUrl", "https://ntfy.test/claushh-test");
         builder.UseSetting("Notifications:NtfyToken", "tk_test");
+        builder.UseSetting("Console:ClaudePath", Path.Join(AppContext.BaseDirectory, "Claushh.FakeClaude"));
+        builder.UseSetting("Console:ConfigDirectory", ClaudeHome);
+        // The fake is a .NET app: with only the allowlisted environment its apphost finds the runtime through DOTNET_ROOT.
+        builder.UseSetting("Console:Environment:DOTNET_ROOT",
+            Path.GetFullPath(Path.Join(RuntimeEnvironment.GetRuntimeDirectory(), "..", "..", "..")));
         builder.ConfigureTestServices(services =>
         {
             services.AddSingleton<TimeProvider>(Clock);
@@ -206,6 +221,15 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         await Services.GetRequiredService<Terminals>().CloseAllAsync();
         // A fetch the previous test started in the background must not touch this test's repositories.
         await Services.GetRequiredService<BackgroundFetch>().ResetAsync();
+        // The previous test's claude processes end (the events of their ends are stored before the tables are emptied),
+        // then the fake's scripts and logs go; a test that broke the version check gets it back.
+        await Services.GetRequiredService<Conversations>().CloseAllAsync();
+        Claude.Reset();
+        var cli = Services.GetRequiredService<ClaudeCli>();
+        if (!cli.Available)
+        {
+            await cli.PrepareAsync(CancellationToken.None);
+        }
         // Directory.Delete removes symlinks without following them, so link targets outside stay untouched.
         Directory.Delete(ProjectsRoot, recursive: true);
         Directory.CreateDirectory(ProjectsRoot);
@@ -216,7 +240,7 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         Clock.Reset();
         await using var scope = Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<ClaushhDbContext>();
-        await db.Database.ExecuteSqlRawAsync("""TRUNCATE "Sessions", "LoginAttempts", "AspNetUsers", "Workspaces" CASCADE""");
+        await db.Database.ExecuteSqlRawAsync("""TRUNCATE "Sessions", "LoginAttempts", "AspNetUsers", "Workspaces", "ConversationEvents", "Conversations", "ConsoleRules" CASCADE""");
         if (!withUser)
         {
             return;
@@ -305,6 +329,7 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         Directory.Delete(RemotesRoot, recursive: true);
         Directory.Delete(GitHome, recursive: true);
         Directory.Delete(FrontendRoot, recursive: true);
+        Directory.Delete(ClaudeRoot, recursive: true);
     }
 
     private static void Check(IdentityResult result)

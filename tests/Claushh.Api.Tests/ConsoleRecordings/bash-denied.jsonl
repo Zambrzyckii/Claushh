@@ -1,0 +1,2 @@
+{"emit":{"type":"user","message":{"role":"user","content":[{"type":"tool_result","content":"The user denied this action.","is_error":true,"tool_use_id":"toolu_fixture5"}]},"parent_tool_use_id":null,"session_id":"{{session}}","tool_use_result":"Error: The user denied this action.","tool_result_meta":[{"id":"toolu_fixture5","non_execution_kind":"permission-rule"}]}}
+{"emit":{"type":"result","subtype":"success","is_error":false,"num_turns":2,"result":"Nie utworzyłem repozytorium.","session_id":"{{session}}","terminal_reason":"completed"}}

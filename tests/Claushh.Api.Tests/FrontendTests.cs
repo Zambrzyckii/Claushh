@@ -71,7 +71,7 @@ public sealed class FrontendTests(ApiFactory api) : ApiTest(api)
 
     [Theory]
     [InlineData("/hubs")]
-    [InlineData("/hubs/console")]
+    [InlineData("/hubs/nope")]
     [InlineData("/hubs/decoy.js")]
     public async Task Hub_paths_are_never_the_page_or_a_file(string url)
     {
