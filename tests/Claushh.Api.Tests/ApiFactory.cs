@@ -109,6 +109,9 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         """;
     public string FrontendRoot { get; } = Directory.CreateTempSubdirectory("claushh-frontend-").FullName;
 
+    // Stands in for ntfy.sh (Notifications:NtfyUrl in ConfigureWebHost): every notification the API sends arrives here.
+    public TestNtfy Ntfy { get; } = new();
+
     public TestGit Git { get; }
 
     // The global git configuration of the test run: https://git.test/<name>.git leads to RemotesRoot, and the file
@@ -175,6 +178,8 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         builder.UseSetting("Terminal:Environment:SHELL", "/bin/sh");
         builder.UseSetting("Terminal:Environment:HOME", TerminalHome);
         builder.UseSetting("Git:Environment:GIT_CONFIG_GLOBAL", GitConfig);
+        builder.UseSetting("Notifications:NtfyUrl", "https://ntfy.test/claushh-test");
+        builder.UseSetting("Notifications:NtfyToken", "tk_test");
         builder.ConfigureTestServices(services =>
         {
             services.AddSingleton<TimeProvider>(Clock);
@@ -183,6 +188,9 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
             // Nested inside HubSessionFilter (registered after it here), so HubConnectionTests can make the connect
             // pipeline fail once the session check has passed (TestHubThrow).
             services.Configure<HubOptions>(options => options.AddFilter<TestHubThrow>());
+            // Only the network boundary: the API's own notification client (LoginNotifications.ClientName) with ntfy.sh
+            // replaced by the fake.
+            services.AddHttpClient("ntfy").ConfigurePrimaryHttpMessageHandler(() => Ntfy);
         });
     }
 
@@ -192,6 +200,8 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     // default) the owner with TOTP enabled.
     public async Task ResetAsync(bool withUser = true)
     {
+        // Every login of the run sends a notification; a straggler of the previous test may still arrive after this.
+        Ntfy.Reset();
         // The previous test's terminals end, and with the last one the tmux server.
         await Services.GetRequiredService<Terminals>().CloseAllAsync();
         // A fetch the previous test started in the background must not touch this test's repositories.

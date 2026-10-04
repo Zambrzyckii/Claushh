@@ -5,9 +5,10 @@ Goals and decisions are in [`PLAN.md`](PLAN.md). After every change to the struc
 or dependency, update the relevant section.
 
 Status: frontend done (login, session countdown and the "Bezpieczeństwo" (Security) window, explorer, editor with diff view,
-console, workspaces and git, terminal). The backend has login, sessions, login protection, the client IP behind
-Cloudflare, the built frontend with the security headers, the files API (listing, reading and saving), the workspaces
-and git API and the terminal hub (section "Backend"); the console hub is still only in the mock.
+console, workspaces and git, terminal). The backend has login, sessions, login protection and notifications, the
+client IP behind Cloudflare, the built frontend with the security headers, the files API (listing, reading and
+saving), the workspaces and git API and the terminal hub (section "Backend"); the console hub is still only in the
+mock.
 The frontend is tested against a mock backend (`web/e2e/mock-api/`) that follows the contracts below.
 
 ## Flow
@@ -47,6 +48,7 @@ server: one process and one origin.
 | `src/Claushh.Api/Terminal/` | terminal: `TerminalOptions` (`Terminal:SocketDirectory`, `Terminal:Environment`), `TmuxServer` (the API's own tmux server: version check, socket and configuration, tmux processes with the allowlisted environment), `TmuxControlClient` (one `tmux -C`: its output read as bytes, replies matched to commands), `TerminalSession` (one terminal: output with `seq`, Attach, Input, Resize), `TerminalSnapshot` (the Attach text), `Terminals` (the terminals in creation order, titles, the limit; prepares and ends the tmux server) |
 | `src/Claushh.Api/Processes/` | `ChildEnvironment` (a clean, allowlisted environment for a child process: `GitRunner` and the terminal) |
 | `src/Claushh.Api/Frontend/` | the built frontend and the response headers: `FrontendOptions` (`Frontend:Root`), `FrontendFiles` (the files of the build, the `index.html` fallback, the CSP read from the page, cache rules), `SecurityHeaders` (the headers of every response, `no-store` on `/api`) |
+| `src/Claushh.Api/Notifications/` | phone notifications: `NotificationsOptions` (`Notifications:NtfyUrl`, `Notifications:NtfyToken`), `LoginNotifications` (the queue of login and lock messages and the background service that sends them to ntfy) |
 | `dotnet-tools.json` | local .NET tools: `dotnet-ef` (`dotnet tool restore`) |
 | `tests/Claushh.Api.Tests/` | backend integration tests: xUnit, the API in memory (`WebApplicationFactory`), PostgreSQL 17 from Testcontainers (`ApiFactory`) |
 | `global.json` | `dotnet test` runs on Microsoft.Testing.Platform (required by xUnit v3 on the .NET 10 SDK) |
@@ -650,6 +652,8 @@ Configuration:
 | `Terminal:SocketDirectory` | not set: `$XDG_RUNTIME_DIR/claushh`; server: `/run/claushh` (deployment) | the directory of the API's tmux socket and configuration, created with mode 0700; the socket path must fit in 107 bytes. Without it and without `XDG_RUNTIME_DIR` the terminal is unavailable |
 | `Terminal:Environment:<NAME>` | none (tests: `SHELL`, `HOME`) | variables for tmux and the shell on top of the allowlisted environment |
 | `Frontend:Root` | not set (development uses `ng serve`); to try the build: `dotnet user-secrets`; server: variable `Frontend__Root` | the absolute path of the Angular build (`web/dist/web/browser`) the API serves at `/`; when set, its `index.html` must carry the CSP `<meta>`, checked at start (the API does not start otherwise). Read once: restart the API after a build that changes the policy |
+| `Notifications:NtfyUrl` | server: variable `Notifications__NtfyUrl` (required in Production: the API does not start without it); development: optional, `dotnet user-secrets` | the URL of the ntfy topic (an absolute https URL, checked at start). A secret: whoever knows the topic can read it, so it is never logged. Empty: no notifications |
+| `Notifications:NtfyToken` | server: variable `Notifications__NtfyToken`; optional | an ntfy access token, sent as `Authorization: Bearer` |
 
 Frontend (`Frontend/`; decisions: `PLAN.md`, "Backend decisions (stage 1, part C)"):
 - With `Frontend:Root` set, the API serves the Angular build:
@@ -708,6 +712,22 @@ Login protection (`Auth/`):
 - Logins in the API process run one at a time (`LoginGuard.EnterAsync`), so the checks and writes of parallel attempts
   never interleave. A login waits at most 10 s for the one before it (`LoginGuard.GateWait`); then it gets `429` with
   `Retry-After: 10`, and nothing is recorded.
+
+Notifications (`Notifications/`; decisions: `PLAN.md`, "Backend decisions (stage 1, part C)"):
+- `LoginNotifications` sends a phone notification through ntfy for two events, never with the user name:
+  - every successful login: title `Claushh: logowanie`, priority `default`, with the address, the device and the time
+    in UTC;
+  - every start of an account lock: title `Claushh: konto zablokowane`, priority `high`, with the lock's length, the
+    last attempt's address, device and time, and `create-user --reset-password` as the way out.
+
+  Failed attempts and `429` send nothing.
+- Each message is one `POST` of the text to `Notifications:NtfyUrl`, with `Authorization: Bearer
+  <Notifications:NtfyToken>` when the token is set. Titles are ASCII (header values); the body is UTF-8.
+- The login only queues the message: at most 100 wait, and a full queue drops it with a warning. A background service
+  sends them one at a time outside the login gate, with a 10 s HTTP limit and one attempt each.
+- A failure is logged with the status code or the exception type only, never the URL (its path is the secret topic),
+  and the login is not affected. The notification client has no HTTP logging for the same reason.
+- Without `Notifications:NtfyUrl` nothing is queued, and one log line at start says notifications are off.
 
 Files (`Files/`; the rules the frontend can see are in "Files API contract"):
 - Every path goes through `ProjectPaths.Resolve` first (`FileEndpoints`: `400` when it returns null, before any file is
@@ -885,7 +905,7 @@ Folders in `src/Claushh.Api/` (each is created together with the code it concern
 sessions), `Data/` (DbContext, migrations), `Files/` (files API and path protection), `Workspaces/` (workspaces),
 `Git/` (repositories and git), `Processes/` (a clean child environment, shared by git and the terminal),
 `Hubs/` (SignalR hubs: the Origin check, the session check, the terminal hub), `Terminal/` (tmux, the terminals),
-`Frontend/` (the built frontend and the security headers).
+`Frontend/` (the built frontend and the security headers), `Notifications/` (phone notifications of logins).
 Planned: `Console/` (the `claude` process, MCP for permissions).
 
 ## Frontend
@@ -910,7 +930,7 @@ Rules: `CLAUDE.md`, section "Tests" (new code: only integration and e2e tests).
 |---|---|---|
 | Integration + older unit | `cd web && npm test` | Vitest (jsdom). Integration: `console.integration.spec.ts` (panel + store + editor, SignalR and HTTP stubbed; also permission requests: hidden characters, button delay, "tak, zawsze", and a double Enter), `workspaces.integration.spec.ts` (Workspace panel + router + git status + explorer + editor, HTTP stubbed; also the strict clone URL validation), `security.integration.spec.ts` (AuthService + interceptor + SessionTimer + the "Bezpieczeństwo" window, HTTP, reload and clock stubbed; also expiry without a server response), `logout-confirmation.integration.spec.ts` (routes with guards + AuthService + login screen after an unconfirmed logout, also with a newer session from another tab), `login-wait.integration.spec.ts` (routes with guards + AuthService + login screen after a `429`: the wait in seconds, minutes or hours). Older unit tests: auth, files API, paths, explorer, `EditorStore` |
 | E2E | `cd web && npm run e2e` | build + Playwright in Chromium on `e2e/mock-api/server.mjs`: login and sessions (including unconfirmed logout with "Back", a new tab and logging in again, embedding in a frame, Trusted Types), explorer and Monaco, console (steps, options, permissions, "tak, zawsze", interrupt, replay, multiple tabs, file changes), workspaces (opening a repo, git status, pull, push, create, clone, a conversation per repo), terminal (commands, keys, reload without duplicates, multiple terminals, `exit`, Ctrl+S, resizing, pasting with the decision panel, characters on a dropped connection without loss or duplication, also after closing the tab, queue limit, focus, OSC 8 links, no answers to terminal queries, closing a terminal that another tab already closed), session (countdown, "Przedłuż", activity once a minute on a fake clock, expiry, also without a server response and hubs closed by the server), the "Bezpieczeństwo" window with a second device (a separate browser context), diff view, Monaco worker startup, mock robustness and the contract rules that the frontend does not let through (clone URL, XSRF token bound to the identity, saving like the files API: `absent`, 5 MB, a NUL character, workspace, repo and path parameters). **Every test** (`fixtures.ts`) fails when the page reports a CSP or Trusted Types violation, an unhandled exception (including one caught by Angular's ErrorHandler, `console.error('ERROR', …)`) or Monaco does not create a worker |
-| Backend | `dotnet test` (needs Docker) | xUnit integration tests over HTTP (`WebApplicationFactory`, PostgreSQL 17 from Testcontainers, a test clock): login and its failures, `me`, `keepalive` and both deadlines, logout and 409, ending another session, XSRF token bound to the session, `no-store`, closed `/api/*`, the built frontend (the page for app paths with its CSP and `no-store`, file types and `no-cache`, `/api` and `/hubs` paths and missing files never the page, the security headers on every response, the start check of `Frontend:Root`), `create-user`, TOTP codes used once, the limit per IP, the client address behind Cloudflare (`CF-Connecting-IP` and `X-Forwarded-Proto` only from a loopback peer, `X-Forwarded-For` ignored, IPv6 limited per /64, IPv4-mapped peers as IPv4), the account lockout and its growth, a login that cannot start within 10 s, session list, `revoke-others`, login history, cleanup, the password reset, the files API (listing, symlinks, `.git`, reading, saving, conflicts, re-creating a deleted file, limits, text rules, file modes, long names, two saves at once, empty error bodies), workspaces and git (the repository list and its order, what is and is not a repository, every git status, ahead and behind, HEAD content with a checkout's line endings and the files API's limits), workspaces (the list and its order, names and directories, creating, a stale row), cloning (every refused URL, git's own errors, the time limit against a server that never answers, only https), pull and push (every answer, both paths of a rename, a branch without commits, two pulls at once, a hook that refuses, only https), the background fetch (every 5 minutes by the test clock, a pull or push taking the repository from a fetch that hangs), the hubs (session and Origin on the WebSocket, WebSockets only, connections closed on logout, ending a session, revoke-others, expiry and a revocation by another process, hub calls never extending the session), the terminal (opening in a directory by its real path, titles, refused paths, the limit, output seq without gaps, the allowlisted environment, exit, close, the start routine), attach and input (snapshot with CRLF, every line exactly once when attaching during output, bracketed paste restored, a batch sent twice typed once, Input only after Attach on the same connection, inputSeq after a reconnect, batch limits, UTF-8 across send-keys commands, resize limits, an exited terminal, an unknown id, the history and normal screen before the switch to the alternate screen and the program's own text after it); needs the git CLI ≥ 2.45 (`--ref-format=reftable`) |
+| Backend | `dotnet test` (needs Docker) | xUnit integration tests over HTTP (`WebApplicationFactory`, PostgreSQL 17 from Testcontainers, a test clock): login and its failures, `me`, `keepalive` and both deadlines, logout and 409, ending another session, XSRF token bound to the session, `no-store`, closed `/api/*`, the built frontend (the page for app paths with its CSP and `no-store`, file types and `no-cache`, `/api` and `/hubs` paths and missing files never the page, the security headers on every response, the start check of `Frontend:Root`), `create-user`, TOTP codes used once, the limit per IP, the client address behind Cloudflare (`CF-Connecting-IP` and `X-Forwarded-Proto` only from a loopback peer, `X-Forwarded-For` ignored, IPv6 limited per /64, IPv4-mapped peers as IPv4), the account lockout and its growth, a login that cannot start within 10 s, session list, `revoke-others`, login history, cleanup, the password reset, login notifications (content, one for the start of a lock and none for failed attempts, a failing or unreachable ntfy, the start check), the files API (listing, symlinks, `.git`, reading, saving, conflicts, re-creating a deleted file, limits, text rules, file modes, long names, two saves at once, empty error bodies), workspaces and git (the repository list and its order, what is and is not a repository, every git status, ahead and behind, HEAD content with a checkout's line endings and the files API's limits), workspaces (the list and its order, names and directories, creating, a stale row), cloning (every refused URL, git's own errors, the time limit against a server that never answers, only https), pull and push (every answer, both paths of a rename, a branch without commits, two pulls at once, a hook that refuses, only https), the background fetch (every 5 minutes by the test clock, a pull or push taking the repository from a fetch that hangs), the hubs (session and Origin on the WebSocket, WebSockets only, connections closed on logout, ending a session, revoke-others, expiry and a revocation by another process, hub calls never extending the session), the terminal (opening in a directory by its real path, titles, refused paths, the limit, output seq without gaps, the allowlisted environment, exit, close, the start routine), attach and input (snapshot with CRLF, every line exactly once when attaching during output, bracketed paste restored, a batch sent twice typed once, Input only after Attach on the same connection, inputSeq after a reconnect, batch limits, UTF-8 across send-keys commands, resize limits, an exited terminal, an unknown id, the history and normal screen before the switch to the alternate screen and the program's own text after it); needs the git CLI ≥ 2.45 (`--ref-format=reftable`) |
 
 Backend tests make repositories with the git CLI (`tests/Claushh.Api.Tests/TestGit.cs`): a fixed identity and date,
 `HOME` set to a temporary directory so the machine's `~/.gitconfig` stays out (libgit2's configuration search paths
@@ -927,6 +947,9 @@ WebSocket only, no negotiation, the browser's cookies and Origin: `https://local
 `ApiFactory` also writes a stand-in frontend build to a temporary `Frontend:Root`: `index.html` with a known CSP `<meta>`,
 one file of each type, and decoys under `api/` and `hubs/` that must never be served.
 `ApiFactory.WaitForALockWaitAsync` waits until a connection of the API waits for a lock a test holds (a row or a table).
+`ApiFactory` sets `Notifications:NtfyUrl` to `https://ntfy.test/claushh-test` and replaces ntfy with `TestNtfy`, the
+primary handler of the API's `ntfy` client: it records every notification and can answer 500 or throw. Every login of
+the run sends one, so the notification tests use their own addresses.
 From the terminal on, `dotnet test` needs tmux 3.7 or later on PATH. `ApiFactory` gives the API a tmux directory and a
 HOME in temporary directories and `/bin/sh` as the shell, and sets `CLAUSHH_TEST_CANARY` and `ConnectionStrings__Canary`
 in the test process (the terminal tests check that they never reach the shell). `ApiFactory.ResetAsync` closes every

@@ -109,8 +109,10 @@ public sealed class LoginGuard(ClaushhDbContext db, UserManager<IdentityUser> us
     // A wrong or reused code after a correct password. The fifth locks the account and starts the count again; every
     // lock in a row without a successful login lasts twice as long as the one before, at most MaxLockout.
     // Identity's own lockout methods use the real clock and require LockoutEnabled, so the fields are set here.
-    public async Task CodeFailedAsync(IdentityUser user)
+    // Returns the length of the lock this failure started (the login notifies the owner), or null when it started none.
+    public async Task<TimeSpan?> CodeFailedAsync(IdentityUser user)
     {
+        TimeSpan? started = null;
         user.AccessFailedCount++;
         if (user.AccessFailedCount >= MaxCodeFailures)
         {
@@ -122,8 +124,10 @@ public sealed class LoginGuard(ClaushhDbContext db, UserManager<IdentityUser> us
                 lockouts.ToString(CultureInfo.InvariantCulture)));
             log.LogWarning("Account locked for {Minutes} minutes after {Failures} wrong codes, lock {Lockouts} in a row",
                 duration.TotalMinutes, MaxCodeFailures, lockouts);
+            started = duration;
         }
         await SaveAsync(user);
+        return started;
     }
 
     public async Task SucceededAsync(IdentityUser user)

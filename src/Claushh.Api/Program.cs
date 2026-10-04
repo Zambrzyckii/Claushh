@@ -5,6 +5,7 @@ using Claushh.Api.Files;
 using Claushh.Api.Frontend;
 using Claushh.Api.Git;
 using Claushh.Api.Hubs;
+using Claushh.Api.Notifications;
 using Claushh.Api.Terminal;
 using Claushh.Api.Workspaces;
 using Microsoft.AspNetCore.Antiforgery;
@@ -64,6 +65,20 @@ builder.Services.AddScoped<TotpVerifier>();
 builder.Services.AddScoped<LoginGuard>();
 builder.Services.AddSingleton<AuthCleanup>();
 builder.Services.AddHostedService(services => services.GetRequiredService<AuthCleanup>());
+builder.Services.AddOptions<NotificationsOptions>()
+    .Bind(builder.Configuration.GetSection("Notifications"))
+    .Validate<IHostEnvironment>((options, environment) => options.NtfyUrl.Length > 0 || !environment.IsProduction(),
+        "Notifications:NtfyUrl must be set in Production (docs/PLAN.md, \"Deployment\").")
+    .Validate(options => options.NtfyUrl.Length == 0
+            || (Uri.TryCreate(options.NtfyUrl, UriKind.Absolute, out var url) && url.Scheme == Uri.UriSchemeHttps),
+        "Notifications:NtfyUrl must be an absolute https URL (docs/ARCHITECTURE.md, \"Backend\", configuration).")
+    .ValidateOnStart();
+// No HttpClient logs: they would write the topic URL, which is a secret.
+builder.Services.AddHttpClient(LoginNotifications.ClientName, client => client.Timeout = LoginNotifications.SendTimeout)
+    .RemoveAllLoggers();
+builder.Services.AddSingleton<LoginNotifications>();
+// Sends the queued notifications; create-user never starts the host, so it never runs this.
+builder.Services.AddHostedService(services => services.GetRequiredService<LoginNotifications>());
 builder.Services.AddScoped<CreateUserCommand>();
 builder.Services.AddSingleton<ProjectPaths>();
 builder.Services.AddSingleton<FileStore>();

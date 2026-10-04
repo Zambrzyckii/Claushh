@@ -5,8 +5,9 @@ terminal and git in the browser. Runs on a home computer (EndeavourOS), access t
 login with a password and a TOTP code. One user.
 
 Status: **frontend ready (login and sessions, editor with a diff view, console, workspaces and git, terminal);
-backend: login, sessions and login protection (stage 1, parts A and B), the files API (stage 2), the workspaces and
-git API and the terminal hub (stage 4).** Nothing is fit to be exposed to the internet.
+backend: login, sessions, login protection, the security headers, serving the built frontend, the client IP behind
+Cloudflare and login notifications (stage 1, parts A-C), the files API (stage 2), the workspaces and git API and the
+terminal hub (stage 4).** Not deployed yet: the steps before the tunnel are in `docs/PLAN.md`, "Deployment".
 Progress: [`docs/PLAN.md`](docs/PLAN.md), section "Stages".
 
 ## Documentation
@@ -52,6 +53,10 @@ at `http://localhost:4200`: hubs accept only the origins in `Hubs:AllowedOrigins
 
 Cloning, fetching and pulling a public repository needs no credential helper in development; pushing always needs
 credentials (also for a public repository), and the server's GitHub token is set up with the deployment.
+
+Login notifications (ntfy) are off in development unless `Notifications:NtfyUrl` is set
+(`dotnet user-secrets set --project src/Claushh.Api Notifications:NtfyUrl https://ntfy.sh/<your topic>`, and optionally
+`Notifications:NtfyToken`); on the server the API does not start without it.
 
 Lost phone or leaked password: `create-user --reset-totp` gives the account a new TOTP key,
 `create-user --reset-password` a new password; both end all sessions (commands in `docs/ARCHITECTURE.md`).

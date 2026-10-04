@@ -2,6 +2,7 @@
 using System.Globalization;
 using System.Text.Json;
 using Claushh.Api.Hubs;
+using Claushh.Api.Notifications;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Identity;
 
@@ -54,7 +55,8 @@ public static class AuthEndpoints
     }
 
     private static async Task<IResult> Login(LoginRequest body, HttpContext http, UserManager<IdentityUser> users,
-        LoginGuard guard, TotpVerifier totp, SessionService sessions, AuthCookies cookies, ILoggerFactory loggers)
+        LoginGuard guard, TotpVerifier totp, SessionService sessions, AuthCookies cookies, LoginNotifications notifications,
+        ILoggerFactory loggers)
     {
         var log = loggers.CreateLogger("Claushh.Api.Auth.Login");
         // After ForwardedHeaders: behind the tunnel, the address from CF-Connecting-IP.
@@ -80,10 +82,10 @@ public static class AuthEndpoints
         await guard.RecordAsync(success, ip, limitKey, userAgent, CancellationToken.None);
         if (user is null || !success)
         {
-            if (user is not null)
+            // The password was right: only wrong or reused codes count towards the lockout. Queuing does not wait for ntfy.
+            if (user is not null && await guard.CodeFailedAsync(user) is { } lockout)
             {
-                // The password was right: only wrong or reused codes count towards the lockout.
-                await guard.CodeFailedAsync(user);
+                notifications.AccountLocked(lockout, ip, userAgent);
             }
             // No user name: it is unvalidated input (newlines, any length, sometimes a mistyped password).
             log.LogInformation("Failed login from {Ip}", ip);
@@ -93,6 +95,7 @@ public static class AuthEndpoints
         var (_, secret) = await sessions.CreateAsync(user, userAgent, ip, http.RequestAborted);
         cookies.AppendSession(http.Response, secret);
         log.LogInformation("Login of {UserName} from {Ip}", user.UserName, ip);
+        notifications.LoggedIn(ip, userAgent);
         return Results.NoContent();
     }
 

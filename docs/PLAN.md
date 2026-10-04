@@ -84,7 +84,7 @@ console conversation identifiers, settings (default model, effort, mode).
 - Password (hash from ASP.NET Core Identity) + **mandatory TOTP**, optionally a passkey.
 - No registration endpoint. The account is created by an installation command (e.g. `dotnet run -- create-user`).
 - Login attempt limit per IP and an account lockout after several wrong codes (own code, see "Backend decisions (stage 1)").
-- Phone notification on every login (ntfy or Telegram).
+- Phone notification through ntfy of every successful login and every start of an account lock.
 - Cookies `HttpOnly`, `Secure`, `SameSite=Strict`, antiforgery.
 - Short sessions (e.g. 30 minutes of inactivity, hard limit of 12 h), extended only by user activity,
   list of active sessions, login history, "wyloguj wszędzie" (log out everywhere).
@@ -184,6 +184,13 @@ Backend decisions (stage 1, part C):
   otherwise, rounded up. Rejected: full words with Polish plural forms (more code for the same information).
   Rejected: a bucket per IPv6 address (a connection usually has a whole /64, so changing the address costs nothing),
   the prefix in `Ip` (the address would be lost) and an `inet` column (more code for the same query).
+- Phone notifications through ntfy of every successful login and every start of an account lock: one `POST` of the
+  text to the topic URL (a secret, in the server's environment file), with an optional access token. The login only
+  queues the message; a background service sends it once, outside the login gate, and a failure is only logged (as
+  `AuthCleanup` does). Required in Production (the API does not start without `Notifications:NtfyUrl`), optional
+  elsewhere, so the local test in Development needs none. Rejected: Telegram (the bot token is part of the URL path),
+  sending inside the login (ntfy's response time would hold the login gate), retries (more code for a rare event) and
+  a notification for every failed attempt (failed attempts are already in the login history).
 
 Backend decisions (stage 2):
 - The projects directory is the configuration key `Projects:Root` (`/srv/projects` in `appsettings.json`, a user-secret
@@ -433,6 +440,22 @@ and do not save the password in the browser. The password alone without the TOTP
 - No sleep (`HandleLidSwitch=ignore` on the laptop), automatic power-on after a power outage in the BIOS.
 - Updates (`pacman -Syu`) manually, after each one check that the portal works.
 - Backup: a daily `pg_dump` from a systemd timer.
+- Before the portal goes behind the tunnel (left to the deployment by stage 1, part C):
+  - ntfy: an unguessable topic (whoever knows it can read and send its messages), subscribed in the ntfy app on the
+    phone, optionally with an access token; the API gets `Notifications__NtfyUrl` (and `Notifications__NtfyToken`) from
+    its `600` environment file.
+  - The API's environment also gets `Frontend__Root` (the absolute path of the build from `npm run build`), the Kestrel
+    URL (`http://127.0.0.1:<port>`), `AllowedHosts` and the public origin in `Hubs__AllowedOrigins__0`.
+  - Cloudflare: HSTS for 12 months with `includeSubDomains`, without preload (HTTPS must then stay on for as long as
+    browsers keep the policy); "Always Use HTTPS"; one rate-limiting rule `http.request.uri.path eq "/api/auth/login"`,
+    5 requests in 10 s per IP, blocked for 10 s; Pseudo IPv4 off; "Remove visitor IP headers" off.
+  - The tunnel acceptance check, through the real tunnel. Send a request over `http://` with a forged
+    `CF-Connecting-IP`, a forged `X-Forwarded-For` and `X-Forwarded-Proto: https`. Then check that:
+    - `http://` redirects to `https://`, and HSTS is present;
+    - a login sets the `__Host-claushh-session` cookie;
+    - the login history shows the device's real public IP, not the forged values and not 127.0.0.1;
+    - two networks (phone data and home Wi-Fi) show different IPs;
+    - the login notification arrives.
 
 ## Stages
 
@@ -447,7 +470,7 @@ The order is chosen so that only already secured things reach the internet.
         server-side sessions, `me` / `login` / `logout` / `keepalive`, ending another session, antiforgery bound to the session.
   - [x] Backend, part B: lockout, rate limiting, blocking reuse of a TOTP code, login history, session list,
         `revoke-others`, cleanup of old rows, growing lockouts, password reset.
-  - [ ] Backend, part C: security headers and serving `index.html`, ForwardedHeaders, notifications.
+  - [x] Backend, part C: security headers and serving `index.html`, ForwardedHeaders, notifications.
   - [x] Frontend: session countdown in the top bar (stage 5).
   - [ ] Deployment: Cloudflare Tunnel, systemd service.
 - [x] **Stage 2: files and editor.**
