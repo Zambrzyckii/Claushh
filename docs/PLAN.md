@@ -114,10 +114,10 @@ Backend decisions (stage 1):
 - Closed by default: `FallbackPolicy` requires a session; anonymous are only `/api/health`, `GET /api/auth/me`,
   `POST /api/auth/login` and the built frontend (static files and the `index.html` fallback, the same files for
   everyone, no data).
-- Development runs over plain http, where ASP.NET antiforgery refuses `Secure`-only cookies, so there the cookies have no
-  `__Host-` prefix (`Sessions:SecureCookies=false`).
-  Behind Cloudflare Tunnel requests also reach the API as HTTP; `ForwardedHeaders` takes `X-Forwarded-Proto: https` from
-  the local `cloudflared`, so production keeps `Secure` and the `__Host-` prefix.
+- Development runs over plain http, where ASP.NET antiforgery refuses `Secure`-only cookies, so there the cookies have
+  no `__Host-` prefix (`Sessions:SecureCookies=false`). Behind Cloudflare Tunnel requests also reach the API as HTTP;
+  `ForwardedHeaders` takes `X-Forwarded-Proto: https` from the local `cloudflared`, so production keeps `Secure` and the
+  `__Host-` prefix.
 - The account is created only by `create-user` on the server; TOTP is switched on only after a correct code from the app,
   in one transaction. A lost phone: `create-user --reset-totp` (a new key, all sessions ended, the lockout cleared),
   which needs shell access to the server anyway. A leaked password: `create-user --reset-password` (a new password,
@@ -177,13 +177,13 @@ Backend decisions (stage 1, part C):
   tunnel acceptance check in "Deployment" catches that case).
 - The per-IP limit counts by the IPv4 address (IPv4-mapped addresses as IPv4) or the IPv6 /64, kept in
   `LoginAttempts.LimitKey`; the history keeps the full address. Old rows are not backfilled (the window is 15 minutes).
+  Rejected: a bucket per IPv6 address (a connection usually has a whole /64, so changing the address costs nothing), the
+  prefix in `Ip` (the address would be lost) and an `inet` column (more code for the same query).
 - A login waits at most 10 s for the one before it; then it gets `429` with `Retry-After: 10`, and nothing is recorded
   (like every `429`). Rejected: `503` (the frontend shows it as "Błąd serwera", and the contract and the mock would
   change).
 - The login screen shows the wait from `Retry-After` as "N s" below a minute, "N min" below an hour and "N godz."
   otherwise, rounded up. Rejected: full words with Polish plural forms (more code for the same information).
-  Rejected: a bucket per IPv6 address (a connection usually has a whole /64, so changing the address costs nothing),
-  the prefix in `Ip` (the address would be lost) and an `inet` column (more code for the same query).
 - Phone notifications through ntfy of every successful login and every start of an account lock: one `POST` of the
   text to the topic URL (a secret, in the server's environment file), with an optional access token. The login only
   queues the message; a background service sends it once, outside the login gate, and a failure is only logged (as

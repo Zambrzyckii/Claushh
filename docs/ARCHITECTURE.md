@@ -621,7 +621,7 @@ Endpoints:
 | POST | `/api/git/pull?repo=<repo>` | fetch and fast-forward merge under the repository's lock; 400 no upstream; 404 not a repository; 409 the merge failed; 502 the fetch failed or ran out of time | session, XSRF token |
 | POST | `/api/git/push?repo=<repo>` | push to the upstream (or -u origin HEAD) under the repository's lock; 400 detached HEAD or no origin; 404 not a repository; 409 [rejected]; 502 any other failure or the time limit | session, XSRF token |
 | GET (WebSocket) | `/hubs/terminal` | the terminal hub (contract: "Terminal"); WebSocket only, without negotiation | session, Origin |
-| GET | `/*` other paths that do not look like a file (no `.` in the last segment) | the built frontend's `index.html` (Angular's routes), `no-store`, with the CSP header; only with `Frontend:Root` | none |
+| any | `/*` other paths that do not look like a file (no `.` in the last segment) | GET and HEAD: the built frontend's `index.html` (Angular's routes), `no-store`, with the CSP header; other methods: 404, also without a session; only with `Frontend:Root` | none |
 | GET | `/<file>` of the build, e.g. `/main-<hash>.js`, `/monaco.css` | the file, `no-cache`; only with `Frontend:Root` | none |
 | any | `/hubs/*` other than the hubs above | 401 without a session, 404 with one | session, Origin |
 

@@ -32,7 +32,9 @@ public static partial class FrontendFiles
         {
             return null;
         }
-        var policy = ReadPolicy(frontend.Root) + "; frame-ancestors 'none'";
+        var policy = (ReadPolicy(frontend.Root) ?? throw new InvalidOperationException(
+            "Frontend:Root must hold the frontend build: an index.html with a Content-Security-Policy <meta> (README.md, \"Running the built frontend\")."))
+            + "; frame-ancestors 'none'";
         var types = new FileExtensionContentTypeProvider();
         // The framework's own type is application/x-font-ttf; the mock sends font/ttf.
         types.Mappings[".ttf"] = "font/ttf";

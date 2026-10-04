@@ -94,7 +94,7 @@ public sealed class FrontendTests(ApiFactory api) : ApiTest(api)
             await Client.Http.GetAsync("/"),
             await Client.Http.GetAsync("/main-TEST.js"),
             await Client.Http.GetAsync("/api/health"),
-            // 401; antiforgery would add its own X-Frame-Options: SAMEORIGIN here.
+            // 401; one X-Frame-Options: DENY (Program.cs suppresses antiforgery's SAMEORIGIN).
             await Client.Http.GetAsync("/api/auth/me"),
             await SendAsync("/hubs/terminal", origin: null),
             await Client.Http.GetAsync("/chunk-x.js"),
