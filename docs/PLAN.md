@@ -425,6 +425,8 @@ Backend decisions (stage 4):
 - Secrets in `/etc/claushh/claushh.env` (root, `600`), which systemd reads before the service starts, and the tunnel
   token as a systemd credential (`LoadCredential=`); never in the repo.
 - The .NET diagnostic port is off on the server (`DOTNET_EnableDiagnostics=0`).
+- In Production the API makes its process non-dumpable as soon as it has started: other processes of `workspace` can
+  neither read its `/proc` files (its environment holds the secrets) nor attach to it.
 - By default the console asks for permission before edits and commands such as `git push`. The request shows the command with all
   hidden characters, and a permanent permission ("tak, zawsze" – yes, always) requires a known rule and confirmation.
 - Terminal: pasted text without control characters, multiple lines only after confirmation, typed characters are not lost
@@ -460,8 +462,9 @@ and do not save the password in the browser. The password alone without the TOTP
     its `600` environment file.
   - The unit sets `Frontend__Root` (`/opt/claushh/web`) and the Kestrel URL (`http://127.0.0.1:5090`); the
     environment file sets `AllowedHosts` and the public origin in `Hubs__AllowedOrigins__0`.
-  - The acceptance check on loopback (phase A) comes first: the service, a login, a portal terminal inside the
-    sandbox, containers, a backup with its restore, a reboot. The tunnel starts only after it has passed.
+  - The acceptance check on loopback (phase A) comes first: the service, the non-dumpable process, a login, a portal
+    terminal inside the sandbox, containers, a backup with its restore, a reboot. The tunnel starts only after it has
+    passed.
   - Cloudflare Access comes before the tunnel: the Access application, with a policy for the owner's e-mail and the
     one-time PIN, exists before the tunnel's public hostname and before `cloudflared` starts.
   - Cloudflare: HSTS for 12 months with `includeSubDomains`, without preload (HTTPS must then stay on for as long as
@@ -562,6 +565,14 @@ Deployment decisions:
   would not test the terminal inside the service) and the tunnel first.
 - Cloudflare Access with the one-time PIN to the owner's e-mail is mandatory; its application and policy exist before
   the tunnel's public hostname and before `cloudflared` starts.
+- In Production, once the host has started, the API makes its process non-dumpable (`prctl(PR_SET_DUMPABLE, 0)`,
+  `Files/Libc.cs`): its `/proc` files belong to root, and no process of its user can attach to it. When that fails,
+  the API logs it and stops. Rejected: the first line of `Program.cs` (a test that runs the API in Production inside
+  the test process would change that process for the rest of the run), a setting that switches it off, and reading
+  `ASPNETCORE_ENVIRONMENT` directly (a host that defaults to Production without it would skip it). It has no automated
+  test: an in-process test would change the test host itself, and a test in a child process would need a second
+  runnable API with a database, tmux and a frontend build; the acceptance check on the server covers it
+  (`README.md`, "Deployment", phase A).
 
 ## Stages
 

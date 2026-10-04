@@ -178,5 +178,20 @@ app.MapHub<TerminalHub>("/hubs/terminal", options => options.Transports = HttpTr
 app.Map("/hubs/{**path}", () => Results.NotFound());
 app.MapFrontendFallback(frontend);
 
+// Production: once the host has started, other processes of the API's user can neither read its /proc files (its
+// environment holds the secrets) nor attach to it (docs/PLAN.md, "Limiting damage"). After the start, so a test host
+// that runs Program in Production only to see it refuse is never changed.
+if (app.Environment.IsProduction())
+{
+    app.Lifetime.ApplicationStarted.Register(() =>
+    {
+        if (!Libc.MakeNotDumpable())
+        {
+            app.Logger.LogCritical("Making the process non-dumpable failed; stopping.");
+            app.Lifetime.StopApplication();
+        }
+    });
+}
+
 app.Run();
 return 0;

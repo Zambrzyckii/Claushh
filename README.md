@@ -207,6 +207,13 @@ for a given version); then `sudo systemctl restart claushh`, which ends the open
 - **Service.** `systemctl is-active claushh` gives `active`; `curl -s http://127.0.0.1:5090/api/health` gives
   `{"status":"ok"}`; `journalctl -u claushh` has no warning about Data Protection keys kept only in memory; and
   `sudo ls /home/workspace/.aspnet/DataProtection-Keys` lists `key-*.xml`.
+- **Not dumpable** (as you, outside the portal):
+  ```bash
+  pid=$(systemctl show -p MainPID --value claushh)
+  sudo stat -c %U:%G /proc/$pid/environ    # root:root
+  sudo -u workspace cat /proc/$pid/environ    # Permission denied
+  ```
+  In a portal terminal the same `cat` gives "Permission denied" or "No such file or directory".
 - **Login** at `http://127.0.0.1:5090` in the browser of this computer; the ntfy notification arrives.
 - **Terminal.** In a portal terminal:
   - `id` shows only the group `workspace`; `grep NoNewPrivs /proc/self/status` gives `1`; `cat /proc/self/cgroup`

@@ -1,6 +1,7 @@
 // libc calls that System.IO does not offer: resolving every symlink of a path (realpath(3)), the type of a file without
-// following a final symlink (statx(2)), so FIFOs and devices are never opened, and whether the process may use a
-// directory (access(2)). Linux only, like the deployment (docs/PLAN.md, "Backend decisions (stage 2)").
+// following a final symlink (statx(2)), so FIFOs and devices are never opened, whether the process may use a directory
+// (access(2)), and making the process non-dumpable (prctl(2)). Linux only, like the deployment (docs/PLAN.md,
+// "Backend decisions (stage 2)").
 using System.Runtime.InteropServices;
 
 namespace Claushh.Api.Files;
@@ -25,6 +26,8 @@ internal static class Libc
     private const int StatxModeOffset = 28;
     // The access(2) mode R_OK | W_OK | X_OK.
     private const int AccessReadWriteSearch = 4 | 2 | 1;
+    // PR_SET_DUMPABLE of <linux/prctl.h>.
+    private const int PrSetDumpable = 4;
 
     // The path with every symlink resolved, or null with errno (ENOENT, ENOTDIR, ELOOP, …).
     public static string? RealPath(string path, out int errno)
@@ -59,6 +62,9 @@ internal static class Libc
     // Whether this process may read, write and search the directory; a symlink is followed.
     public static bool CanReadWriteAndSearch(string path) => AccessNative(path, AccessReadWriteSearch) == 0;
 
+    // prctl(PR_SET_DUMPABLE, 0): the process's /proc files belong to root and no process of its user can attach to it.
+    public static bool MakeNotDumpable() => PrctlNative(PrSetDumpable, 0, 0, 0, 0) == 0;
+
     [DllImport("libc", EntryPoint = "realpath", SetLastError = true)]
     private static extern nint RealPathNative([MarshalAs(UnmanagedType.LPUTF8Str)] string path, nint resolved);
 
@@ -70,4 +76,7 @@ internal static class Libc
 
     [DllImport("libc", EntryPoint = "access", SetLastError = true)]
     private static extern int AccessNative([MarshalAs(UnmanagedType.LPUTF8Str)] string path, int mode);
+
+    [DllImport("libc", EntryPoint = "prctl", SetLastError = true)]
+    private static extern int PrctlNative(int option, nuint arg2, nuint arg3, nuint arg4, nuint arg5);
 }
