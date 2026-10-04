@@ -1,9 +1,12 @@
-// The console's conversations (docs/ARCHITECTURE.md, "Backend" → "Console"; decisions: docs/PLAN.md, "Backend
-// decisions (stage 3)"). A singleton, because a hub instance lives for one call. Every event of a conversation is
-// stored and then sent to every console connection under the conversation's lock, so all connections and a later
-// replay see one order. Also the hosted service that prepares the claude CLI's config directory at start (never for
-// create-user, which exits before the host runs).
+// The console's conversations and their claude processes (docs/ARCHITECTURE.md, "Backend" → "Console"; decisions:
+// docs/PLAN.md, "Backend decisions (stage 3)"). A singleton, because a hub instance lives for one call. Every change of
+// a conversation and every event it sends happen under the conversation's lock, so all connections and a later replay
+// see one order. Replies to the API's own control requests are matched without that lock, so a prompt waiting for them
+// never blocks the reader that reads them. Also the hosted service that prepares the CLI's config directory and ends
+// the turns a stopped API left open at start, closes idle processes every minute and stops every process on a stop
+// (never for create-user, which exits before the host runs).
 using System.Collections.Concurrent;
+using System.ComponentModel;
 using System.Text;
 using System.Text.Json;
 using Claushh.Api.Files;
@@ -16,26 +19,96 @@ namespace Claushh.Api.Claude;
 public sealed record ConversationSnapshot(string? ConversationId, IReadOnlyList<JsonElement> Events);
 
 public sealed class Conversations(ClaudeCli cli, ConversationLog store, ProjectPaths paths, IHubContext<ConsoleHub> hub,
-    ILogger<Conversations> log) : IHostedService
+    TimeProvider clock, ILogger<Conversations> log) : IHostedService
 {
     public const string InvalidPath = "Nieprawidłowa ścieżka";
+    public const string UnknownConversation = "Nieznana rozmowa";
+    public const string BusyConversation = "Rozmowa jest zajęta";
+    public const string TooMany = "Za dużo aktywnych rozmów";
+    public const int ProcessLimit = 8;
+    public static readonly TimeSpan IdleTimeout = TimeSpan.FromMinutes(15);
+    public static readonly TimeSpan DefaultInterruptTimeout = TimeSpan.FromSeconds(10);
+
+    private const string Interrupted = "przerwano";
+    private const string ResumeFailed = "Nie udało się wznowić rozmowy. Zacznij nową („Nowa”).";
+    private const string StoppedMidTurn = "Serwer został zatrzymany w trakcie pracy.";
+    // How long a closed process may take to exit before its tree is killed; also the whole stop's limit.
+    private static readonly TimeSpan CloseWait = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan IdleSweep = TimeSpan.FromMinutes(1);
 
     private readonly ConcurrentDictionary<Guid, ConversationState> _states = new();
+    // Every started process with its reader, until the reader has handled its exit.
+    private readonly ConcurrentDictionary<ClaudeProcess, Task> _running = new();
+    // Held while a launch counts the live processes and frees a slot, so two launches never take the same one.
+    private readonly SemaphoreSlim _launch = new(1, 1);
+    private readonly CancellationTokenSource _stopping = new();
+    private Task _sweep = Task.CompletedTask;
+    private volatile bool _stopped;
 
-    public Task StartAsync(CancellationToken cancellationToken)
+    // How long an interrupted turn may run on before its process tree is killed; the tests shorten it, and CloseAllAsync
+    // restores it.
+    public TimeSpan InterruptTimeout { get; set; } = DefaultInterruptTimeout;
+
+    public async Task StartAsync(CancellationToken cancellationToken)
     {
         cli.PrepareDirectory();
-        return Task.CompletedTask;
+        await RecoverAsync();
+        _sweep = SweepAsync(_stopping.Token);
     }
 
-    public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    // Open turns are interrupted and every stdin is closed; whatever still runs after 5 s is killed. A turn that ends
+    // meanwhile ends as interrupted (ReadAsync).
+    public async Task StopAsync(CancellationToken cancellationToken)
+    {
+        _stopped = true;
+        await _stopping.CancelAsync();
+        await _sweep;
+        var ending = new List<Task>();
+        foreach (var state in _states.Values)
+        {
+            await state.Lock.WaitAsync();
+            try
+            {
+                if (state.Process is { } process)
+                {
+                    var interrupt = state.Turn is { Interrupting: false };
+                    if (state.Turn is { } turn)
+                    {
+                        turn.Interrupting = true;
+                        await DenyPendingAsync(state, turn);
+                    }
+                    ending.Add(EndAsync(process, interrupt));
+                }
+            }
+            finally
+            {
+                state.Lock.Release();
+            }
+        }
+        await WithinAsync(Task.WhenAll(ending), CloseWait);
+        foreach (var process in _running.Keys)
+        {
+            process.KillTree();
+        }
+        await WithinAsync(Task.WhenAll(_running.Values), CloseWait);
+    }
 
-    // For the tests, before every test: every conversation in memory is forgotten (the test deletes the rows next).
-    public Task CloseAllAsync()
+    // For the tests, before every test: every process is killed and every conversation in memory forgotten (the test
+    // deletes the rows next); the events of their ends are stored before that.
+    public async Task CloseAllAsync()
     {
         _states.Clear();
-        return Task.CompletedTask;
+        foreach (var (process, reader) in _running.ToArray())
+        {
+            process.KillTree();
+            await reader;
+        }
+        InterruptTimeout = DefaultInterruptTimeout;
     }
+
+    // Whether the conversation has a live process (for the tests).
+    public bool IsRunning(string conversationId) =>
+        Guid.TryParse(conversationId, out var id) && _states.TryGetValue(id, out var state) && state.Process is not null;
 
     public async Task<ConversationSnapshot> GetAsync(string? projectPath)
     {
@@ -79,10 +152,611 @@ public sealed class Conversations(ClaudeCli cli, ConversationLog store, ProjectP
         return state.Key;
     }
 
+    // Launches or reuses the process, applies the options, stores and sends prompt and working, and writes the prompt;
+    // the turn's events follow from the reader. The conversation is busy from here to the end of its turn.
+    public async Task SendPromptAsync(string? conversationId, string text, PromptOptions options)
+    {
+        var state = await FindAsync(conversationId) ?? throw new HubException(UnknownConversation);
+        await state.Lock.WaitAsync();
+        try
+        {
+            if (state.Busy)
+            {
+                throw new HubException(BusyConversation);
+            }
+            state.Busy = true;
+            state.LastUsed = clock.GetUtcNow();
+        }
+        finally
+        {
+            state.Lock.Release();
+        }
+        var opened = false;
+        try
+        {
+            var process = await EnsureProcessAsync(state, options);
+            await process.ApplyAsync(options);
+            await state.Lock.WaitAsync();
+            try
+            {
+                state.Turn = new Turn(state.WorkingDirectory);
+                opened = true;
+                await EmitAsync(state, ConsoleEvents.Prompt(state.Key, text));
+                await EmitAsync(state, ConsoleEvents.Status(state.Key, "working"));
+            }
+            finally
+            {
+                state.Lock.Release();
+            }
+            await process.SendPromptAsync(text);
+        }
+        catch when (!opened)
+        {
+            await state.Lock.WaitAsync();
+            try
+            {
+                state.Busy = false;
+            }
+            finally
+            {
+                state.Lock.Release();
+            }
+            throw;
+        }
+    }
+
+    // Open questions end as denied at once, then the CLI's interrupt; a turn without its result within
+    // InterruptTimeout ends as interrupted and its process is killed. An unknown or idle conversation is a no-op.
+    public async Task InterruptAsync(string? conversationId)
+    {
+        if (await FindAsync(conversationId) is not { } state)
+        {
+            return;
+        }
+        Turn turn;
+        ClaudeProcess process;
+        await state.Lock.WaitAsync();
+        try
+        {
+            if (state.Turn is not { Interrupting: false } open || state.Process is not { } running)
+            {
+                return;
+            }
+            open.Interrupting = true;
+            await DenyPendingAsync(state, open);
+            turn = open;
+            process = running;
+        }
+        finally
+        {
+            state.Lock.Release();
+        }
+        _ = WatchInterruptAsync(state, turn, process);
+        try
+        {
+            await process.InterruptAsync();
+        }
+        catch (HubException e)
+        {
+            log.LogWarning(e, "Sending the interrupt of console conversation {Conversation} failed", state.Key);
+        }
+    }
+
+    // Processes without a turn for IdleTimeout get EOF on stdin and are killed 5 s later if they still run; the next
+    // prompt resumes the conversation. Every minute, and directly from the tests.
+    public async Task CloseIdleAsync()
+    {
+        var now = clock.GetUtcNow();
+        foreach (var state in _states.Values)
+        {
+            await state.Lock.WaitAsync();
+            try
+            {
+                if (!state.Busy && state.Process is { } process && now - state.LastUsed >= IdleTimeout)
+                {
+                    state.Process = null;
+                    state.Closing = process.CloseAsync(CloseWait);
+                }
+            }
+            finally
+            {
+                state.Lock.Release();
+            }
+        }
+    }
+
+    // At start: a conversation whose log ends with working or waiting was cut off by a stop or a crash. Its open
+    // questions end as denied, then an error, so a replay shows no dead question.
+    public async Task RecoverAsync()
+    {
+        try
+        {
+            foreach (var id in await store.UnfinishedAsync())
+            {
+                if (await store.FindAsync(id) is not { } row)
+                {
+                    continue;
+                }
+                var state = Track(row);
+                await state.Lock.WaitAsync();
+                try
+                {
+                    var events = (await store.EventsAsync(id)).Select(Parse).ToList();
+                    var answered = events.Where(e => StreamJson.Str(e, "type") == "permission-resolved")
+                        .Select(e => StreamJson.Str(e, "requestId")).ToHashSet();
+                    foreach (var question in events.Where(e => StreamJson.Str(e, "type") == "permission").Select(e => StreamJson.Str(e, "requestId")))
+                    {
+                        if (question is not null && !answered.Contains(question))
+                        {
+                            await EmitAsync(state, ConsoleEvents.Resolved(state.Key, question, "deny"));
+                        }
+                    }
+                    await EmitAsync(state, ConsoleEvents.Status(state.Key, "error", StoppedMidTurn));
+                }
+                finally
+                {
+                    state.Lock.Release();
+                }
+            }
+        }
+        catch (Exception e)
+        {
+            log.LogError(e, "Ending the console turns a stopped API left open failed");
+        }
+    }
+
+    // The conversation's process, launched (or resumed) when it has none. Called while the conversation is busy, so
+    // nothing else launches for it at the same time.
+    private async Task<ClaudeProcess> EnsureProcessAsync(ConversationState state, PromptOptions options)
+    {
+        if (state.Process is { } running)
+        {
+            return running;
+        }
+        await state.Closing;
+        if (!await cli.EnsureAvailableAsync(CancellationToken.None))
+        {
+            throw new HubException(ClaudeCli.Unavailable);
+        }
+        var directory = RealDirectory(state.ProjectPath);
+        await ReserveAsync(state);
+        ClaudeProcess? process = null;
+        try
+        {
+            var resume = state.Resumable;
+            var started = ClaudeProcess.Start(cli.StartInfo(directory, cli.Arguments(state.Id, resume, options, [])), log);
+            process = started;
+            await state.Lock.WaitAsync();
+            try
+            {
+                state.Process = started;
+                state.WorkingDirectory = directory;
+            }
+            finally
+            {
+                state.Lock.Release();
+            }
+            _running[started] = Task.Run(() => ReadAsync(state, started));
+            try
+            {
+                await started.InitializeAsync();
+            }
+            catch (HubException) when (resume)
+            {
+                await state.Lock.WaitAsync();
+                try
+                {
+                    await EmitAsync(state, ConsoleEvents.Status(state.Key, "error", ResumeFailed));
+                }
+                finally
+                {
+                    state.Lock.Release();
+                }
+                throw;
+            }
+            return started;
+        }
+        catch (Exception e) when (e is HubException or Win32Exception or InvalidOperationException or IOException)
+        {
+            log.LogWarning(e, "Starting claude for console conversation {Conversation} failed", state.Key);
+            if (process is not null)
+            {
+                await state.Lock.WaitAsync();
+                try
+                {
+                    if (state.Process == process)
+                    {
+                        state.Process = null;
+                    }
+                }
+                finally
+                {
+                    state.Lock.Release();
+                }
+                process.KillTree();
+            }
+            throw new HubException(ClaudeCli.Unavailable);
+        }
+        finally
+        {
+            state.Launching = false;
+        }
+    }
+
+    // A slot among the ProcessLimit live processes: free, or freed by closing the least recently used idle one.
+    private async Task ReserveAsync(ConversationState state)
+    {
+        await _launch.WaitAsync();
+        try
+        {
+            if (_stopped)
+            {
+                throw new HubException(ClaudeCli.Unavailable);
+            }
+            if (_states.Values.Count(s => s.Process is not null || s.Launching) >= ProcessLimit && !await CloseLeastRecentlyUsedAsync(state))
+            {
+                throw new HubException(TooMany);
+            }
+            state.Launching = true;
+        }
+        finally
+        {
+            _launch.Release();
+        }
+    }
+
+    private async Task<bool> CloseLeastRecentlyUsedAsync(ConversationState except)
+    {
+        foreach (var candidate in _states.Values.Where(s => s != except && s.Process is not null && !s.Busy).OrderBy(s => s.LastUsed).ToList())
+        {
+            await candidate.Lock.WaitAsync();
+            try
+            {
+                if (candidate.Busy || candidate.Process is not { } process)
+                {
+                    continue;
+                }
+                candidate.Process = null;
+                candidate.Closing = process.CloseAsync(CloseWait);
+                return true;
+            }
+            finally
+            {
+                candidate.Lock.Release();
+            }
+        }
+        return false;
+    }
+
+    // One reader per process: each line is handled, its events stored and sent, before the next is read. At the end of
+    // the output, a turn this process still had ends: as interrupted while the API stops, otherwise with an error.
+    private async Task ReadAsync(ConversationState state, ClaudeProcess process)
+    {
+        try
+        {
+            while (true)
+            {
+                JsonElement? line;
+                try
+                {
+                    line = await process.ReadLineAsync();
+                }
+                catch (JsonException e)
+                {
+                    log.LogWarning(e, "claude wrote a line that is not JSON in console conversation {Conversation}", state.Key);
+                    continue;
+                }
+                if (line is not { } value)
+                {
+                    break;
+                }
+                await HandleAsync(state, process, value);
+            }
+        }
+        catch (Exception e)
+        {
+            // A line over 16 MB, or a failure while handling one: the process cannot go on.
+            log.LogWarning(e, "Reading claude's output in console conversation {Conversation} failed; its process is killed", state.Key);
+            process.KillTree();
+        }
+        try
+        {
+            var code = await process.ExitAsync();
+            log.LogInformation("claude of console conversation {Conversation} exited with {ExitCode}", state.Key, code);
+            await state.Lock.WaitAsync();
+            try
+            {
+                if (state.Process == process)
+                {
+                    state.Process = null;
+                    if (state.Turn is not null)
+                    {
+                        await EndTurnAsync(state, _stopped
+                            ? ConsoleEvents.Status(state.Key, "idle", Interrupted)
+                            : ConsoleEvents.Status(state.Key, "error", $"Proces konsoli zakończył się (kod {code})."));
+                    }
+                }
+            }
+            finally
+            {
+                state.Lock.Release();
+            }
+        }
+        catch (Exception e)
+        {
+            log.LogError(e, "Ending the claude process of console conversation {Conversation} failed", state.Key);
+        }
+        finally
+        {
+            _running.TryRemove(process, out _);
+        }
+    }
+
+    // One line. Control replies complete the API's own requests without the lock; everything else is handled under it,
+    // and only while this process is the conversation's.
+    private async Task HandleAsync(ConversationState state, ClaudeProcess process, JsonElement line)
+    {
+        var type = StreamJson.Str(line, "type");
+        if (type == "control_response")
+        {
+            process.Complete(line);
+            return;
+        }
+        await state.Lock.WaitAsync();
+        try
+        {
+            if (state.Process != process)
+            {
+                return;
+            }
+            if (type == "control_request")
+            {
+                await OnControlRequestAsync(state, process, line);
+            }
+            else if (type == "system")
+            {
+                await OnSystemAsync(state, line);
+            }
+            else if (state.Turn is { } turn)
+            {
+                switch (type)
+                {
+                    case "stream_event":
+                        await OnStreamEventAsync(state, turn, line);
+                        break;
+                    case "assistant":
+                        OnAssistant(turn, line);
+                        break;
+                    case "user":
+                        await OnUserAsync(state, turn, line);
+                        break;
+                    case "result":
+                        await OnResultAsync(state, turn, line);
+                        break;
+                }
+            }
+        }
+        finally
+        {
+            state.Lock.Release();
+        }
+    }
+
+    // Every control request of the CLI is answered, or the CLI waits for ever; one the console does not support gets an
+    // error reply.
+    private async Task OnControlRequestAsync(ConversationState state, ClaudeProcess process, JsonElement line)
+    {
+        var requestId = StreamJson.Str(line, "request_id") ?? "";
+        var request = StreamJson.Get(line, "request") ?? default;
+        var subtype = StreamJson.Str(request, "subtype");
+        log.LogWarning("claude sent the control request {Subtype}, which the console does not support, in conversation {Conversation}",
+            subtype, state.Key);
+        await process.ReplyErrorAsync(requestId, $"Unsupported control request: {subtype}");
+    }
+
+    // init: the CLI knows the conversation's id as its session, so the next process resumes it. permission_denied: a
+    // tool the CLI refused on its own, without a question (--restricted, e.g. a file outside the directory), is a step of
+    // kind other with the CLI's reason as its error output; its tool_result then adds nothing.
+    private async Task OnSystemAsync(ConversationState state, JsonElement line)
+    {
+        var subtype = StreamJson.Str(line, "subtype");
+        if (subtype == "init" && !state.Resumable && StreamJson.Str(line, "session_id") == state.Key)
+        {
+            state.Resumable = true;
+            try
+            {
+                await store.MarkResumableAsync(state.Id);
+            }
+            catch (Exception e)
+            {
+                log.LogError(e, "Marking console conversation {Conversation} as resumable failed", state.Key);
+            }
+            return;
+        }
+        if (subtype != "permission_denied" || state.Turn is not { } turn || StreamJson.Str(line, "tool_use_id") is not { } id
+            || !turn.Tools.Remove(id, out var tool) || StreamJson.Kind(tool.Name, null) is null)
+        {
+            return;
+        }
+        await EmitAsync(state, ConsoleEvents.Step(state.Key, id, "other", StreamJson.Target(tool.Name, tool.Input, turn.Directory)));
+        await EmitAsync(state, ConsoleEvents.StepOutput(state.Key, id,
+            StreamJson.Str(line, "message") ?? StreamJson.Str(line, "decision_reason") ?? "", true));
+    }
+
+    // Text deltas of the conversation's own messages. A text block's messageId is "<message id>:<block index>", so text
+    // after a tool in the same message starts a new entry. Thinking is not shown.
+    private async Task OnStreamEventAsync(ConversationState state, Turn turn, JsonElement line)
+    {
+        if (!StreamJson.TopLevel(line) || StreamJson.Get(line, "event") is not { } streamEvent)
+        {
+            return;
+        }
+        var type = StreamJson.Str(streamEvent, "type");
+        if (type == "message_start")
+        {
+            turn.MessageId = StreamJson.Get(streamEvent, "message") is { } message ? StreamJson.Str(message, "id") ?? "" : "";
+        }
+        else if (type == "content_block_delta" && StreamJson.Get(streamEvent, "delta") is { } delta
+            && StreamJson.Str(delta, "type") == "text_delta" && StreamJson.Str(delta, "text") is { Length: > 0 } text)
+        {
+            var index = StreamJson.Get(streamEvent, "index") is { ValueKind: JsonValueKind.Number } number ? number.GetInt32() : 0;
+            await EmitAsync(state, ConsoleEvents.Text(state.Key, $"{turn.MessageId}:{index}", text));
+        }
+    }
+
+    // Complete tool_use blocks: what a step needs once its result arrives.
+    private static void OnAssistant(Turn turn, JsonElement line)
+    {
+        if (!StreamJson.TopLevel(line))
+        {
+            return;
+        }
+        foreach (var block in StreamJson.Content(line))
+        {
+            if (StreamJson.Str(block, "type") == "tool_use" && StreamJson.Str(block, "id") is { } id
+                && StreamJson.Str(block, "name") is { } name)
+            {
+                turn.Tools[id] = (name, StreamJson.Get(block, "input") ?? default);
+            }
+        }
+    }
+
+    // A tool_result: the step of a tool that ran; a tool that did not run (denied, refused, cancelled) has none.
+    private async Task OnUserAsync(ConversationState state, Turn turn, JsonElement line)
+    {
+        if (!StreamJson.TopLevel(line))
+        {
+            return;
+        }
+        var results = StreamJson.Content(line).Where(block => StreamJson.Str(block, "type") == "tool_result").ToList();
+        // The structured result belongs to the line; the CLI writes one tool_result per line.
+        var structured = results.Count == 1 ? StreamJson.Get(line, "tool_use_result") : null;
+        foreach (var block in results)
+        {
+            if (StreamJson.Str(block, "tool_use_id") is not { } id || !turn.Tools.Remove(id, out var tool)
+                || StreamJson.NotExecuted(line, id) || StreamJson.Kind(tool.Name, structured) is not { } kind)
+            {
+                continue;
+            }
+            foreach (var e in StepOf(state, turn, id, tool, kind, block, structured))
+            {
+                await EmitAsync(state, e);
+            }
+        }
+    }
+
+    // The events of a tool that ran: its step and its output.
+    private IEnumerable<JsonElement> StepOf(ConversationState state, Turn turn, string id, (string Name, JsonElement Input) tool,
+        string kind, JsonElement block, JsonElement? structured)
+    {
+        yield return ConsoleEvents.Step(state.Key, id, kind, StreamJson.Target(tool.Name, tool.Input, turn.Directory));
+        foreach (var (text, isError) in StreamJson.Outputs(tool.Name, block, structured))
+        {
+            yield return ConsoleEvents.StepOutput(state.Key, id, text, isError);
+        }
+    }
+
+    // The end of the turn: idle, idle "przerwano" after an interrupt, or an error with the CLI's text.
+    private async Task OnResultAsync(ConversationState state, Turn turn, JsonElement line)
+    {
+        var detail = StreamJson.Str(line, "result") is { Length: > 0 } text ? text : StreamJson.Str(line, "subtype") ?? "";
+        var status = turn.Interrupting
+            ? ConsoleEvents.Status(state.Key, "idle", Interrupted)
+            : StreamJson.Str(line, "subtype") == "success" && !StreamJson.True(line, "is_error")
+                ? ConsoleEvents.Status(state.Key, "idle")
+                : ConsoleEvents.Status(state.Key, "error", "Polecenie zakończone błędem: " + (detail.Length <= 500 ? detail : detail[..500]));
+        await EndTurnAsync(state, status);
+    }
+
+    // Open questions end as denied, then the status; the conversation takes prompts again.
+    private async Task EndTurnAsync(ConversationState state, JsonElement status)
+    {
+        if (state.Turn is { } turn)
+        {
+            await DenyPendingAsync(state, turn);
+        }
+        await EmitAsync(state, status);
+        state.Turn = null;
+        state.Busy = false;
+        state.LastUsed = clock.GetUtcNow();
+    }
+
+    private async Task DenyPendingAsync(ConversationState state, Turn turn)
+    {
+        foreach (var requestId in turn.Pending.Keys.ToList())
+        {
+            turn.Pending.Remove(requestId);
+            await EmitAsync(state, ConsoleEvents.Resolved(state.Key, requestId, "deny"));
+        }
+    }
+
+    private async Task WatchInterruptAsync(ConversationState state, Turn turn, ClaudeProcess process)
+    {
+        await Task.Delay(InterruptTimeout);
+        await state.Lock.WaitAsync();
+        try
+        {
+            if (state.Turn != turn)
+            {
+                return;
+            }
+            await EndTurnAsync(state, ConsoleEvents.Status(state.Key, "idle", Interrupted));
+            if (state.Process == process)
+            {
+                state.Process = null;
+                state.Closing = process.KillAsync();
+            }
+        }
+        catch (Exception e)
+        {
+            log.LogError(e, "Ending the interrupted turn of console conversation {Conversation} failed", state.Key);
+        }
+        finally
+        {
+            state.Lock.Release();
+        }
+    }
+
+    private async Task SweepAsync(CancellationToken ct)
+    {
+        using var timer = new PeriodicTimer(IdleSweep, clock);
+        try
+        {
+            while (await timer.WaitForNextTickAsync(ct))
+            {
+                try
+                {
+                    await CloseIdleAsync();
+                }
+                catch (Exception e)
+                {
+                    log.LogError(e, "Closing idle console processes failed");
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // The API stops.
+        }
+    }
+
+    private async Task<ConversationState?> FindAsync(string? conversationId)
+    {
+        if (!Guid.TryParseExact(conversationId, "D", out var id))
+        {
+            return null;
+        }
+        if (_states.TryGetValue(id, out var state))
+        {
+            return state;
+        }
+        return await store.FindAsync(id) is { } row ? Track(row) : null;
+    }
+
     private ConversationState Track(Conversation row) =>
         _states.GetOrAdd(row.Id, _ => new ConversationState(row.Id, row.ProjectPath, row.Resumable));
 
-    // The real path of projectPath, which must be a directory in the projects directory (ProjectPaths); a process runs
+    // The real path of projectPath, which must be a directory in the projects directory (ProjectPaths); the process runs
     // there, and the conversation stays keyed by projectPath as sent.
     private string RealDirectory(string? projectPath) =>
         projectPath is not null && paths.Resolve(projectPath) is { Kind: PathKind.Directory } directory
@@ -148,19 +822,60 @@ public sealed class Conversations(ClaudeCli cli, ConversationLog store, ProjectP
         using var document = JsonDocument.Parse(json);
         return document.RootElement.Clone();
     }
+
+    // A stop: the open turn interrupted, then EOF on stdin.
+    private static async Task EndAsync(ClaudeProcess process, bool interrupt)
+    {
+        if (interrupt)
+        {
+            try
+            {
+                await process.InterruptAsync();
+            }
+            catch (HubException)
+            {
+                // It is going anyway.
+            }
+        }
+        process.CloseInput();
+        await process.WaitForExitAsync(CloseWait);
+    }
+
+    private static async Task WithinAsync(Task task, TimeSpan limit)
+    {
+        try
+        {
+            await task.WaitAsync(limit);
+        }
+        catch (TimeoutException)
+        {
+            // What is left is killed.
+        }
+    }
 }
 
-// A conversation in memory: its lock, the next event number and the text block being streamed. Every change of it and
-// every event it sends happen under Lock.
+// A conversation in memory. Every change of it and every event it sends happen under Lock.
 internal sealed class ConversationState(Guid id, string projectPath, bool resumable)
 {
     public Guid Id { get; } = id;
     public string Key { get; } = id.ToString("D");
     public string ProjectPath { get; } = projectPath;
     public SemaphoreSlim Lock { get; } = new(1, 1);
+    // The CLI knows this id as a session: the next process starts with --resume.
     public bool Resumable { get; set; } = resumable;
     // null until it is read from the database.
     public int? NextSeq { get; set; }
     // The text deltas of one messageId so far, stored as one row before the next other event.
     public (string MessageId, StringBuilder Text)? OpenText { get; set; }
+    // The real path of the project directory at the last launch.
+    public string WorkingDirectory { get; set; } = "";
+    public ClaudeProcess? Process { get; set; }
+    // A launch holds a slot of the limit and has no process yet.
+    public bool Launching { get; set; }
+    // A process being closed (idle, the limit, an interrupt that timed out); the next launch waits for it.
+    public Task Closing { get; set; } = Task.CompletedTask;
+    // From an accepted prompt to the end of its turn.
+    public bool Busy { get; set; }
+    public Turn? Turn { get; set; }
+    public DateTimeOffset LastUsed { get; set; }
 }

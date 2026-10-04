@@ -48,7 +48,7 @@ Devices: mainly laptop and PC. The phone is secondary.
 | Backend | ASP.NET Core (.NET 10), SignalR, ASP.NET Core Identity (TOTP, passkeys) |
 | Database | PostgreSQL 17 in Docker (pinned version, only `127.0.0.1`), EF Core + Npgsql |
 | Frontend | Angular, Monaco (`ngx-monaco-editor-v2`), xterm.js, `@microsoft/signalr` |
-| Console | process `claude -p --output-format stream-json --input-format stream-json` |
+| Console | one long-lived `claude -p --input-format stream-json --output-format stream-json --verbose --include-partial-messages --permission-prompt-tool stdio` process per conversation, with the hardening flags of "Backend decisions (stage 3)" |
 | Terminal | tmux in control mode (`tmux -C`), no PTY package; terminals end with the API |
 | Git | LibGit2Sharp for everything local (status, branches, HEAD content), the git CLI for clone, fetch, pull and push |
 | Access from outside | Cloudflare Access (one-time PIN by e-mail) and Cloudflare Tunnel |
@@ -57,7 +57,7 @@ Devices: mainly laptop and PC. The phone is secondary.
 
 - The backend runs `claude` in headless mode with a JSON stream. Every event (file read,
   edit, command, response) goes through SignalR to the Console panel.
-- Model, effort and permission mode are process launch parameters.
+- Model, effort and permission mode are launch parameters, re-applied before every prompt by control requests.
 - Permission requests: the `--permission-prompt-tool` flag and a small MCP server in C# (the official MCP SDK for C#),
   which forwards the request to the browser and waits for the decision.
 - Claude Code keeps the model's memory for `--resume`; the portal keeps its own log of the console events for replay
@@ -282,6 +282,29 @@ Backend decisions (stage 3):
   and replay still works. Console processes get `DISABLE_UPDATES=1` and `DISABLE_AUTOUPDATER=1`, so the CLI never
   updates itself under the API; the server's CLI is the launcher of Anthropic's installer, updated on purpose
   ("Deployment decisions"). Rejected: a pin without a check (an update in development would break silently).
+- One long-lived `claude -p` process per conversation, stream-json both ways; questions, interrupts and option changes
+  are control requests on the same pipes. The conversation's id is the CLI's session id, and a new process resumes it
+  with `--resume` and every flag again. Rejected: a process per prompt (every prompt would reload the session).
+- Hardening against cloned repositories: `--restricted` (no user, project or local settings files; file tools confined
+  to the working directory; writes to settings, `.git` and tool configuration only with a question), an explicit
+  `--tools` list (AskUserQuestion, EnterPlanMode, worktrees, scheduling, notifications and Skill off), no MCP servers
+  (`--strict-mcp-config`), `--disable-slash-commands`, and `--settings` without hooks and with
+  `blockReadsOutsideWorkingDirectories`. Rejected: `--safe-mode` (it also drops CLAUDE.md) and `--bare` (it never reads
+  the subscription login).
+- The process gets an allowlisted environment (as git and the terminal) and its own config directory; the API's
+  `ANTHROPIC_API_KEY` never reaches it (it would silently replace the login). Authentication is the login in
+  `Console:ConfigDirectory`, or `Console:ApiKeyFile` through `apiKeyHelper`.
+- Model, effort and mode are launch flags and are sent again before every prompt, each reply awaited. Rejected:
+  remembering and diffing them (an approved plan changes the mode inside the CLI).
+- A prompt that starts with `/` is marked `client_composed`, so the CLI gives it to the model as text; otherwise a
+  typed `/effort` is answered by the CLI itself (also with `--disable-slash-commands`) and the panel's options would no
+  longer show the truth.
+- Limits are constants: 8 live processes, 15 minutes idle, prompts up to 100,000 characters; the console hub alone
+  accepts messages up to 1 MiB.
+- A turn always ends: an interrupt has 10 s before the process tree is killed, a process that ends ends its turn, a
+  stop interrupts and gives 5 s, and at start the turns a crash left open end with an error. Exit codes are only
+  logged. The CLI's `--help` lists no `default` permission mode although the CLI accepts it, one more reason for the
+  version check.
 
 Backend decisions (stage 4):
 - Git access: LibGit2Sharp in-process for everything local (finding repositories, status, branch, upstream, ahead and

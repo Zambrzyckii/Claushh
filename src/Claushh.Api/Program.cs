@@ -94,7 +94,9 @@ builder.Services.AddSingleton<HubSessionFilter>();
 builder.Services.AddSingleton<HubSessionSweep>();
 builder.Services.AddHostedService(services => services.GetRequiredService<HubSessionSweep>());
 // For every hub: the session on connect and on every call (docs/ARCHITECTURE.md, "Backend" → "Hubs").
-builder.Services.AddSignalR(options => options.AddFilter<HubSessionFilter>());
+builder.Services.AddSignalR(options => options.AddFilter<HubSessionFilter>())
+    // A console prompt may hold 100,000 characters; every other hub keeps the 32 KB default.
+    .AddHubOptions<ConsoleHub>(options => options.MaximumReceiveMessageSize = ConsoleHub.MaxMessage);
 builder.Services.Configure<TerminalOptions>(builder.Configuration.GetSection("Terminal"));
 builder.Services.AddSingleton<TmuxServer>();
 builder.Services.AddSingleton<Terminals>();
@@ -104,7 +106,8 @@ builder.Services.Configure<ConsoleOptions>(builder.Configuration.GetSection("Con
 builder.Services.AddSingleton<ClaudeCli>();
 builder.Services.AddSingleton<ConversationLog>();
 builder.Services.AddSingleton<Conversations>();
-// Prepares the claude CLI's config directory at start; create-user never starts the host, so it never runs this.
+// Prepares the claude CLI's config directory and ends turns left open at start, closes idle processes, stops them all
+// on a stop; create-user never starts the host, so it never runs this.
 builder.Services.AddHostedService(services => services.GetRequiredService<Conversations>());
 builder.Services.AddAuthentication(SessionAuthenticationHandler.SchemeName)
     .AddScheme<AuthenticationSchemeOptions, SessionAuthenticationHandler>(SessionAuthenticationHandler.SchemeName, _ => { });
@@ -181,7 +184,13 @@ api.Map("{**path}", () => Results.NotFound());
 // WebSocket only: the frontend skips negotiation, and other transports would only add ways in.
 app.MapHub<TerminalHub>("/hubs/terminal", options => options.Transports = HttpTransportType.WebSockets)
     .RequireAuthorization();
-app.MapHub<ConsoleHub>("/hubs/console", options => options.Transports = HttpTransportType.WebSockets)
+// A hub message is parsed only once it is whole, so the connection's buffers hold a whole 1 MiB message.
+app.MapHub<ConsoleHub>("/hubs/console", options =>
+    {
+        options.Transports = HttpTransportType.WebSockets;
+        options.ApplicationMaxBufferSize = ConsoleHub.MaxMessage;
+        options.TransportMaxBufferSize = ConsoleHub.MaxMessage;
+    })
     .RequireAuthorization();
 // Unknown /hubs paths: 401 without a session, 404 with one, never the page. The MapHub routes are more specific.
 app.Map("/hubs/{**path}", () => Results.NotFound());

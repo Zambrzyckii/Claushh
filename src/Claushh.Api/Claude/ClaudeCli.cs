@@ -5,6 +5,7 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
+using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Claushh.Api.Processes;
 using Microsoft.Extensions.Options;
@@ -128,6 +129,42 @@ public sealed partial class ClaudeCli(IOptions<ConsoleOptions> options, ILogger<
         }
         ChildEnvironment.Apply(start, overrides);
         return start;
+    }
+
+    // Every tool the model may use; the others (AskUserQuestion, EnterPlanMode, worktrees, scheduling, notifications,
+    // Skill, …) are off.
+    public const string Tools = "Bash,Read,Edit,Write,NotebookEdit,Glob,Grep,WebFetch,WebSearch,Task,TaskCreate,TaskGet,TaskList,TaskUpdate,TaskStop,ToolSearch,ExitPlanMode";
+
+    // A conversation's command line: stream-json both ways, questions over stdio, the hardening flags, the options of the
+    // prompt that starts it, and the conversation's id as a new session or one to resume.
+    public IReadOnlyList<string> Arguments(Guid conversation, bool resume, PromptOptions prompt, IReadOnlyList<string> rules) =>
+    [
+        "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--include-partial-messages",
+        "--permission-prompt-tool", "stdio", "--restricted", "--tools", Tools, "--strict-mcp-config",
+        "--disable-slash-commands", "--no-chrome", "--settings", Settings(rules), "--model", prompt.Model, "--effort",
+        prompt.Effort, "--permission-mode", prompt.Mode, resume ? "--resume" : "--session-id", conversation.ToString("D"),
+    ];
+
+    // No hooks, no read outside the working directory without a question, the project's "always" rules, transcripts kept
+    // 90 days, and the API key file through apiKeyHelper when one is configured.
+    public string Settings(IReadOnlyList<string> rules)
+    {
+        var allow = new JsonArray();
+        foreach (var rule in rules)
+        {
+            allow.Add(JsonValue.Create(rule));
+        }
+        var settings = new JsonObject
+        {
+            ["disableAllHooks"] = true,
+            ["permissions"] = new JsonObject { ["blockReadsOutsideWorkingDirectories"] = true, ["allow"] = allow },
+            ["cleanupPeriodDays"] = 90,
+        };
+        if (options.Value.ApiKeyFile is { } keyFile)
+        {
+            settings["apiKeyHelper"] = $"cat -- '{keyFile.Replace("'", "'\\''", StringComparison.Ordinal)}'";
+        }
+        return settings.ToJsonString();
     }
 
     private async Task<Version?> VersionAsync(CancellationToken ct)
