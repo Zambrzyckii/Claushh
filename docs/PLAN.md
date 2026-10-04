@@ -454,21 +454,28 @@ and do not save the password in the browser. The password alone without the TOTP
   of the API, installed like any update.
 - Backup: a daily `pg_dump` in the custom format from a systemd timer, kept 14 days, with a restore command. The git
   remotes are the copy of `/srv/projects`.
-- Before the portal goes behind the tunnel (left to the deployment by stage 1, part C):
+- Before the portal goes behind the tunnel (commands and checks: `README.md`, "Deployment"):
   - ntfy: an unguessable topic (whoever knows it can read and send its messages), subscribed in the ntfy app on the
     phone, optionally with an access token; the API gets `Notifications__NtfyUrl` (and `Notifications__NtfyToken`) from
     its `600` environment file.
-  - The API's environment also gets `Frontend__Root` (the absolute path of the build from `npm run build`), the Kestrel
-    URL (`http://127.0.0.1:<port>`), `AllowedHosts` and the public origin in `Hubs__AllowedOrigins__0`.
+  - The unit sets `Frontend__Root` (`/opt/claushh/web`) and the Kestrel URL (`http://127.0.0.1:5090`); the
+    environment file sets `AllowedHosts` and the public origin in `Hubs__AllowedOrigins__0`.
+  - The acceptance check on loopback (phase A) comes first: the service, a login, a portal terminal inside the
+    sandbox, containers, a backup with its restore, a reboot. The tunnel starts only after it has passed.
+  - Cloudflare Access comes before the tunnel: the Access application, with a policy for the owner's e-mail and the
+    one-time PIN, exists before the tunnel's public hostname and before `cloudflared` starts.
   - Cloudflare: HSTS for 12 months with `includeSubDomains`, without preload (HTTPS must then stay on for as long as
     browsers keep the policy); "Always Use HTTPS"; one rate-limiting rule `http.request.uri.path eq "/api/auth/login"`,
     5 requests in 10 s per IP, blocked for 10 s; Pseudo IPv4 off; "Remove visitor IP headers" off.
-  - The tunnel acceptance check, through the real tunnel. Send a request over `http://` with a forged
-    `CF-Connecting-IP`, a forged `X-Forwarded-For` and `X-Forwarded-Proto: https`. Then check that:
+  - The tunnel acceptance check (phase B), through the real tunnel: a failed login with a forged `CF-Connecting-IP`
+    and a forged `X-Forwarded-For`, and a request over `http://` with `X-Forwarded-Proto: https`. Then check that:
+    - a browser without an Access session gets the PIN page before any page of the portal;
     - `http://` redirects to `https://`, and HSTS is present;
+    - the portal loads with `AllowedHosts=<domain>` (a `400` means that `cloudflared` sends another Host);
     - a login sets the `__Host-claushh-session` cookie;
     - the login history shows the device's real public IP, not the forged values and not 127.0.0.1;
     - two networks (phone data and home Wi-Fi) show different IPs;
+    - a terminal still answers after 10 idle minutes (the hub's WebSocket through the tunnel);
     - the login notification arrives.
 
 Deployment decisions:
@@ -539,6 +546,22 @@ Deployment decisions:
   owner updates it on purpose. Rejected: the API's files owned by `workspace`.
 - The computer is a desktop: the BIOS powers it on after a power loss, and `sleep.target`, `suspend.target`,
   `hibernate.target` and `hybrid-sleep.target` are masked.
+- Build and install are two steps: `deploy/install.sh build <dir>` runs as the owner (a self-contained
+  `dotnet publish` for linux-x64 and the frontend build); `sudo deploy/install.sh install <dir>` checks the server,
+  takes a dump before an update, replaces `/opt/claushh/{api,web,deploy}` (the previous copy stays as `*.previous`),
+  installs the units and starts the API again when it was running, with a health check. It never enables the API and
+  never starts `cloudflared`. Rejected: one script run as root (`npm ci` would run dependency scripts as root and
+  leave root-owned files in the checkout) and replacing files under a running process.
+- A rollback is the `*.previous` copies plus the dump taken before the update, because an older build does not undo
+  migrations.
+- Before the tunnel, the first login and a portal terminal are tested on loopback: a temporary drop-in
+  `claushh.service.d/local-test.conf` starts the API with `--Sessions:SecureCookies=false`,
+  `--Hubs:AllowedOrigins:1=http://127.0.0.1:5090` and `--AllowedHosts=*` (command-line settings win over the
+  environment). It is removed before the tunnel starts, and the `__Host-` cookie behind the tunnel shows that it is
+  gone. Rejected: an `Environment=` drop-in (the environment file wins over it), a separate `systemd-run` shell (it
+  would not test the terminal inside the service) and the tunnel first.
+- Cloudflare Access with the one-time PIN to the owner's e-mail is mandatory; its application and policy exist before
+  the tunnel's public hostname and before `cloudflared` starts.
 
 ## Stages
 

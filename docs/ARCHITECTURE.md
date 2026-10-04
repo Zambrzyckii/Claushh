@@ -33,7 +33,7 @@ server: one process and one origin.
 On the server (decisions: `PLAN.md`, "Deployment decisions"):
 - `claushh.service` runs the API as the user `workspace` on `http://127.0.0.1:5090`, from `/opt/claushh/api`, serving
   `/opt/claushh/web`; `cloudflared.service` connects the tunnel; `claushh-backup.timer` dumps the database daily into
-  `/var/backups/claushh`. The units come from `deploy/`.
+  `/var/backups/claushh`. `deploy/install.sh` installs the build and the units (`README.md`, "Deployment").
 - PostgreSQL is the compose project `claushh-prod` on `127.0.0.1:5435` (`/opt/claushh/deploy/docker-compose.yml`).
 - `/opt/claushh` (the API, the frontend build, `deploy/`) belongs to root; `/etc/claushh` (root only) holds
   `claushh.env` (the unit's install-specific settings and secrets) and `compose.env` (the compose variables);
@@ -126,6 +126,7 @@ On the server (decisions: `PLAN.md`, "Deployment decisions"):
 | `deploy/claushh-backup.service`, `deploy/claushh-backup.timer` | the daily database dump (`backup.sh`), started by the timer |
 | `deploy/backup.sh` | dump and restore of the production database (the container's `pg_dump -Fc`, 14 days kept), run as root |
 | `deploy/podman-socket.conf` | user drop-in that moves the `podman.socket` of `workspace` into its home, where the API's unit sees it |
+| `deploy/install.sh` | `build <dir>` (as you: the self-contained API, the frontend build, `deploy/`) and `install <dir>` (as root: the checks, a dump before an update, `/opt/claushh` replaced with the old copy kept as `*.previous`, the units, the restart and the health check) |
 | `docs/` | project documentation |
 
 ## Authentication
@@ -907,7 +908,8 @@ Terminal (`Terminal/`; the contract is in "Terminal"):
   API's own socket) does not keep running unlisted. `CloseTerminal` takes it off the list first (no event), then runs
   `kill-session`; an unknown id is no error.
 
-Commands (`dotnet run --project src/Claushh.Api -- <command>`, on the server `./Claushh.Api <command>`):
+Commands (`dotnet run --project src/Claushh.Api -- <command>`; on the server as `workspace`, with the service's
+environment file and a terminal, through `systemd-run`: README.md, "Deployment", step 10):
 
 | Command | What it does |
 |---|---|
