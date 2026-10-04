@@ -505,11 +505,11 @@ and do not save the password in the browser. The password alone without the TOTP
 - The server is the home computer, a desktop. Files: `deploy/` (`ARCHITECTURE.md`, "Flow" and "Repository map");
   decisions: "Deployment decisions" below.
 - Packages: `docker` with compose, `podman` (rootless containers for the terminal), `cloudflared`, `git`, `tmux` (3.7
-  or later); the .NET 10 SDK and Node.js only to build. The console's `claude` CLI is installed for `workspace` with
-  Anthropic's installer.
+  or later); the .NET 10 SDK and Node.js only to build. The console's `claude` CLI (2.1.285 or later) is installed for
+  `workspace` with Anthropic's installer; `Console:ClaudePath` points at its launcher ("Deployment decisions").
 - A `workspace` user with its own home directory, cloned dotfiles, a configured `git` and, for the console, a
-  logged-in `claude` (once, with the owner's subscription, in the console's own configuration directory). Projects in
-  `/srv/projects`.
+  `claude` logged in once, with the owner's subscription, in the console's own configuration directory
+  (`Console:ConfigDirectory`). Projects in `/srv/projects`.
 - API as a systemd service (`claushh.service`, a self-contained build, so that system updates do not break it) on
   `127.0.0.1:5090`.
 - PostgreSQL from `deploy/docker-compose.yml`, project `claushh-prod`, on `127.0.0.1:5435`.
@@ -662,12 +662,13 @@ The order is chosen so that only already secured things reach the internet.
   - [x] Backend: files API from the contract in `ARCHITECTURE.md`, path protection (including symlinks), file versions,
         size limits, binary file detection.
   - [x] Marking of changed files (`M`, `U`, …) in the explorer (frontend, based on the git status from stage 4).
-- [ ] **Stage 3: console.**
+- [x] **Stage 3: console.**
   - [x] Frontend: Console panel (plain text), model / effort / mode, permission requests, interrupt (Esc),
         new conversation, replaying the conversation after a reload and in other tabs, refreshing files changed
         by the console, SignalR connection with session control.
-  - [ ] Backend: hub `/hubs/console` from the contract in `ARCHITECTURE.md`, `claude` process with stream-json,
-        permission requests through MCP (`--permission-prompt-tool`), storing conversations, resuming (`--resume`).
+  - [x] Backend: hub `/hubs/console` from the contract in `ARCHITECTURE.md`, `claude` process with stream-json,
+        permission requests through stdio control requests (`--permission-prompt-tool stdio`), storing
+        conversations, resuming (`--resume`).
 - [x] **Stage 4: git, terminal, workspaces.**
   - [x] Frontend: Workspace panel (workspaces, repository table, Otwórz (open) / Pull / Push, creating a
         workspace, cloning), open repo in the URL, path and branch in the top bar, branch and number of changes

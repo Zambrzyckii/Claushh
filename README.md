@@ -6,8 +6,8 @@ login with a password and a TOTP code. One user.
 
 Status: **frontend ready (login and sessions, editor with a diff view, console, workspaces and git, terminal);
 backend: login, sessions, login protection, the security headers, serving the built frontend, the client IP behind
-Cloudflare and login notifications (stage 1, parts A-C), the files API (stage 2), the workspaces and git API and the
-terminal hub (stage 4).** Not deployed yet: the steps are in "Deployment" below.
+Cloudflare and login notifications (stage 1, parts A-C), the files API (stage 2), the console hub (stage 3), the
+workspaces and git API and the terminal hub (stage 4).** Not deployed yet: the steps are in "Deployment" below.
 Progress: [`docs/PLAN.md`](docs/PLAN.md), section "Stages".
 
 ## Documentation
@@ -21,7 +21,8 @@ Progress: [`docs/PLAN.md`](docs/PLAN.md), section "Stages".
 ## Running in development
 
 Requirements: Linux for the backend, .NET 10 SDK, Node.js 22.12+ (npm 11), Docker, git (the API runs it for clone,
-fetch, pull and push), tmux 3.7 or later (the terminal; dotnet test needs it too).
+fetch, pull and push), tmux 3.7 or later (the terminal; dotnet test needs it too), the `claude` CLI 2.1.285 or later
+(the console; dotnet test does not need it).
 
 ```bash
 # database (the compose project claushh-dev; the server uses claushh-prod)
@@ -50,6 +51,26 @@ PATH, the locale): none of the API's connection string, `ASPNETCORE_*`, `DOTNET_
 profile may still set its own, e.g. `DOTNET_ROOT`). Terminals end when the API stops, also on Ctrl+C. Open the portal
 at `http://localhost:4200`: hubs accept only the origins in `Hubs:AllowedOrigins` (`appsettings.Development.json`), so
 `http://127.0.0.1:4200` gets no terminal or console.
+
+The Konsola panel runs the `claude` CLI (`Console:ClaudePath`, by default `claude` on PATH) with a config directory of
+its own, `~/.local/state/claushh/claude` (`Console:ConfigDirectory`): your `~/.claude` settings, CLAUDE.md and plugins
+are not used there. Log in there once:
+
+```bash
+CLAUDE_CONFIG_DIR=~/.local/state/claushh/claude claude    # then /login, and /exit when done
+```
+
+or put an Anthropic API key in a file with mode 0600 outside the projects directory and set `Console:ApiKeyFile` to
+its path (an `ANTHROPIC_API_KEY` in the API's environment never reaches the CLI). A "tak, zawsze" rule is saved per
+project in the database; to remove one:
+
+```bash
+docker compose -p claushh-dev -f deploy/docker-compose.yml --env-file deploy/.env exec postgres \
+  psql -U claushh -d claushh -c "DELETE FROM \"ConsoleRules\" WHERE \"ProjectPath\" = '<project>' AND \"Rule\" = '<rule>'"
+```
+
+The config directory also holds the CLI's transcripts (kept 90 days), plan files and backups of its own state. It may
+be cleaned while the API is stopped; older conversations then cannot be resumed, and "Nowa" starts a new one.
 
 Cloning, fetching and pulling a public repository needs no credential helper in development; pushing always needs
 credentials (also for a public repository); the server's GitHub token is set up in "Deployment", step 8.
@@ -205,6 +226,12 @@ on purpose, as `workspace`: `~/.local/bin/claude update`, or the installer again
 (`curl -fsSL https://claude.ai/install.sh | bash -s <version>` for a given version); then
 `sudo systemctl restart claushh`, which ends the open terminals and console processes.
 
+A "tak, zawsze" rule is removed on the server as in development, in the production database:
+```bash
+sudo docker compose -p claushh-prod -f /opt/claushh/deploy/docker-compose.yml --env-file /etc/claushh/compose.env \
+  exec postgres psql -U claushh -d claushh -c "DELETE FROM \"ConsoleRules\" WHERE \"ProjectPath\" = '<project>' AND \"Rule\" = '<rule>'"
+```
+
 ### Phase A: on loopback, before the tunnel
 
 - **Service.** `systemctl is-active claushh` gives `active`; `curl -s http://127.0.0.1:5090/api/health` gives
@@ -239,6 +266,10 @@ on purpose, as `workspace`: `~/.local/bin/claude update`, or the installer again
   If a short image name fails (`docker run alpine`), add `unqualified-search-registries = ["docker.io"]` to
   `~/.config/containers/registries.conf`. If Testcontainers cannot start its Ryuk container, run the tests with
   `TESTCONTAINERS_RYUK_DISABLED=true` (then `docker container prune` after a crashed run).
+- **Console** (once "The console" above is done). In the Konsola panel, a prompt that runs `pwd` and `env` (answer
+  "tak") shows the repository's directory and no `ConnectionStrings__*`, `Notifications__*`, `ASPNETCORE_*` or
+  `DOTNET_*` variable; `journalctl -u claushh` then shows `The console runs claude <version>`. This does not hold up
+  step 17.
 - **Backup and restore:**
   ```bash
   sudo systemctl start claushh-backup.service
@@ -266,9 +297,9 @@ on purpose, as `workspace`: `~/.local/bin/claude update`, or the installer again
   PrivateDevices=yes
   RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
   ```
-  Then `sudo systemctl restart claushh`, repeat "Terminal" and "Containers", and run `npm test` and `npm run e2e` in
-  the clone. Keep the lines whose work passes, remove the others from `trial.conf`, and note what failed and why. This
-  does not hold up step 17.
+  Then `sudo systemctl restart claushh`, repeat "Terminal", "Containers" and "Console", and run `npm test` and
+  `npm run e2e` in the clone. Keep the lines whose work passes, remove the others from `trial.conf`, and note what
+  failed and why. This does not hold up step 17.
 - **Reboot.** After a restart of the computer the portal answers, `docker` works in a terminal, the database runs,
   `systemctl list-timers` lists `claushh-backup.timer`, and `sudo coredumpctl list /opt/claushh/api/Claushh.Api` shows
   no entry, or only entries whose COREFILE is `none` (the API may fail a start or two while the database comes up).
@@ -360,3 +391,4 @@ dotnet test    # integration tests; needs Docker (starts PostgreSQL 17 in a cont
 ```
 
 Also needs the git CLI ≥ 2.45 (some test repositories use `--ref-format=reftable`).
+The console tests run a fake `claude` built with the solution (`tests/Claushh.FakeClaude`); the real CLI is not needed.

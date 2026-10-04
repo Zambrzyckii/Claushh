@@ -686,13 +686,22 @@ setInterval(() => {
   for (const sid of [...state.sessions.keys()]) validSession(sid);
 }, 500).unref();
 
+/** Console limits of the contract (docs/ARCHITECTURE.md, "Console"): the same checks as the backend. */
+const CONSOLE_MODELS = ['opus', 'sonnet', 'haiku'];
+const CONSOLE_EFFORTS = ['low', 'medium', 'high', 'max'];
+const CONSOLE_MODES = ['default', 'acceptEdits', 'plan'];
+/** A console `projectPath`, checked like the files API's `path` (no leading "/", no ".."). */
+const consolePathOk = (p) => typeof p === 'string' && !p.startsWith('/') && !p.split('/').includes('..');
+
 async function invoke(target, args) {
   switch (target) {
     case 'GetConversation': {
+      if (!consolePathOk(args[0])) throw new Error('Nieprawidłowa ścieżka');
       const id = state.latestByProject.get(args[0]) ?? null;
       return { conversationId: id, events: id ? state.conversations.get(id).events : [] };
     }
     case 'StartConversation': {
+      if (!consolePathOk(args[0])) throw new Error('Nieprawidłowa ścieżka');
       const id = crypto.randomUUID();
       state.conversations.set(id, { projectPath: args[0], events: [], running: null });
       state.latestByProject.set(args[0], id);
@@ -701,6 +710,10 @@ async function invoke(target, args) {
     }
     case 'SendPrompt': {
       const request = args[0];
+      if (typeof request?.text !== 'string' || request.text.length < 1 || request.text.length > 100_000) throw new Error('Nieprawidłowe polecenie');
+      if (!CONSOLE_MODELS.includes(request.model) || !CONSOLE_EFFORTS.includes(request.effort) || !CONSOLE_MODES.includes(request.mode)) {
+        throw new Error('Nieprawidłowe opcje');
+      }
       const conversation = state.conversations.get(request.conversationId);
       if (!conversation) throw new Error('Nieznana rozmowa');
       if (conversation.running) throw new Error('Rozmowa jest zajęta');

@@ -1,7 +1,7 @@
 import os from 'node:os';
 
 import { expect, test } from './fixtures';
-import { USER, mockState, resetMock, setRepoState } from './helpers';
+import { USER, login, mockState, resetMock, setRepoState } from './helpers';
 
 /** Mock backend: tests of the mock itself (it has unprotected /__test/*) and of contract rules that the frontend does not let through. */
 
@@ -126,4 +126,51 @@ test('a token issued before logging in is refused afterwards (XSRF bound to the 
   await request.post('/api/auth/login', { headers: { 'X-XSRF-TOKEN': xsrf }, data: { userName: 'owner', password: 'secret', totpCode: '123456' } });
   const response = await request.post('/api/auth/keepalive', { headers: { 'X-XSRF-TOKEN': xsrf } });
   expect(response.status()).toBe(400);
+});
+
+test('the mock refuses console paths, prompts and options that the contract forbids, like the backend', async ({ page, request }) => {
+  await login(page);
+  const errors = await page.evaluate(async () => {
+    const RS = '\x1e';
+    const socket = new WebSocket(location.origin.replace(/^http/, 'ws') + '/hubs/console');
+    const pending = new Map<string, (reply: { result?: unknown; error?: string }) => void>();
+    let handshake!: () => void;
+    const ready = new Promise<void>((resolve) => (handshake = resolve));
+    socket.onmessage = (event) => {
+      for (const part of String(event.data).split(RS).filter(Boolean)) {
+        const message = JSON.parse(part);
+        if (message.type === undefined) handshake();
+        else if (message.type === 3) pending.get(message.invocationId)?.(message);
+      }
+    };
+    await new Promise((resolve) => (socket.onopen = resolve));
+    socket.send(JSON.stringify({ protocol: 'json', version: 1 }) + RS);
+    await ready;
+    let next = 0;
+    const invoke = (target: string, ...args: unknown[]) =>
+      new Promise<{ result?: unknown; error?: string }>((resolve) => {
+        const invocationId = String(++next);
+        pending.set(invocationId, resolve);
+        socket.send(JSON.stringify({ type: 1, invocationId, target, arguments: args }) + RS);
+      });
+    const conversationId = (await invoke('StartConversation', 'studia/lab-3-sieci')).result;
+    const options = { model: 'haiku', effort: 'low', mode: 'default' };
+    const replies = [
+      await invoke('GetConversation', '../etc'),
+      await invoke('StartConversation', '/etc'),
+      await invoke('SendPrompt', { conversationId, text: 'x'.repeat(100_001), ...options }),
+      await invoke('SendPrompt', { conversationId, text: '', ...options }),
+      await invoke('SendPrompt', { conversationId, text: 'x', ...options, effort: 'xhigh' })
+    ];
+    socket.close();
+    return replies.map((reply) => reply.error);
+  });
+  expect(errors).toEqual([
+    'Nieprawidłowa ścieżka',
+    'Nieprawidłowa ścieżka',
+    'Nieprawidłowe polecenie',
+    'Nieprawidłowe polecenie',
+    'Nieprawidłowe opcje'
+  ]);
+  expect((await mockState(request)).prompts).toHaveLength(0);
 });

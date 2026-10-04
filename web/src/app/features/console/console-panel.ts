@@ -169,7 +169,7 @@ export class ConsolePanel {
     if (
       this.dialogs.confirm(
         `Zapisać stałą zgodę: ${revealHidden(rule)}?\n\nKonsola przestanie pytać o polecenia pasujące do tej reguły. ` +
-          'Regułę można usunąć w pliku .claude/settings.local.json w katalogu projektu.'
+          'Regułę zapisze serwer dla tego projektu, nie w pliku repozytorium.'
       )
     ) {
       void this.store.answer(requestId, 'allow-always');
