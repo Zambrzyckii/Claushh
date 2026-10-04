@@ -1,0 +1,11 @@
+# Starts claushh-backup.service once a day; with Persistent=true a day missed while the computer was off runs at the
+# next start (docs/PLAN.md, "Deployment decisions").
+[Unit]
+Description=Daily Claushh database dump
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+
+[Install]
+WantedBy=timers.target

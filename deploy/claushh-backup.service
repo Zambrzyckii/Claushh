@@ -1,0 +1,12 @@
+# The daily dump of the Claushh database by deploy/backup.sh (docs/PLAN.md, "Deployment decisions"). Started by
+# claushh-backup.timer. No sandbox options: it runs docker compose as root.
+[Unit]
+Description=Claushh database dump
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/claushh/deploy/backup.sh
+Nice=10
+IOSchedulingClass=idle

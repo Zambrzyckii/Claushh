@@ -1,0 +1,52 @@
+# The Claushh API as a system service (docs/PLAN.md, "Deployment decisions"; docs/ARCHITECTURE.md, "Flow").
+# Installed into /etc/systemd/system. Generic settings are here; the install-specific ones and the secrets come from
+# /etc/claushh/claushh.env (template: deploy/claushh.env.example), whose values win over Environment= lines.
+[Unit]
+Description=Claushh API
+Wants=docker.service
+After=docker.service
+
+[Service]
+Type=exec
+User=workspace
+Group=workspace
+WorkingDirectory=/opt/claushh/api
+ExecStart=/opt/claushh/api/Claushh.Api
+EnvironmentFile=/etc/claushh/claushh.env
+Environment=ASPNETCORE_ENVIRONMENT=Production
+Environment=ASPNETCORE_URLS=http://127.0.0.1:5090
+Environment=Projects__Root=/srv/projects
+Environment=Frontend__Root=/opt/claushh/web
+Environment=Terminal__SocketDirectory=/run/claushh
+Environment=Terminal__Environment__DOCKER_HOST=unix:///home/workspace/.local/state/podman/podman.sock
+Environment=Terminal__Environment__TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/home/workspace/.local/state/podman/podman.sock
+Environment=Logging__Console__FormatterName=systemd
+Environment=DOTNET_EnableDiagnostics=0
+SyslogIdentifier=claushh
+RuntimeDirectory=claushh
+RuntimeDirectoryMode=0700
+KillMode=mixed
+TimeoutStopSec=60
+Restart=on-failure
+RestartSec=5
+# The sandbox; the terminal and the console are the API's children and run inside it too.
+ProtectSystem=strict
+ProtectHome=tmpfs
+BindPaths=/home/workspace
+ReadWritePaths=/srv/projects
+PrivateTmp=yes
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+LockPersonality=yes
+
+[Install]
+WantedBy=multi-user.target

@@ -1,6 +1,7 @@
 # PostgreSQL for Claushh. The version is pinned on purpose: on EndeavourOS (rolling release)
 # the system Postgres can jump a major version and require pg_upgrade.
 # Port exposed only on localhost – the database must not be reachable from the network.
+# Compose project: development -p claushh-dev, production -p claushh-prod; host port POSTGRES_PORT (default 5432).
 services:
   postgres:
     image: postgres:17
@@ -10,7 +11,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-claushh}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Ustaw POSTGRES_PASSWORD w deploy/.env}
     ports:
-      - "127.0.0.1:5432:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
 

@@ -24,13 +24,13 @@ Requirements: Linux for the backend, .NET 10 SDK, Node.js 22.12+ (npm 11), Docke
 fetch, pull and push), tmux 3.7 or later (the terminal; dotnet test needs it too).
 
 ```bash
-# database
-cp deploy/.env.example deploy/.env    # fill in the password
-docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d
+# database (the compose project claushh-dev; the server uses claushh-prod)
+cp deploy/.env.example deploy/.env    # fill in the password and a free POSTGRES_PORT
+docker compose -p claushh-dev -f deploy/docker-compose.yml --env-file deploy/.env up -d
 
 # backend: http://localhost:5080/api/health
 dotnet user-secrets set --project src/Claushh.Api ConnectionStrings:Claushh \
-  "Host=localhost;Port=5432;Database=claushh;Username=claushh;Password=<POSTGRES_PASSWORD from deploy/.env>"
+  "Host=localhost;Port=<POSTGRES_PORT>;Database=claushh;Username=claushh;Password=<POSTGRES_PASSWORD from deploy/.env>"
 dotnet user-secrets set --project src/Claushh.Api Projects:Root <directory>    # the projects directory of the portal
 dotnet run --project src/Claushh.Api -- create-user    # once: the account and its TOTP key
 dotnet run --project src/Claushh.Api

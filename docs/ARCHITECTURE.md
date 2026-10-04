@@ -16,10 +16,10 @@ The frontend is tested against a mock backend (`web/e2e/mock-api/`) that follows
 ```
 Browser (Angular, web/)
    │  HTTPS + WebSocket (SignalR)
-Cloudflare Tunnel                       [stage 1]
-   │
+Cloudflare Access (one-time PIN by e-mail) + Cloudflare Tunnel    [stage 1]
+   │  cloudflared on the server → http://127.0.0.1:5090
 ASP.NET Core API (src/Claushh.Api)
-   ├─ PostgreSQL (deploy/docker-compose.yml, localhost only)    [stage 1]
+   ├─ PostgreSQL (deploy/docker-compose.yml, localhost only; server: project claushh-prod)    [stage 1]
    ├─ files / git  → /srv/projects                              [stage 2, 4]
    ├─ terminal     → tmux in control mode (tmux -C)              [stage 4]
    └─ console      → `claude` process (stream-json)             [stage 3]
@@ -29,6 +29,15 @@ In development mode, Angular (`npm start`, port 4200) proxies `/api` and `/hubs`
 to the API at `http://localhost:5080` (`web/proxy.conf.json`).
 With `Frontend:Root` set (README.md, "Running the built frontend"), the API serves the built frontend itself, as on the
 server: one process and one origin.
+
+On the server (decisions: `PLAN.md`, "Deployment decisions"):
+- `claushh.service` runs the API as the user `workspace` on `http://127.0.0.1:5090`, from `/opt/claushh/api`, serving
+  `/opt/claushh/web`; `cloudflared.service` connects the tunnel; `claushh-backup.timer` dumps the database daily into
+  `/var/backups/claushh`. The units come from `deploy/`.
+- PostgreSQL is the compose project `claushh-prod` on `127.0.0.1:5435` (`/opt/claushh/deploy/docker-compose.yml`).
+- `/opt/claushh` (the API, the frontend build, `deploy/`) belongs to root; `/etc/claushh` (root only) holds
+  `claushh.env` (the unit's install-specific settings and secrets) and `compose.env` (the compose variables);
+  `/srv/projects` belongs to `workspace`; the tmux socket is in `/run/claushh`.
 
 ## Repository map
 
@@ -109,8 +118,14 @@ server: one process and one origin.
 | `web/e2e/tests/` | e2e tests: `auth`, `editor`, `diff`, `console`, `workspaces`, `terminal`, `security`, `mock-api` + `helpers.ts` and `fixtures.ts` (CSP check in every test, `newDevice` for a second browser) |
 | `web/proxy.conf.json` | dev server proxy to the API |
 | `web/.npmrc` | every npm script runs Node with `--no-experimental-webstorage`: from Node 25 on, Node's own global `localStorage` (undefined without `--localstorage-file`) hides jsdom's in the Vitest tests |
-| `deploy/docker-compose.yml` | PostgreSQL 17 on `127.0.0.1:5432` |
-| `deploy/.env.example` | template of variables for Compose (copy to `deploy/.env`) |
+| `deploy/docker-compose.yml` | PostgreSQL 17 on `127.0.0.1:${POSTGRES_PORT}` (default 5432); the compose project is `claushh-dev` in development and `claushh-prod` on the server |
+| `deploy/.env.example` | template of the compose variables: development `deploy/.env`, server `/etc/claushh/compose.env` |
+| `deploy/claushh.service` | the API's systemd unit: user `workspace`, `127.0.0.1:5090`, the generic settings, the sandbox |
+| `deploy/claushh.env.example` | template of `/etc/claushh/claushh.env`, the unit's install-specific settings and secrets (key names and placeholders) |
+| `deploy/cloudflared.service` | the tunnel's systemd unit: `cloudflared` with a dynamic user, the token as a credential |
+| `deploy/claushh-backup.service`, `deploy/claushh-backup.timer` | the daily database dump (`backup.sh`), started by the timer |
+| `deploy/backup.sh` | dump and restore of the production database (the container's `pg_dump -Fc`, 14 days kept), run as root |
+| `deploy/podman-socket.conf` | user drop-in that moves the `podman.socket` of `workspace` into its home, where the API's unit sees it |
 | `docs/` | project documentation |
 
 ## Authentication
@@ -642,16 +657,21 @@ Configuration:
 
 | Key | Where | Meaning |
 |---|---|---|
-| `ConnectionStrings:Claushh` | development: `dotnet user-secrets`; server: variable `ConnectionStrings__Claushh` | PostgreSQL from `deploy/docker-compose.yml` |
+| `ASPNETCORE_ENVIRONMENT` | development: `launchSettings.json` (`Development`); tests: `Testing`; server: `Production` (the unit) | the host environment: `appsettings.<environment>.json` and the Production rules (`Notifications:NtfyUrl` required) |
+| `ASPNETCORE_URLS` | development: `launchSettings.json` (`http://localhost:5080`); server: `http://127.0.0.1:5090` (the unit) | where Kestrel listens; on the server only loopback, where `cloudflared` connects |
+| `AllowedHosts` | `appsettings.json` (`*`); server: `<domain>` in `/etc/claushh/claushh.env` | the Host header values the API answers (host filtering; another Host gets 400); local requests on the server send `Host: <domain>` |
+| `Logging:Console:FormatterName` | not set; server: `systemd` (the unit) | the console log format; `systemd` writes one line per message with its syslog level, for the journal |
+| `DOTNET_EnableDiagnostics` | not set; server: `0` (the unit) | `0` turns off the .NET diagnostic port, so there is no `dotnet-diagnostic-*` socket |
+| `ConnectionStrings:Claushh` | development: `dotnet user-secrets`; server: variable `ConnectionStrings__Claushh` in `/etc/claushh/claushh.env` | PostgreSQL from `deploy/docker-compose.yml` (server: project `claushh-prod` on `127.0.0.1:5435`) |
 | `Sessions:IdleTimeout`, `Sessions:AbsoluteTimeout` | `appsettings.json` | `00:30:00` and `12:00:00` |
 | `Sessions:SecureCookies` | `appsettings.json` (`true`), `appsettings.Development.json` (`false`) | `false` only for plain http in development: cookie names without `__Host-`, `Secure` only on HTTPS |
-| `Projects:Root` | `appsettings.json` (`/srv/projects`); development: `dotnet user-secrets`; server: variable `Projects__Root` | the projects directory: an absolute path to an existing directory whose real path is not `/`, which the API can read, write and search; checked at start (the API does not start otherwise) |
+| `Projects:Root` | `appsettings.json` (`/srv/projects`); development: `dotnet user-secrets`; server: variable `Projects__Root` (`/srv/projects`, the unit) | the projects directory: an absolute path to an existing directory whose real path is not `/`, which the API can read, write and search; checked at start (the API does not start otherwise) |
 | `Git:NetworkTimeout` | `appsettings.json` (`00:01:40`) | the one deadline of a clone, pull or push request, lock wait included, and of a background fetch; at it the git process tree is killed (502) |
-| `Hubs:AllowedOrigins` | `appsettings.json` (empty: every hub request is refused), `appsettings.Development.json` (`http://localhost:4200`, `http://localhost:5080`) | the exact Origin values (scheme, host, port) a hub request may carry, compared ordinally |
+| `Hubs:AllowedOrigins` | `appsettings.json` (empty: every hub request is refused), `appsettings.Development.json` (`http://localhost:4200`, `http://localhost:5080`); server: `Hubs__AllowedOrigins__0=https://<domain>` in `/etc/claushh/claushh.env` | the exact Origin values (scheme, host, port) a hub request may carry, compared ordinally |
 | `Git:Environment:*` | not set by default | extra variables for the git CLI's environment (`ChildEnvironment`'s overrides in `GitRunner.StartInfo`), e.g. for a credential helper's configuration |
-| `Terminal:SocketDirectory` | not set: `$XDG_RUNTIME_DIR/claushh`; server: `/run/claushh` (deployment) | the directory of the API's tmux socket and configuration, created with mode 0700; the socket path must fit in 107 bytes. Without it and without `XDG_RUNTIME_DIR` the terminal is unavailable |
-| `Terminal:Environment:<NAME>` | none (tests: `SHELL`, `HOME`) | variables for tmux and the shell on top of the allowlisted environment |
-| `Frontend:Root` | not set (development uses `ng serve`); to try the build: `dotnet user-secrets`; server: variable `Frontend__Root` | the absolute path of the Angular build (`web/dist/web/browser`) the API serves at `/`; when set, its `index.html` must carry the CSP `<meta>`, checked at start (the API does not start otherwise). Read once: restart the API after a build that changes the policy |
+| `Terminal:SocketDirectory` | not set: `$XDG_RUNTIME_DIR/claushh`; server: `/run/claushh` (the unit, with `RuntimeDirectory=`) | the directory of the API's tmux socket and configuration, created with mode 0700; the socket path must fit in 107 bytes. Without it and without `XDG_RUNTIME_DIR` the terminal is unavailable |
+| `Terminal:Environment:<NAME>` | none (tests: `SHELL`, `HOME`); server: `DOCKER_HOST` and `TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE` (the unit) | variables for tmux and the shell on top of the allowlisted environment; on the server they point `docker` and Testcontainers at the rootless Podman socket of `workspace` (`/home/workspace/.local/state/podman/podman.sock`) |
+| `Frontend:Root` | not set (development uses `ng serve`); to try the build: `dotnet user-secrets`; server: variable `Frontend__Root` (`/opt/claushh/web`, the unit) | the absolute path of the Angular build (`web/dist/web/browser`) the API serves at `/`; when set, its `index.html` must carry the CSP `<meta>`, checked at start (the API does not start otherwise). Read once: restart the API after a build that changes the policy |
 | `Notifications:NtfyUrl` | server: variable `Notifications__NtfyUrl` (required in Production: the API does not start without it); development: optional, `dotnet user-secrets` | the URL of the ntfy topic (an absolute https URL, checked at start). A secret: whoever knows the topic can read it, so it is never logged. Empty: no notifications |
 | `Notifications:NtfyToken` | server: variable `Notifications__NtfyToken`; optional | an ntfy access token, sent as `Authorization: Bearer` |
 

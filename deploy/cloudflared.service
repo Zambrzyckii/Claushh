@@ -1,0 +1,34 @@
+# cloudflared for the remotely managed Claushh tunnel (docs/PLAN.md, "Deployment decisions"). The public hostname
+# and its target, http://127.0.0.1:5090, are set in the Cloudflare dashboard. The token comes from
+# /etc/cloudflared/tunnel-token (root, 600) as a credential, never on the command line.
+[Unit]
+Description=Cloudflare Tunnel for Claushh
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=exec
+DynamicUser=yes
+LoadCredential=tunnel-token:/etc/cloudflared/tunnel-token
+ExecStart=/usr/bin/cloudflared --no-autoupdate tunnel run --token-file %d/tunnel-token
+Restart=on-failure
+RestartSec=5
+CapabilityBoundingSet=
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+RestrictNamespaces=yes
+SystemCallFilter=@system-service
+SystemCallArchitectures=native
+LockPersonality=yes
+RestrictRealtime=yes
+MemoryDenyWriteExecute=yes
+
+[Install]
+WantedBy=multi-user.target

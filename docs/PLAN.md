@@ -44,14 +44,14 @@ Devices: mainly laptop and PC. The phone is secondary.
 
 | Layer | Solution |
 |---|---|
-| System | EndeavourOS with the owner's dotfiles, system user `workspace`, systemd service with sandboxing |
+| System | EndeavourOS with the owner's dotfiles, user `workspace`, systemd service with sandboxing |
 | Backend | ASP.NET Core (.NET 10), SignalR, ASP.NET Core Identity (TOTP, passkeys) |
 | Database | PostgreSQL 17 in Docker (pinned version, only `127.0.0.1`), EF Core + Npgsql |
 | Frontend | Angular, Monaco (`ngx-monaco-editor-v2`), xterm.js, `@microsoft/signalr` |
 | Console | process `claude -p --output-format stream-json --input-format stream-json` |
 | Terminal | tmux in control mode (`tmux -C`), no PTY package; terminals end with the API |
 | Git | LibGit2Sharp for everything local (status, branches, HEAD content), the git CLI for clone, fetch, pull and push |
-| Access from outside | Cloudflare Tunnel (+ optionally Cloudflare Access) |
+| Access from outside | Cloudflare Access (one-time PIN by e-mail) and Cloudflare Tunnel |
 
 ### Claude Code integration
 
@@ -76,8 +76,8 @@ console conversation identifiers, settings (default model, effort, mode).
 
 - No open ports on the router. `cloudflared` connects outward, the home IP is not visible,
   HTTPS and DDoS protection are on Cloudflare's side.
-- Optional first layer: Cloudflare Access (code by e-mail before the page is shown at all).
-- Firewall: `ufw default deny incoming`. SSH only on the home network.
+- First layer: Cloudflare Access (a one-time PIN sent to the owner's e-mail before the page is shown at all).
+- Firewall: firewalld, with no inbound port for the tunnel; SSH only from the home network.
 
 ### Login and sessions
 
@@ -388,7 +388,7 @@ Backend decisions (stage 4):
   owner's own tmux, which the start-time `kill-server` would end).
 - Only an allowlist of the API's environment reaches tmux and the shell (HOME, USER, LOGNAME, SHELL, PATH, LANG,
   LANGUAGE, LC_*, TZ), plus `COLORTERM=truecolor` and `Terminal:Environment`. Rejected: removing a denylist (any new
-  variable would leak). The shell runs as the API's user; a separate user for it is left to the deployment stage.
+  variable would leak). The shell runs as the API's user (on the server `workspace`: "Limiting damage").
 - The shell starts in the real path of `projectPath` (a directory checked by `ProjectPaths`); the shell itself is not
   confined, which is the sandbox's job. Ids are new GUIDs, titles unique with the smallest free " (k)", at most 20
   terminals. Rejected: the mock's `t<n>` ids and count-based titles (they repeat after a restart or a close).
@@ -412,13 +412,19 @@ Backend decisions (stage 4):
 
 ### Limiting damage
 
-- Everything runs as the `workspace` user without administrator privileges.
-- systemd: `ProtectSystem=strict`, `ProtectHome=true` (except the `workspace` home),
-  `ReadWritePaths=/srv/projects`, `NoNewPrivileges=true`.
+- Everything runs as the `workspace` user without administrator privileges: the API, the terminal and the console;
+  `workspace` is in neither `wheel` nor `docker`.
+- systemd (`deploy/claushh.service`): `ProtectSystem=strict`, `ProtectHome=tmpfs` with only the `workspace` home
+  bound, `ReadWritePaths=/srv/projects`, `PrivateTmp`, `NoNewPrivileges` and the further options in "Deployment
+  decisions". The terminal and the console are the API's children and run inside the same sandbox.
+- Containers in the terminal come from the rootless Podman of `workspace`, never from the `docker` group.
+- The installed API and frontend (`/opt/claushh`) belong to root.
 - Every file API checks whether the path, resolved like `realpath(3)` (every symlink followed), lies inside the
   projects directory.
 - GitHub token with access only to selected repositories.
-- Secrets in an environment file with `600` permissions or through `LoadCredential=`, never in the repo.
+- Secrets in `/etc/claushh/claushh.env` (root, `600`), which systemd reads before the service starts, and the tunnel
+  token as a systemd credential (`LoadCredential=`); never in the repo.
+- The .NET diagnostic port is off on the server (`DOTNET_EnableDiagnostics=0`).
 - By default the console asks for permission before edits and commands such as `git push`. The request shows the command with all
   hidden characters, and a permanent permission ("tak, zawsze" – yes, always) requires a known rule and confirmation.
 - Terminal: pasted text without control characters, multiple lines only after confirmation, typed characters are not lost
@@ -431,15 +437,23 @@ and do not save the password in the browser. The password alone without the TOTP
 
 ## Deployment on EndeavourOS
 
-- Packages: `dotnet-sdk`, `aspnet-runtime`, `cloudflared`, `docker`, `git`, `tmux` (3.7 or later), the `claude` CLI.
-- A `workspace` user with its own home directory, cloned dotfiles, a logged-in `claude`
-  and a configured `git`. Projects in `/srv/projects`.
-- API as a systemd service (self-contained build, so that system updates do not break it).
-- PostgreSQL from `deploy/docker-compose.yml`.
-- `cloudflared` as a systemd service.
-- No sleep (`HandleLidSwitch=ignore` on the laptop), automatic power-on after a power outage in the BIOS.
-- Updates (`pacman -Syu`) manually, after each one check that the portal works.
-- Backup: a daily `pg_dump` from a systemd timer.
+- The server is the home computer, a desktop. Files: `deploy/` (`ARCHITECTURE.md`, "Flow" and "Repository map");
+  decisions: "Deployment decisions" below.
+- Packages: `docker` with compose, `podman` (rootless containers for the terminal), `cloudflared`, `git`, `tmux` (3.7
+  or later); the .NET 10 SDK and Node.js only to build. The console's `claude` CLI is installed for `workspace` with
+  Anthropic's installer.
+- A `workspace` user with its own home directory, cloned dotfiles, a configured `git` and, for the console, a
+  logged-in `claude` (once, with the owner's subscription, in the console's own configuration directory). Projects in
+  `/srv/projects`.
+- API as a systemd service (`claushh.service`, a self-contained build, so that system updates do not break it) on
+  `127.0.0.1:5090`.
+- PostgreSQL from `deploy/docker-compose.yml`, project `claushh-prod`, on `127.0.0.1:5435`.
+- `cloudflared` as a systemd service (`cloudflared.service`).
+- No sleep: the sleep targets are masked; automatic power-on after a power outage in the BIOS.
+- Updates (`pacman -Syu`) manually, after each one check that the portal works. A .NET security patch needs a new build
+  of the API, installed like any update.
+- Backup: a daily `pg_dump` in the custom format from a systemd timer, kept 14 days, with a restore command. The git
+  remotes are the copy of `/srv/projects`.
 - Before the portal goes behind the tunnel (left to the deployment by stage 1, part C):
   - ntfy: an unguessable topic (whoever knows it can read and send its messages), subscribed in the ntfy app on the
     phone, optionally with an access token; the API gets `Notifications__NtfyUrl` (and `Notifications__NtfyToken`) from
@@ -457,6 +471,75 @@ and do not save the password in the browser. The password alone without the TOTP
     - two networks (phone data and home Wi-Fi) show different IPs;
     - the login notification arrives.
 
+Deployment decisions:
+- The API runs as `claushh.service` (`deploy/claushh.service`), as the user `workspace`, on `http://127.0.0.1:5090`
+  (development keeps 5080 on the same machine), `Type=exec`, with logs in the `systemd` console format for the
+  journal. When the database is not up yet at boot, the start fails in the migrations and `Restart=on-failure` tries
+  again every 5 s. Rejected: `Type=notify` (a new package for the readiness signal).
+- Generic settings are `Environment=` lines of the unit; the install-specific ones (connection string, domain, ntfy)
+  are in `/etc/claushh/claushh.env` (root, `600`), which systemd reads before the service starts and which wins over
+  `Environment=`. Values with `;` are single-quoted, which systemd and `sh` read the same way; the database password is
+  hex, so nothing needs escaping. Rejected: secrets in `Environment=` (every local user can read them with
+  `systemctl show`) and `LoadCredential=` for the API's settings (the API reads its configuration from the
+  environment; one mechanism for all of it).
+- `AllowedHosts` is the public domain from the first start; local requests on the server send `Host: <domain>`. The
+  tunnel acceptance check shows which Host `cloudflared` sends: a `400` would mean another one, fixed with the
+  tunnel's HTTP Host header setting. Rejected: `*` until that check (the `400` is the check).
+- The sandbox of the unit is also that of the terminal and the console, which are the API's children:
+  - `ProtectSystem=strict`, `ProtectHome=tmpfs` with only `/home/workspace` bound (`BindPaths=`),
+    `ReadWritePaths=/srv/projects`, `PrivateTmp`, `NoNewPrivileges`, and `KillMode=mixed` (the API's own stop order
+    runs first);
+  - an empty `CapabilityBoundingSet=`, `ProtectKernelTunables`, `ProtectKernelModules`, `ProtectKernelLogs`,
+    `ProtectControlGroups`, `ProtectClock`, `ProtectHostname`, `ProtectProc=invisible`, `RestrictSUIDSGID`,
+    `RestrictRealtime`, `LockPersonality`. In the terminal they cost `dmesg`, other users' processes in `ps`, and
+    setting the clock or the host name;
+  - tried at the acceptance check, and kept where the terminal's work (containers, `dotnet test`, `npm test`, e2e)
+    still passes: `SystemCallFilter=@system-service` with `SystemCallErrorNumber=EPERM` and
+    `SystemCallArchitectures=native`, `RestrictNamespaces=yes`, `PrivateDevices=yes`,
+    `RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK`;
+  - not set: `MemoryDenyWriteExecute=` (the .NET JIT and Node write code at run time), `RemoveIPC=` (at a stop it
+    would remove the IPC objects of the whole user, whose user manager and Podman keep running), `UMask=0077`
+    (containers whose image runs as another user could not read their bind mounts; `/srv/projects` and the home are
+    `0700` anyway), `ProcSubset=pid` (tools read `/proc/meminfo` and the like) and `PrivateNetwork=` (the tunnel and
+    the terminal need the network).
+- `DOTNET_EnableDiagnostics=0`: the API opens no .NET diagnostic socket.
+- Containers in the terminal come from the rootless Podman of `workspace`. A user drop-in
+  (`deploy/podman-socket.conf`) moves its `podman.socket` to `~/.local/state/podman/podman.sock`, inside the bound
+  home, and the unit points `DOCKER_HOST` and `TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE` of the terminal at it
+  (`Terminal:Environment`); the override is needed because Testcontainers' default `/var/run/docker.sock` is the
+  system Docker. The user's manager starts at boot (lingering). Rejected: the `docker` group (root-equivalent) and the
+  default socket under `/run/user/<uid>/` (`ProtectHome=tmpfs` hides it, and binding it needs the user's UID in the
+  unit and an ordering on the user's manager).
+- PostgreSQL 17 from `deploy/docker-compose.yml` runs under the system Docker as the compose project `claushh-prod` on
+  `127.0.0.1:5435`, with its variables in `/etc/claushh/compose.env` (root, `600`); the host port is `POSTGRES_PORT`
+  (default 5432), and development uses the project `claushh-dev`. Rejected: `name:` in the file (a command without
+  `-p` would act on that project) and one project for both (they would share the data volume).
+- Backups: `claushh-backup.service` (root, oneshot) from a daily timer with `Persistent=true` (a day missed while the
+  computer was off runs at the next start) runs `deploy/backup.sh`: the container's own `pg_dump -Fc` into
+  `/var/backups/claushh` (root, `0700`), first as `.part`, then renamed, kept 14 days. `backup.sh restore` loads a
+  dump into a new database in one transaction and then, only with the API stopped, gives it the live database's name;
+  the replaced database stays as `before_restore_<time>`. With a database name as a second argument it only loads the
+  dump into a new database of that name. Rejected: the host's `pg_dump` (another major version; its dump may not load
+  into 17), plain SQL (larger, no selective restore) and `pg_restore --clean` into the live database (the tables of a
+  newer migration would block it or survive it).
+- The tunnel is remotely managed. `cloudflared` runs on the host, so its requests reach the API from loopback, which
+  `ForwardedHeaders` trusts; it runs as `deploy/cloudflared.service` with a dynamic user, its own sandbox and the token
+  as a credential (`LoadCredential=` from `/etc/cloudflared/tunnel-token`, root, `600`, passed as `--token-file`, which
+  needs cloudflared 2025.4.0 or later). Rejected: the token on the command line (visible in `ps` and
+  `systemctl show`) and `cloudflared` in Docker (its requests would not come from loopback).
+- Firewall: firewalld, with `ssh` removed from the zone `public` and allowed by one rich rule from the home network;
+  no inbound port for the tunnel. Rejected: `--add-source` on the zone `home` (it would also open that zone's other
+  services to the network).
+- The Data Protection keys stay at the framework's default, `~/.aspnet/DataProtection-Keys` in the bound home of
+  `workspace`, so the antiforgery tokens of open tabs survive a restart. Rejected: a key path in code.
+- Layout: `/opt/claushh/{api,web,deploy}` belongs to root (the API's user cannot change the installed API or
+  frontend); `/etc/claushh` and `/var/backups/claushh` are root `0700`; `/srv/projects` belongs to `workspace`
+  (`0700`). The console's `claude` is installed with Anthropic's installer as `workspace`
+  (`/home/workspace/.local/bin/claude`), with its updates off (`DISABLE_UPDATES=1`, `DISABLE_AUTOUPDATER=1`); the
+  owner updates it on purpose. Rejected: the API's files owned by `workspace`.
+- The computer is a desktop: the BIOS powers it on after a power loss, and `sleep.target`, `suspend.target`,
+  `hibernate.target` and `hybrid-sleep.target` are masked.
+
 ## Stages
 
 The order is chosen so that only already secured things reach the internet.
@@ -472,7 +555,7 @@ The order is chosen so that only already secured things reach the internet.
         `revoke-others`, cleanup of old rows, growing lockouts, password reset.
   - [x] Backend, part C: security headers and serving `index.html`, ForwardedHeaders, notifications.
   - [x] Frontend: session countdown in the top bar (stage 5).
-  - [ ] Deployment: Cloudflare Tunnel, systemd service.
+  - [ ] Deployment: Cloudflare Tunnel and Access, systemd service, backups.
 - [x] **Stage 2: files and editor.**
   - [x] Frontend: explorer with lazy loading, Monaco with tabs, saving (Ctrl+S), detection of
         conflicts with changes on disk, status bar (cursor, language, unsaved).
@@ -502,5 +585,5 @@ The order is chosen so that only already secured things reach the internet.
         permission requests in the console, strict clone URL, unconfirmed logout without returning to the app,
         expiry without the server, "Wyloguj wszędzie", CSP with Trusted Types and headers, XSRF token bound to the identity,
         mock only on `127.0.0.1`), verified in several rounds of independent review, with integration and e2e tests.
-  - [ ] Backend: passkeys, backups.
+  - [ ] Backend: passkeys.
   - [ ] Colors (the owner will refine them in later iterations), a possible phone view (low priority).
