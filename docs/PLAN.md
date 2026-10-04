@@ -95,7 +95,9 @@ console conversation identifiers, settings (default model, effort, mode).
   retries ending the session until the server confirms.
 - Content-Security-Policy (no inline scripts, with Trusted Types), no embedding in a frame (`frame-ancestors 'none'`),
   `nosniff`, `Referrer-Policy`, HSTS. Details: `ARCHITECTURE.md`, "Security headers".
-- `ForwardedHeaders` trusts only the local `cloudflared`, the real IP from the `CF-Connecting-IP` header.
+- `ForwardedHeaders` trusts only a loopback peer (the local `cloudflared`; any local process could set the header, and a
+  local process already has a shell): the real IP from the `CF-Connecting-IP` header, the scheme from
+  `X-Forwarded-Proto`.
 
 Backend decisions (stage 1):
 - Password: at least 12 characters, without composition rules (length matters more, and TOTP is mandatory anyway).
@@ -113,8 +115,9 @@ Backend decisions (stage 1):
   `POST /api/auth/login` and the built frontend (static files and the `index.html` fallback, the same files for
   everyone, no data).
 - Development runs over plain http, where ASP.NET antiforgery refuses `Secure`-only cookies, so there the cookies have no
-  `__Host-` prefix (`Sessions:SecureCookies=false`). Behind Cloudflare Tunnel requests also reach the API as HTTP,
-  so production needs `ForwardedHeaders` (stage 1, part C) first.
+  `__Host-` prefix (`Sessions:SecureCookies=false`).
+  Behind Cloudflare Tunnel requests also reach the API as HTTP; `ForwardedHeaders` takes `X-Forwarded-Proto: https` from
+  the local `cloudflared`, so production keeps `Secure` and the `__Host-` prefix.
 - The account is created only by `create-user` on the server; TOTP is switched on only after a correct code from the app,
   in one transaction. A lost phone: `create-user --reset-totp` (a new key, all sessions ended, the lockout cleared),
   which needs shell access to the server anyway. A leaked password: `create-user --reset-password` (a new password,
@@ -167,6 +170,15 @@ Backend decisions (stage 1, part C):
 - No path under `/hubs` falls back to the page: unknown ones are `401` without a session and `404` with one. The
   catch-all stays when more hubs arrive, since `MapHub` routes are more specific.
 - The Kestrel URL and `AllowedHosts` are left to the deployment.
+- `ForwardedHeaders` runs first in every environment and reads `CF-Connecting-IP` (as the client address) and
+  `X-Forwarded-Proto` only from a loopback peer, one entry each; a loopback request without `CF-Connecting-IP` keeps the
+  peer's address. Rejected: `X-Forwarded-For` (its left part comes from the client),
+  `ASPNETCORE_FORWARDEDHEADERS_ENABLED` (it trusts every proxy) and refusing loopback requests without the header (the
+  tunnel acceptance check in "Deployment" catches that case).
+- The per-IP limit counts by the IPv4 address (IPv4-mapped addresses as IPv4) or the IPv6 /64, kept in
+  `LoginAttempts.LimitKey`; the history keeps the full address. Old rows are not backfilled (the window is 15 minutes).
+  Rejected: a bucket per IPv6 address (a connection usually has a whole /64, so changing the address costs nothing),
+  the prefix in `Ip` (the address would be lost) and an `inet` column (more code for the same query).
 
 Backend decisions (stage 2):
 - The projects directory is the configuration key `Projects:Root` (`/srv/projects` in `appsettings.json`, a user-secret

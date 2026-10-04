@@ -1,7 +1,10 @@
 // Login protection (docs/ARCHITECTURE.md, "Backend", "Login protection"; decisions: docs/PLAN.md, "Login and sessions"):
-// the limit of failed attempts per IP, the account lockout after wrong codes and the login history. The only place with
-// these rules; the login endpoint calls it. Time comes from TimeProvider, so tests move the clock instead of waiting.
+// the client address, the limit of failed attempts per address, the account lockout after wrong codes and the login
+// history. The only place with these rules; the login endpoint calls it. Time comes from TimeProvider, so tests move
+// the clock instead of waiting.
 using System.Globalization;
+using System.Net;
+using System.Net.Sockets;
 using Claushh.Api.Data;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -31,13 +34,36 @@ public sealed class LoginGuard(ClaushhDbContext db, UserManager<IdentityUser> us
         return new GateLease();
     }
 
+    // The client's address as the history, the session list and the logs show it, and the key the per-IP limit counts by:
+    // an IPv4 address (also one mapped into IPv6) as itself, an IPv6 address by its /64, since one connection usually has
+    // a whole /64 and can change the rest at will. "" for both when the server knows no address.
+    public static (string Text, string LimitKey) ClientIp(IPAddress? address)
+    {
+        if (address is null)
+        {
+            return ("", "");
+        }
+        if (address.IsIPv4MappedToIPv6)
+        {
+            address = address.MapToIPv4();
+        }
+        var text = address.ToString();
+        if (address.AddressFamily != AddressFamily.InterNetworkV6)
+        {
+            return (text, text);
+        }
+        var prefix = address.GetAddressBytes();
+        Array.Clear(prefix, 8, 8);
+        return (text, new IPAddress(prefix) + "/64");
+    }
+
     // Whole seconds until a login may be tried again (the later end of both limits), or null when it may be tried now.
-    public async Task<int?> RetryAfterAsync(string ip, CancellationToken ct)
+    public async Task<int?> RetryAfterAsync(string limitKey, CancellationToken ct)
     {
         var now = clock.GetUtcNow();
         var windowStart = now - IpWindow;
         var failures = await db.LoginAttempts
-            .Where(a => a.Ip == ip && !a.Success && a.At > windowStart)
+            .Where(a => a.LimitKey == limitKey && !a.Success && a.At > windowStart)
             .OrderByDescending(a => a.At)
             .Take(MaxFailuresPerIp)
             .Select(a => a.At)
@@ -49,12 +75,13 @@ public sealed class LoginGuard(ClaushhDbContext db, UserManager<IdentityUser> us
         return end is { } later ? SecondsUntil(later, now) : null;
     }
 
-    public async Task RecordAsync(bool success, string ip, string userAgent, CancellationToken ct)
+    public async Task RecordAsync(bool success, string ip, string limitKey, string userAgent, CancellationToken ct)
     {
         db.LoginAttempts.Add(new LoginAttempt
         {
             At = clock.GetUtcNow(),
             Ip = ip,
+            LimitKey = limitKey,
             Device = DeviceName.Stored(userAgent),
             Success = success,
         });

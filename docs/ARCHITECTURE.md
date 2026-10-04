@@ -5,9 +5,9 @@ Goals and decisions are in [`PLAN.md`](PLAN.md). After every change to the struc
 or dependency, update the relevant section.
 
 Status: frontend done (login, session countdown and the "Bezpieczeństwo" (Security) window, explorer, editor with diff view,
-console, workspaces and git, terminal). The backend has login, sessions, login protection, the built frontend with the
-security headers, the files API (listing, reading and saving), the workspaces and git API and the terminal hub
-(section "Backend"); the console hub is still only in the mock.
+console, workspaces and git, terminal). The backend has login, sessions, login protection, the client IP behind
+Cloudflare, the built frontend with the security headers, the files API (listing, reading and saving), the workspaces
+and git API and the terminal hub (section "Backend"); the console hub is still only in the mock.
 The frontend is tested against a mock backend (`web/e2e/mock-api/`) that follows the contracts below.
 
 ## Flow
@@ -39,7 +39,7 @@ server: one process and one origin.
 | `src/Claushh.Api/Program.cs` | app configuration and endpoint mapping |
 | `src/Claushh.Api/Properties/launchSettings.json` | development profile, port 5080 |
 | `src/Claushh.Api/Data/` | `ClaushhDbContext` (Identity tables, `Sessions`, `LoginAttempts` and `Workspaces`) and EF Core migrations, applied at startup |
-| `src/Claushh.Api/Auth/` | login: `Session`, `AuthSessionOptions`, `AuthCookies` (cookie names), `SessionService` (the only code with session rules), `SessionAuthenticationHandler` (cookie → user, never extends), `SessionAntiforgeryData` (XSRF token bound to the session), `TotpVerifier` (TOTP codes, each accepted once), `LoginGuard` (limit per IP, account lockout, login history), `LoginAttempt`, `DeviceName` (User-Agent for storage and display), `AuthEndpoints` (`me`, `login`, `keepalive`, `logout`, XSRF filter), `SessionEndpoints` (session list, ending sessions, login history), `CreateUserCommand` (`create-user`), `AuthCleanup` (hourly deletion after 90 days) |
+| `src/Claushh.Api/Auth/` | login: `Session`, `AuthSessionOptions`, `AuthCookies` (cookie names), `SessionService` (the only code with session rules), `SessionAuthenticationHandler` (cookie → user, never extends), `SessionAntiforgeryData` (XSRF token bound to the session), `TotpVerifier` (TOTP codes, each accepted once), `LoginGuard` (the client address and its limit key, limit per IP, account lockout, login history), `LoginAttempt`, `DeviceName` (User-Agent for storage and display), `AuthEndpoints` (`me`, `login`, `keepalive`, `logout`, XSRF filter), `SessionEndpoints` (session list, ending sessions, login history), `CreateUserCommand` (`create-user`), `AuthCleanup` (hourly deletion after 90 days) |
 | `src/Claushh.Api/Files/` | files: `ProjectsOptions` (`Projects:Root`), `ProjectPaths` (the only code that turns an API path into a path on disk: syntax, symlinks resolved with `realpath`, `.git` refused, file types from `statx`), `Libc` (the three libc calls: `realpath`, `statx` and `access`), `FileStore` (reading and saving: versions, the 5 MB limit, the text rule `DecodeText`, atomic saves under a per-file lock), `FileEndpoints` (`/api/files/*`) |
 | `src/Claushh.Api/Workspaces/` | workspaces: `Workspace` (entity: display name and creation time), `WorkspaceNames` (the name rule and the directory made from a name), `CloneUrl` (the frontend's clone URL rule in .NET terms), `WorkspaceStore` (what a workspace is, the list in display order, creating one), `WorkspaceEndpoints` (`/api/workspaces`, `/api/repos`, `/api/repos/clone`) |
 | `src/Claushh.Api/Git/` | git: `Repositories` (what a repository is and its state, read with LibGit2Sharp: the repository list, the status, HEAD content), `GitOptions` (`Git:NetworkTimeout`, `Git:Environment:*`), `GitRunner` (the git CLI: safety options, environment through `ChildEnvironment`, output, time limits, killing the process tree), `RepoLocks` (one lock per repository), `BackgroundFetch` (the fetch after `GET /api/repos`, at most every 5 minutes per repository), `GitEndpoints` (`/api/git/*`: status, show, pull, push) |
@@ -197,8 +197,7 @@ server: one process and one origin.
 
 ### API contract
 
-Implemented in the backend (section "Backend"), except `ip` from `CF-Connecting-IP`, which needs `ForwardedHeaders`
-(stage 1, part C) — until then `ip` is the connection address.
+Implemented in the backend (section "Backend").
 
 | Method | Path | Response |
 |---|---|---|
@@ -211,7 +210,7 @@ Implemented in the backend (section "Backend"), except `ip` from `CF-Connecting-
 
 | Method | Path | Response |
 |---|---|---|
-| GET | `/api/auth/sessions` | `200 [{"id","current","device","ip","createdAt","lastActivityAt"}]`, newest first. `id` is a public ID, **never the secret from the cookie**. `device` e.g. "Chrome · Linux" from the User-Agent header, `ip` from `CF-Connecting-IP` |
+| GET | `/api/auth/sessions` | `200 [{"id","current","device","ip","createdAt","lastActivityAt"}]`, newest first. `id` is a public ID, **never the secret from the cookie**. `device` e.g. "Chrome · Linux" from the User-Agent header, `ip` from `CF-Connecting-IP` when the API's peer is the local `cloudflared` (loopback), otherwise the connection address; IPv4-mapped addresses as IPv4 |
 | DELETE | `/api/auth/sessions/{id}` | ends another session (including its WebSockets). `204`, `404` unknown, `400` for your own session (that is what logout is for) |
 | POST | `/api/auth/sessions/revoke-others` | ends all sessions except the current one. `204` |
 | GET | `/api/auth/logins` | `200 [{"at","ip","device","success"}]`, the last 20, newest first, including failed attempts |
@@ -675,18 +674,31 @@ Sessions (`Auth/`):
   `__Host-claushh-af` (antiforgery cookie token, `HttpOnly`), `XSRF-TOKEN` (request token that Angular sends back in
   `X-XSRF-TOKEN`). With `Sessions:SecureCookies=false`: `claushh-session`, `claushh-af`, and `Secure` only on HTTPS.
 
+Client address (`Program.cs`, `LoginGuard.ClientIp`; decisions: `PLAN.md`, "Backend decisions (stage 1, part C)"):
+- `ForwardedHeaders` runs first in every environment with the framework's default trust: only a loopback peer
+  (127.0.0.0/8 and `::1`, also IPv4-mapped), which on the server is the local `cloudflared`.
+- From such a peer the client address is `CF-Connecting-IP` and the scheme is `X-Forwarded-Proto`, one entry each.
+  From any other peer both are ignored. `X-Forwarded-For` is never read, since its left part comes from the client.
+- A loopback request without `CF-Connecting-IP` keeps its own address (127.0.0.1). A request without any peer address
+  (e.g. over a Unix socket) is trusted like loopback.
+- With `X-Forwarded-Proto: https` from `cloudflared` a request counts as HTTPS, so the `Secure` and `__Host-` cookies
+  work behind the tunnel. Plain http with `Sessions:SecureCookies=true` fails in antiforgery (500).
+- `LoginGuard.ClientIp` turns the address into two values:
+  - the text shown in the history, the session list and the logs (an IPv4-mapped address as IPv4);
+  - the key of the per-IP limit (`LimitKey`): the IPv4 address itself, or the IPv6 /64 written as `2001:db8:1:2::/64`.
+
 Login protection (`Auth/`):
 - TOTP codes are checked by `TotpVerifier` against `TimeProvider`: the 30 s step of now, the one before and the one
   after. A code is accepted once: the last accepted step is stored in `AspNetUserTokens` (`Claushh` / `TotpLastStep`),
   and a code from that step or an earlier one is rejected. `create-user` checks its code the same way, so that code is
   used up and the first login needs the next one. `--reset-totp` first removes the stored step, so the new key's
   current code confirms it.
-- Every attempt that reaches the check of the credentials is recorded in `LoginAttempts` (`At`, `Ip`, `Device` as the
-  User-Agent cut to at most 256 characters, `Success`), also for unknown names; the typed user name never. Attempts
-  answered with `429` are not recorded. Attempts are deleted after 90 days (`AuthCleanup`).
-- 10 failures from one IP within 15 minutes give `429` with `Retry-After` (seconds until the 10th most recent failure
-  leaves the window), with an empty body. The IP is the connection address; behind Cloudflare Tunnel it becomes the
-  real one only with `ForwardedHeaders` (stage 1, part C).
+- Every attempt that reaches the check of the credentials is recorded in `LoginAttempts` (`At`, `Ip`, `LimitKey`,
+  `Device` as the User-Agent cut to at most 256 characters, `Success`), also for unknown names; the typed user name
+  never. Attempts answered with `429` are not recorded. Attempts are deleted after 90 days (`AuthCleanup`).
+- 10 failures with one limit key within 15 minutes give `429` with `Retry-After` (seconds until the 10th most recent
+  failure leaves the window), with an empty body. The key is the client's IPv4 address or its IPv6 /64 ("Client
+  address"). Attempts recorded before the key existed have an empty key and count for no client.
 - 5 wrong or reused codes after a correct password lock the account (`AccessFailedCount` and `LockoutEnd` of
   `AspNetUsers`, written by `LoginGuard`; Identity's own lockout methods use the real clock): for 15 minutes the first
   time, twice as long for every further lock in a row, at most 24 hours (the number of locks in a row is the token
@@ -897,7 +909,7 @@ Rules: `CLAUDE.md`, section "Tests" (new code: only integration and e2e tests).
 |---|---|---|
 | Integration + older unit | `cd web && npm test` | Vitest (jsdom). Integration: `console.integration.spec.ts` (panel + store + editor, SignalR and HTTP stubbed; also permission requests: hidden characters, button delay, "tak, zawsze", and a double Enter), `workspaces.integration.spec.ts` (Workspace panel + router + git status + explorer + editor, HTTP stubbed; also the strict clone URL validation), `security.integration.spec.ts` (AuthService + interceptor + SessionTimer + the "Bezpieczeństwo" window, HTTP, reload and clock stubbed; also expiry without a server response), `logout-confirmation.integration.spec.ts` (routes with guards + AuthService + login screen after an unconfirmed logout, also with a newer session from another tab). Older unit tests: auth, files API, paths, explorer, `EditorStore` |
 | E2E | `cd web && npm run e2e` | build + Playwright in Chromium on `e2e/mock-api/server.mjs`: login and sessions (including unconfirmed logout with "Back", a new tab and logging in again, embedding in a frame, Trusted Types), explorer and Monaco, console (steps, options, permissions, "tak, zawsze", interrupt, replay, multiple tabs, file changes), workspaces (opening a repo, git status, pull, push, create, clone, a conversation per repo), terminal (commands, keys, reload without duplicates, multiple terminals, `exit`, Ctrl+S, resizing, pasting with the decision panel, characters on a dropped connection without loss or duplication, also after closing the tab, queue limit, focus, OSC 8 links, no answers to terminal queries, closing a terminal that another tab already closed), session (countdown, "Przedłuż", activity once a minute on a fake clock, expiry, also without a server response and hubs closed by the server), the "Bezpieczeństwo" window with a second device (a separate browser context), diff view, Monaco worker startup, mock robustness and the contract rules that the frontend does not let through (clone URL, XSRF token bound to the identity, saving like the files API: `absent`, 5 MB, a NUL character, workspace, repo and path parameters). **Every test** (`fixtures.ts`) fails when the page reports a CSP or Trusted Types violation, an unhandled exception (including one caught by Angular's ErrorHandler, `console.error('ERROR', …)`) or Monaco does not create a worker |
-| Backend | `dotnet test` (needs Docker) | xUnit integration tests over HTTP (`WebApplicationFactory`, PostgreSQL 17 from Testcontainers, a test clock): login and its failures, `me`, `keepalive` and both deadlines, logout and 409, ending another session, XSRF token bound to the session, `no-store`, closed `/api/*`, the built frontend (the page for app paths with its CSP and `no-store`, file types and `no-cache`, `/api` and `/hubs` paths and missing files never the page, the security headers on every response, the start check of `Frontend:Root`), `create-user`, TOTP codes used once, the limit per IP, the account lockout and its growth, session list, `revoke-others`, login history, cleanup, the password reset, the files API (listing, symlinks, `.git`, reading, saving, conflicts, re-creating a deleted file, limits, text rules, file modes, long names, two saves at once, empty error bodies), workspaces and git (the repository list and its order, what is and is not a repository, every git status, ahead and behind, HEAD content with a checkout's line endings and the files API's limits), workspaces (the list and its order, names and directories, creating, a stale row), cloning (every refused URL, git's own errors, the time limit against a server that never answers, only https), pull and push (every answer, both paths of a rename, a branch without commits, two pulls at once, a hook that refuses, only https), the background fetch (every 5 minutes by the test clock, a pull or push taking the repository from a fetch that hangs), the hubs (session and Origin on the WebSocket, WebSockets only, connections closed on logout, ending a session, revoke-others, expiry and a revocation by another process, hub calls never extending the session), the terminal (opening in a directory by its real path, titles, refused paths, the limit, output seq without gaps, the allowlisted environment, exit, close, the start routine), attach and input (snapshot with CRLF, every line exactly once when attaching during output, bracketed paste restored, a batch sent twice typed once, Input only after Attach on the same connection, inputSeq after a reconnect, batch limits, UTF-8 across send-keys commands, resize limits, an exited terminal, an unknown id, the history and normal screen before the switch to the alternate screen and the program's own text after it); needs the git CLI ≥ 2.45 (`--ref-format=reftable`) |
+| Backend | `dotnet test` (needs Docker) | xUnit integration tests over HTTP (`WebApplicationFactory`, PostgreSQL 17 from Testcontainers, a test clock): login and its failures, `me`, `keepalive` and both deadlines, logout and 409, ending another session, XSRF token bound to the session, `no-store`, closed `/api/*`, the built frontend (the page for app paths with its CSP and `no-store`, file types and `no-cache`, `/api` and `/hubs` paths and missing files never the page, the security headers on every response, the start check of `Frontend:Root`), `create-user`, TOTP codes used once, the limit per IP, the client address behind Cloudflare (`CF-Connecting-IP` and `X-Forwarded-Proto` only from a loopback peer, `X-Forwarded-For` ignored, IPv6 limited per /64, IPv4-mapped peers as IPv4), the account lockout and its growth, session list, `revoke-others`, login history, cleanup, the password reset, the files API (listing, symlinks, `.git`, reading, saving, conflicts, re-creating a deleted file, limits, text rules, file modes, long names, two saves at once, empty error bodies), workspaces and git (the repository list and its order, what is and is not a repository, every git status, ahead and behind, HEAD content with a checkout's line endings and the files API's limits), workspaces (the list and its order, names and directories, creating, a stale row), cloning (every refused URL, git's own errors, the time limit against a server that never answers, only https), pull and push (every answer, both paths of a rename, a branch without commits, two pulls at once, a hook that refuses, only https), the background fetch (every 5 minutes by the test clock, a pull or push taking the repository from a fetch that hangs), the hubs (session and Origin on the WebSocket, WebSockets only, connections closed on logout, ending a session, revoke-others, expiry and a revocation by another process, hub calls never extending the session), the terminal (opening in a directory by its real path, titles, refused paths, the limit, output seq without gaps, the allowlisted environment, exit, close, the start routine), attach and input (snapshot with CRLF, every line exactly once when attaching during output, bracketed paste restored, a batch sent twice typed once, Input only after Attach on the same connection, inputSeq after a reconnect, batch limits, UTF-8 across send-keys commands, resize limits, an exited terminal, an unknown id, the history and normal screen before the switch to the alternate screen and the program's own text after it); needs the git CLI ≥ 2.45 (`--ref-format=reftable`) |
 
 Backend tests make repositories with the git CLI (`tests/Claushh.Api.Tests/TestGit.cs`): a fixed identity and date,
 `HOME` set to a temporary directory so the machine's `~/.gitconfig` stays out (libgit2's configuration search paths

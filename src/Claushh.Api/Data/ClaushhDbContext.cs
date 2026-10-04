@@ -24,7 +24,7 @@ public sealed class ClaushhDbContext(DbContextOptions<ClaushhDbContext> options)
         });
         builder.Entity<LoginAttempt>(attempt =>
         {
-            attempt.HasIndex(a => new { a.Ip, a.At });
+            attempt.HasIndex(a => new { a.LimitKey, a.At });
             attempt.HasIndex(a => a.At);
         });
         builder.Entity<Workspace>().HasKey(w => w.Directory);

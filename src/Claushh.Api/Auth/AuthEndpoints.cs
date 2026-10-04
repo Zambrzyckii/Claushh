@@ -57,10 +57,11 @@ public static class AuthEndpoints
         LoginGuard guard, TotpVerifier totp, SessionService sessions, AuthCookies cookies, ILoggerFactory loggers)
     {
         var log = loggers.CreateLogger("Claushh.Api.Auth.Login");
-        var ip = http.Connection.RemoteIpAddress?.ToString() ?? "";
+        // After ForwardedHeaders: behind the tunnel, the address from CF-Connecting-IP.
+        var (ip, limitKey) = LoginGuard.ClientIp(http.Connection.RemoteIpAddress);
         var userAgent = http.Request.Headers.UserAgent.ToString();
         using var gate = await guard.EnterAsync(http.RequestAborted);
-        if (await guard.RetryAfterAsync(ip, http.RequestAborted) is { } retryAfter)
+        if (await guard.RetryAfterAsync(limitKey, http.RequestAborted) is { } retryAfter)
         {
             http.Response.Headers.RetryAfter = retryAfter.ToString(CultureInfo.InvariantCulture);
             return Results.StatusCode(StatusCodes.Status429TooManyRequests);
@@ -69,7 +70,7 @@ public static class AuthEndpoints
         var user = await CheckPasswordAsync(users, body);
         var success = user is not null && await totp.VerifyAsync(user, body.TotpCode!);
         // Not the request's token: an attempt whose client went away is still recorded and counted.
-        await guard.RecordAsync(success, ip, userAgent, CancellationToken.None);
+        await guard.RecordAsync(success, ip, limitKey, userAgent, CancellationToken.None);
         if (user is null || !success)
         {
             if (user is not null)

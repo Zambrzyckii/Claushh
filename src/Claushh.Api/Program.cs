@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http.Connections;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
@@ -128,6 +129,15 @@ if (args is ["create-user", .. var flags])
 // The built frontend (docs/ARCHITECTURE.md, "Backend" → "Frontend"); null when Frontend:Root is empty. Read here, after
 // create-user, because the static files and the fallback need it when they are mapped.
 var frontend = FrontendFiles.Options(app.Services.GetRequiredService<IOptions<FrontendOptions>>().Value);
+
+// First in every environment: the client's address (CF-Connecting-IP) and scheme (X-Forwarded-Proto) as the local
+// cloudflared forwards them. The default lists trust only a loopback peer (docs/ARCHITECTURE.md, "Backend" → "Client
+// address"); never ASPNETCORE_FORWARDEDHEADERS_ENABLED, which trusts every proxy.
+app.UseForwardedHeaders(new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto,
+    ForwardedForHeaderName = "CF-Connecting-IP",
+});
 
 // Before the error handler and authorization, so their 500 and 401 and the Origin check's 403 get the headers too.
 app.UseSecurityHeaders();
