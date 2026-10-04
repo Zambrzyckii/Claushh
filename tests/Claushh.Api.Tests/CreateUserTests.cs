@@ -154,7 +154,7 @@ public sealed class CreateUserTests(ApiFactory api) : ApiTest(api)
         var terminal = new ScriptedTerminal(Api, t => t.CurrentCode());
 
         var command = RunAsync(resetTotp: true, terminal); // not awaited yet: its first write waits for the row lock
-        await WaitForARowLockAsync();
+        await Api.WaitForALockWaitAsync();
         await change.CommitAsync();
 
         Assert.Equal(1, await command.WaitAsync(TestContext.Current.CancellationToken));
@@ -288,22 +288,5 @@ public sealed class CreateUserTests(ApiFactory api) : ApiTest(api)
         await using var scope = Api.Services.CreateAsyncScope();
         return await scope.ServiceProvider.GetRequiredService<CreateUserCommand>()
             .ResetPasswordAsync(terminal, CancellationToken.None);
-    }
-
-    // Until another connection waits for a row lock (the command's first write), at most 10 s.
-    private async Task WaitForARowLockAsync()
-    {
-        await using var scope = Api.Services.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<ClaushhDbContext>();
-        for (var attempt = 0; attempt < 100; attempt++)
-        {
-            if (await db.Database.SqlQueryRaw<int>(
-                    """SELECT count(*)::int AS "Value" FROM pg_stat_activity WHERE wait_event_type = 'Lock'""").SingleAsync() > 0)
-            {
-                return;
-            }
-            await Task.Delay(100);
-        }
-        Assert.Fail("The command never waited for the account's row.");
     }
 }

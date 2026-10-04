@@ -192,13 +192,27 @@ function errorMessage(result: Extract<LoginResult, { ok: false }>): string {
       return 'Nieprawidłowe dane logowania.';
     case 'rate-limited':
       return result.retryAfterSeconds
-        ? `Zbyt wiele prób. Spróbuj ponownie za ${result.retryAfterSeconds} s.`
+        ? `Zbyt wiele prób. Spróbuj ponownie za ${waitText(result.retryAfterSeconds)}`
         : 'Zbyt wiele prób. Spróbuj ponownie później.';
     case 'network':
       return 'Brak połączenia z serwerem.';
     case 'server':
       return 'Błąd serwera. Spróbuj ponownie.';
   }
+}
+
+/**
+ * The wait from `Retry-After`, rounded up, with the sentence's full stop: "30 s." below a minute, "15 min." below an
+ * hour, "24 godz." otherwise (the abbreviation's own dot ends the sentence). Abbreviations need no plural forms.
+ */
+function waitText(seconds: number): string {
+  if (seconds < 60) {
+    return `${seconds} s.`;
+  }
+  if (seconds < 3600) {
+    return `${Math.ceil(seconds / 60)} min.`;
+  }
+  return `${Math.ceil(seconds / 3600)} godz.`;
 }
 
 function noticeFor(reason: string | null, logout: string | null): { text: string; warning: boolean } | null {

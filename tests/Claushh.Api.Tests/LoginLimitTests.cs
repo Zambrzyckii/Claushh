@@ -1,4 +1,8 @@
+using System.Diagnostics;
 using System.Net;
+using Claushh.Api.Data;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Claushh.Api.Tests;
 
@@ -92,6 +96,39 @@ public sealed class LoginLimitTests(ApiFactory api) : ApiTest(api)
         Assert.Equal(5, await Api.LoginAttemptCountAsync());
         Assert.Equal(HttpStatusCode.TooManyRequests,
             (await client.LoginAsync(ApiFactory.UserName, ApiFactory.Password, Api.WrongTotp())).StatusCode);
+    }
+
+    // Real time: the first login holds the gate while a test lock on LoginAttempts stops it, and the second waits the
+    // gate's full 10 s (LoginGuard.GateWait).
+    [Fact(Timeout = 60_000)]
+    public async Task A_login_that_cannot_start_within_10_s_gets_429_and_is_not_recorded()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var scope = Api.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ClaushhDbContext>();
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        await db.Database.ExecuteSqlRawAsync("""LOCK TABLE "LoginAttempts" IN ACCESS EXCLUSIVE MODE""", ct);
+        var held = new ApiClient(Api).LoginAsync(ApiFactory.UserName, "wrong password", "000000"); // stops inside the gate
+        await Api.WaitForALockWaitAsync();
+        var waited = Stopwatch.StartNew();
+        var second = new ApiClient(Api).LoginAsync(ApiFactory.UserName, ApiFactory.Password, Api.NextTotp());
+        HttpResponseMessage refused;
+        try
+        {
+            refused = await second.WaitAsync(TimeSpan.FromSeconds(20), ct);
+        }
+        finally
+        {
+            await transaction.RollbackAsync(CancellationToken.None);
+        }
+        waited.Stop();
+
+        Assert.Equal(HttpStatusCode.TooManyRequests, refused.StatusCode);
+        Assert.Equal(TimeSpan.FromSeconds(10), refused.Headers.RetryAfter?.Delta);
+        Assert.Equal("", await refused.Content.ReadAsStringAsync(ct));
+        Assert.True(waited.Elapsed >= TimeSpan.FromSeconds(9.5), $"429 after {waited.Elapsed}");
+        Assert.Equal(HttpStatusCode.Unauthorized, (await held.WaitAsync(ct)).StatusCode);
+        Assert.Equal(1, await Api.LoginAttemptCountAsync());
     }
 
     // Wrong passwords: they count for the IP limit, never for the account lockout.

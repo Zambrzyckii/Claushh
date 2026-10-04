@@ -61,6 +61,13 @@ public static class AuthEndpoints
         var (ip, limitKey) = LoginGuard.ClientIp(http.Connection.RemoteIpAddress);
         var userAgent = http.Request.Headers.UserAgent.ToString();
         using var gate = await guard.EnterAsync(http.RequestAborted);
+        if (gate is null)
+        {
+            // Not recorded, like every 429.
+            log.LogInformation("Login from {Ip} did not start within {Seconds} s", ip, LoginGuard.GateWait.TotalSeconds);
+            http.Response.Headers.RetryAfter = LoginGuard.GateWait.TotalSeconds.ToString(CultureInfo.InvariantCulture);
+            return Results.StatusCode(StatusCodes.Status429TooManyRequests);
+        }
         if (await guard.RetryAfterAsync(limitKey, http.RequestAborted) is { } retryAfter)
         {
             http.Response.Headers.RetryAfter = retryAfter.ToString(CultureInfo.InvariantCulture);

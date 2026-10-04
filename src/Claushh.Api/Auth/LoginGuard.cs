@@ -22,12 +22,18 @@ public sealed class LoginGuard(ClaushhDbContext db, UserManager<IdentityUser> us
     // Locks in a row without a successful login, stored under TotpVerifier.LoginProvider next to TotpLastStep.
     private const string LockoutsToken = "LockoutsInARow";
 
-    // One login at a time in this process: the checks and writes of parallel attempts never interleave.
+    // One login at a time in this process: the checks and writes of parallel attempts never interleave. A login waits at
+    // most 10 s for the one before it.
     private static readonly SemaphoreSlim Gate = new(1, 1);
+    public static readonly TimeSpan GateWait = TimeSpan.FromSeconds(10);
 
-    public async Task<IDisposable> EnterAsync(CancellationToken ct)
+    // The lease of the gate, or null when the login before it still runs after GateWait (the endpoint answers 429).
+    public async Task<IDisposable?> EnterAsync(CancellationToken ct)
     {
-        await Gate.WaitAsync(ct);
+        if (!await Gate.WaitAsync(GateWait, ct))
+        {
+            return null;
+        }
         // What the request loaded before the gate (the user of its session cookie) may be stale by now: forget it, so the
         // checks read the rows as the previous login left them. Only Login calls this, and it has no unsaved changes here.
         db.ChangeTracker.Clear();
@@ -168,8 +174,17 @@ public sealed class LoginGuard(ClaushhDbContext db, UserManager<IdentityUser> us
     private static int SecondsUntil(DateTimeOffset end, DateTimeOffset now) =>
         Math.Max(1, (int)Math.Ceiling((end - now).TotalSeconds));
 
+    // Releases the gate once, also when it is disposed twice.
     private sealed class GateLease : IDisposable
     {
-        public void Dispose() => Gate.Release();
+        private int _released;
+
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref _released, 1) == 0)
+            {
+                Gate.Release();
+            }
+        }
     }
 }

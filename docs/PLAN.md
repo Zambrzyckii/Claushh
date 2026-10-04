@@ -177,6 +177,11 @@ Backend decisions (stage 1, part C):
   tunnel acceptance check in "Deployment" catches that case).
 - The per-IP limit counts by the IPv4 address (IPv4-mapped addresses as IPv4) or the IPv6 /64, kept in
   `LoginAttempts.LimitKey`; the history keeps the full address. Old rows are not backfilled (the window is 15 minutes).
+- A login waits at most 10 s for the one before it; then it gets `429` with `Retry-After: 10`, and nothing is recorded
+  (like every `429`). Rejected: `503` (the frontend shows it as "Błąd serwera", and the contract and the mock would
+  change).
+- The login screen shows the wait from `Retry-After` as "N s" below a minute, "N min" below an hour and "N godz."
+  otherwise, rounded up. Rejected: full words with Polish plural forms (more code for the same information).
   Rejected: a bucket per IPv6 address (a connection usually has a whole /64, so changing the address costs nothing),
   the prefix in `Ip` (the address would be lost) and an `inet` column (more code for the same query).
 

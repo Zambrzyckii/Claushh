@@ -225,6 +225,23 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         return await scope.ServiceProvider.GetRequiredService<ClaushhDbContext>().LoginAttempts.CountAsync();
     }
 
+    // Until a connection of the API waits for a lock that a test holds (a row or a table), at most 10 s.
+    public async Task WaitForALockWaitAsync()
+    {
+        await using var scope = Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ClaushhDbContext>();
+        for (var attempt = 0; attempt < 100; attempt++)
+        {
+            if (await db.Database.SqlQueryRaw<int>(
+                    """SELECT count(*)::int AS "Value" FROM pg_stat_activity WHERE wait_event_type = 'Lock'""").SingleAsync() > 0)
+            {
+                return;
+            }
+            await Task.Delay(100);
+        }
+        Assert.Fail("No connection waited for a lock.");
+    }
+
     // A row of the Workspaces table, as creating a workspace leaves it (its directory is up to the test).
     public async Task AddWorkspaceRowAsync(string directory, string displayName, DateTimeOffset createdAt)
     {
