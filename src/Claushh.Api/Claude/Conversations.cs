@@ -10,6 +10,7 @@ using System.ComponentModel;
 using System.Text;
 using System.Text.Json;
 using Claushh.Api.Files;
+using Claushh.Api.Git;
 using Claushh.Api.Hubs;
 using Microsoft.AspNetCore.SignalR;
 
@@ -18,8 +19,8 @@ namespace Claushh.Api.Claude;
 // GetConversation's result: the project's latest conversation as its events (none: null and no events).
 public sealed record ConversationSnapshot(string? ConversationId, IReadOnlyList<JsonElement> Events);
 
-public sealed class Conversations(ClaudeCli cli, ConversationLog store, ProjectPaths paths, IHubContext<ConsoleHub> hub,
-    TimeProvider clock, ILogger<Conversations> log) : IHostedService
+public sealed class Conversations(ClaudeCli cli, ConversationLog store, ProjectPaths paths, Repositories repositories,
+    IHubContext<ConsoleHub> hub, TimeProvider clock, ILogger<Conversations> log) : IHostedService
 {
     public const string InvalidPath = "Nieprawidłowa ścieżka";
     public const string UnknownConversation = "Nieznana rozmowa";
@@ -180,7 +181,7 @@ public sealed class Conversations(ClaudeCli cli, ConversationLog store, ProjectP
             await state.Lock.WaitAsync();
             try
             {
-                state.Turn = new Turn(state.WorkingDirectory);
+                state.Turn = new Turn(state.WorkingDirectory) { Before = FileChanges.Status(repositories, state.ProjectPath) };
                 opened = true;
                 await EmitAsync(state, ConsoleEvents.Prompt(state.Key, text));
                 await EmitAsync(state, ConsoleEvents.Status(state.Key, "working"));
@@ -738,14 +739,27 @@ public sealed class Conversations(ClaudeCli cli, ConversationLog store, ProjectP
         }
     }
 
-    // The events of a tool that ran: its step and its output.
+    // The events of a tool that ran: its step (an edit with its counts), its output (capped), and for an edit the file it
+    // changed, relative to the projects directory. A command marks the turn for the status diff at its end.
     private IEnumerable<JsonElement> StepOf(ConversationState state, Turn turn, string id, (string Name, JsonElement Input) tool,
         string kind, JsonElement block, JsonElement? structured)
     {
-        yield return ConsoleEvents.Step(state.Key, id, kind, StreamJson.Target(tool.Name, tool.Input, turn.Directory));
-        foreach (var (text, isError) in StreamJson.Outputs(tool.Name, block, structured))
+        var isError = StreamJson.True(block, "is_error");
+        var counts = kind is "edit" or "write" && !isError ? FileChanges.Counts(structured) : null;
+        yield return ConsoleEvents.Step(state.Key, id, kind, StreamJson.Target(tool.Name, tool.Input, turn.Directory),
+            counts?.Added, counts?.Removed);
+        foreach (var (text, error) in StreamJson.Outputs(tool.Name, block, structured))
         {
-            yield return ConsoleEvents.StepOutput(state.Key, id, text, isError);
+            yield return ConsoleEvents.StepOutput(state.Key, id, FileChanges.Cap(text), error);
+        }
+        if (tool.Name is "Edit" or "Write" or "NotebookEdit" && !isError
+            && FileChanges.Relative(structured is { } result ? StreamJson.Str(result, "filePath") : null, paths.Root) is { } changed)
+        {
+            yield return ConsoleEvents.FilesChanged(state.Key, [changed]);
+        }
+        if (tool.Name == "Bash")
+        {
+            turn.RanCommand = true;
         }
     }
 
@@ -758,6 +772,12 @@ public sealed class Conversations(ClaudeCli cli, ConversationLog store, ProjectP
             : StreamJson.Str(line, "subtype") == "success" && !StreamJson.True(line, "is_error")
                 ? ConsoleEvents.Status(state.Key, "idle")
                 : ConsoleEvents.Status(state.Key, "error", "Polecenie zakończone błędem: " + (detail.Length <= 500 ? detail : detail[..500]));
+        // A command can change files the CLI does not report: in a repository, every path whose git status changed since
+        // the prompt.
+        if (turn.RanCommand && FileChanges.Changed(turn.Before, FileChanges.Status(repositories, state.ProjectPath)) is { Count: > 0 } changed)
+        {
+            await EmitAsync(state, ConsoleEvents.FilesChanged(state.Key, changed));
+        }
         await EndTurnAsync(state, status);
     }
 

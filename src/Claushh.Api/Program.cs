@@ -109,6 +109,8 @@ builder.Services.AddSingleton<Conversations>();
 // Prepares the claude CLI's config directory and ends turns left open at start, closes idle processes, stops them all
 // on a stop; create-user never starts the host, so it never runs this.
 builder.Services.AddHostedService(services => services.GetRequiredService<Conversations>());
+builder.Services.AddSingleton<ConversationCleanup>();
+builder.Services.AddHostedService(services => services.GetRequiredService<ConversationCleanup>());
 builder.Services.AddAuthentication(SessionAuthenticationHandler.SchemeName)
     .AddScheme<AuthenticationSchemeOptions, SessionAuthenticationHandler>(SessionAuthenticationHandler.SchemeName, _ => { });
 // Closed by default: an endpoint without .AllowAnonymous() requires a session.

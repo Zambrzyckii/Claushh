@@ -321,6 +321,13 @@ Backend decisions (stage 3):
   model asks in plain text).
 - The answer is sent as `permission-resolved` before it is written to the CLI, so the allowed tool's step never
   overtakes its question.
+- Edit and write steps go out when their tool has run, with exact counts from the CLI's own diff, and a denied tool never
+  shows as done. Rejected: steps at `tool_use` with counts guessed from the input.
+- `files-changed` comes from successful edits, and for commands from the repository's git status at the end of the turn
+  compared with the prompt's. Rejected: every status path at each turn (false "Plik zmienił się" notes) and classifying
+  commands by their first word.
+- A step's output keeps its last 32,000 characters. Conversations are deleted 90 days after their last event, like login
+  attempts; the rules stay.
 
 Backend decisions (stage 4):
 - Git access: LibGit2Sharp in-process for everything local (finding repositories, status, branch, upstream, ahead and

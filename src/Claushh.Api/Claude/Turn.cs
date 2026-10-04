@@ -19,4 +19,8 @@ internal sealed class Turn(string directory)
     // Open questions by the server's requestId.
     public Dictionary<string, PendingPermission> Pending { get; } = new(StringComparer.Ordinal);
     public bool Interrupting { get; set; }
+    // A command ran in this turn, and the repository's status at the prompt (null outside a repository): at the end the
+    // paths whose status changed are reported.
+    public bool RanCommand { get; set; }
+    public Dictionary<string, string>? Before { get; set; }
 }
