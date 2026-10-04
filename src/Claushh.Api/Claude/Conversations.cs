@@ -25,6 +25,7 @@ public sealed class Conversations(ClaudeCli cli, ConversationLog store, ProjectP
     public const string UnknownConversation = "Nieznana rozmowa";
     public const string BusyConversation = "Rozmowa jest zajęta";
     public const string TooMany = "Za dużo aktywnych rozmów";
+    public const string NoRule = "To pytanie nie ma reguły do zapisania";
     public const int ProcessLimit = 8;
     public static readonly TimeSpan IdleTimeout = TimeSpan.FromMinutes(15);
     public static readonly TimeSpan DefaultInterruptTimeout = TimeSpan.FromSeconds(10);
@@ -242,6 +243,57 @@ public sealed class Conversations(ClaudeCli cli, ConversationLog store, ProjectP
         }
     }
 
+    // The browser's answer. An unknown conversation or request, or one already answered, is silent: the first answer
+    // wins. The answer is stored and sent before it is written, so the allowed tool's step always comes after it.
+    public async Task AnswerPermissionAsync(string? conversationId, string? requestId, string decision)
+    {
+        if (requestId is null || await FindAsync(conversationId) is not { } state)
+        {
+            return;
+        }
+        PendingPermission pending;
+        ClaudeProcess? process;
+        await state.Lock.WaitAsync();
+        try
+        {
+            if (state.Turn is not { } turn || !turn.Pending.TryGetValue(requestId, out var found))
+            {
+                return;
+            }
+            if (decision == "allow-always" && found.AlwaysRule is null)
+            {
+                throw new HubException(NoRule);
+            }
+            turn.Pending.Remove(requestId);
+            pending = found;
+            process = state.Process;
+            await EmitAsync(state, ConsoleEvents.Resolved(state.Key, requestId, decision));
+            if (turn.Pending.Count == 0)
+            {
+                await EmitAsync(state, ConsoleEvents.Status(state.Key, "working"));
+            }
+        }
+        finally
+        {
+            state.Lock.Release();
+        }
+        if (decision == "allow-always")
+        {
+            try
+            {
+                await store.AddRuleAsync(state.ProjectPath, pending.AlwaysRule!);
+            }
+            catch (Exception e)
+            {
+                log.LogError(e, "Saving a rule of console conversation {Conversation} failed; the answer was still sent", state.Key);
+            }
+        }
+        if (process is not null)
+        {
+            await process.ReplyAsync(pending.CliRequestId, PermissionRequests.Answer(pending, decision));
+        }
+    }
+
     // Processes without a turn for IdleTimeout get EOF on stdin and are killed 5 s later if they still run; the next
     // prompt resumes the conversation. Every minute, and directly from the tests.
     public async Task CloseIdleAsync()
@@ -324,7 +376,8 @@ public sealed class Conversations(ClaudeCli cli, ConversationLog store, ProjectP
         try
         {
             var resume = state.Resumable;
-            var started = ClaudeProcess.Start(cli.StartInfo(directory, cli.Arguments(state.Id, resume, options, [])), log);
+            var started = ClaudeProcess.Start(
+                cli.StartInfo(directory, cli.Arguments(state.Id, resume, options, await store.RulesAsync(state.ProjectPath))), log);
             process = started;
             await state.Lock.WaitAsync();
             try
@@ -513,6 +566,10 @@ public sealed class Conversations(ClaudeCli cli, ConversationLog store, ProjectP
             {
                 await OnControlRequestAsync(state, process, line);
             }
+            else if (type == "control_cancel_request")
+            {
+                await OnCancelAsync(state, line);
+            }
             else if (type == "system")
             {
                 await OnSystemAsync(state, line);
@@ -549,9 +606,45 @@ public sealed class Conversations(ClaudeCli cli, ConversationLog store, ProjectP
         var requestId = StreamJson.Str(line, "request_id") ?? "";
         var request = StreamJson.Get(line, "request") ?? default;
         var subtype = StreamJson.Str(request, "subtype");
+        if (subtype == "can_use_tool" && state.Turn is { } turn)
+        {
+            await AskAsync(state, turn, requestId, request);
+            return;
+        }
         log.LogWarning("claude sent the control request {Subtype}, which the console does not support, in conversation {Conversation}",
             subtype, state.Key);
         await process.ReplyErrorAsync(requestId, $"Unsupported control request: {subtype}");
+    }
+
+    // A question of the CLI: the server's own requestId, what it is for, and the one rule allow-always may save; then the
+    // conversation waits. A question has no time limit.
+    private async Task AskAsync(ConversationState state, Turn turn, string cliRequestId, JsonElement request)
+    {
+        var tool = StreamJson.Str(request, "tool_name") ?? "";
+        var input = StreamJson.Get(request, "input") ?? default;
+        var (rule, alwaysRule) = PermissionRequests.Rule(request);
+        var requestId = Guid.NewGuid().ToString("D");
+        turn.Pending[requestId] = new PendingPermission(cliRequestId, tool, input, rule, alwaysRule);
+        await EmitAsync(state, ConsoleEvents.Permission(state.Key, requestId, PermissionRequests.Description(tool, input, turn.Directory), alwaysRule));
+        await EmitAsync(state, ConsoleEvents.Status(state.Key, "waiting"));
+    }
+
+    // The CLI no longer needs an answer (control_cancel_request): the question ends as denied.
+    private async Task OnCancelAsync(ConversationState state, JsonElement line)
+    {
+        if (state.Turn is not { } turn || StreamJson.Str(line, "request_id") is not { } cliRequestId)
+        {
+            return;
+        }
+        foreach (var requestId in turn.Pending.Where(entry => entry.Value.CliRequestId == cliRequestId).Select(entry => entry.Key).ToList())
+        {
+            turn.Pending.Remove(requestId);
+            await EmitAsync(state, ConsoleEvents.Resolved(state.Key, requestId, "deny"));
+            if (turn.Pending.Count == 0 && !turn.Interrupting)
+            {
+                await EmitAsync(state, ConsoleEvents.Status(state.Key, "working"));
+            }
+        }
     }
 
     // init: the CLI knows the conversation's id as its session, so the next process resumes it. permission_denied: a

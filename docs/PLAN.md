@@ -58,8 +58,8 @@ Devices: mainly laptop and PC. The phone is secondary.
 - The backend runs `claude` in headless mode with a JSON stream. Every event (file read,
   edit, command, response) goes through SignalR to the Console panel.
 - Model, effort and permission mode are launch parameters, re-applied before every prompt by control requests.
-- Permission requests: the `--permission-prompt-tool` flag and a small MCP server in C# (the official MCP SDK for C#),
-  which forwards the request to the browser and waits for the decision.
+- Permission requests: `--permission-prompt-tool stdio`; the CLI asks with control requests on stdout and the backend
+  answers on stdin with the browser's decision ("Backend decisions (stage 3)").
 - Claude Code keeps the model's memory for `--resume`; the portal keeps its own log of the console events for replay
   (kept 90 days).
 - We stay with the official CLI instead of the Agent SDK. Before any change, Anthropic's current
@@ -305,6 +305,22 @@ Backend decisions (stage 3):
   stop interrupts and gives 5 s, and at start the turns a crash left open end with an error. Exit codes are only
   logged. The CLI's `--help` lists no `default` permission mode although the CLI accepts it, one more reason for the
   version check.
+- Questions go over stdio: `can_use_tool` control requests on stdout, the answer on stdin, as the Agent SDK does. The
+  value `stdio` is not in `--help`, and `--permission-prompts host` alone sends no question at all. Rejected: an MCP
+  server in C# (its tool gets no rule suggestions, it needs a server per process, and the C# SDK's compatibility is
+  unknown).
+- A question shows exactly what it is for (the whole command, the path, the URL, the plan), never the model's text.
+  `alwaysRule` only for exactly one suggested rule, and the answer is built from the server's own copy of the
+  question, so allow-always saves exactly that rule. Rejected: joining several rules into one (the contract saves one).
+- "Always" rules live in PostgreSQL per project (`ConsoleRules`) and go to every launch in `--settings`
+  `permissions.allow`; the answer adds the rule for the session only. A rule is removed with SQL (README.md).
+  Rejected: the CLI's `.claude/settings.local.json` in the repository (it needs the project's settings files, and a
+  cloned repository could commit one).
+- Plan mode stays: ExitPlanMode is a question with the plan as its text, and allowing it switches the mode back to
+  asking before edits; plan files go to the console's config directory. AskUserQuestion and EnterPlanMode are off (the
+  model asks in plain text).
+- The answer is sent as `permission-resolved` before it is written to the CLI, so the allowed tool's step never
+  overtakes its question.
 
 Backend decisions (stage 4):
 - Git access: LibGit2Sharp in-process for everything local (finding repositories, status, branch, upstream, ahead and

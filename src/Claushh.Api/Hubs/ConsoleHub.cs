@@ -14,6 +14,7 @@ public sealed class ConsoleHub(Conversations conversations) : Hub
 
     public sealed record PromptRequest(string? ConversationId, string? Text, string? Model, string? Effort, string? Mode);
     public sealed record InterruptRequest(string? ConversationId);
+    public sealed record AnswerRequest(string? ConversationId, string? RequestId, string? Decision);
 
     public Task<ConversationSnapshot> GetConversation(string? projectPath) => conversations.GetAsync(projectPath);
 
@@ -31,6 +32,16 @@ public sealed class ConsoleHub(Conversations conversations) : Hub
             throw new HubException("Nieprawidłowe opcje");
         }
         await conversations.SendPromptAsync(request.ConversationId, text, new PromptOptions(request.Model!, request.Effort!, request.Mode!));
+    }
+
+    // The decision is checked first; an unknown conversation or request, or one already answered, is silent.
+    public async Task AnswerPermission(AnswerRequest request)
+    {
+        if (request.Decision is not { } decision || decision is not ("allow" or "allow-always" or "deny"))
+        {
+            throw new HubException("Nieznana decyzja");
+        }
+        await conversations.AnswerPermissionAsync(request.ConversationId, request.RequestId, decision);
     }
 
     public Task Interrupt(InterruptRequest request) => conversations.InterruptAsync(request.ConversationId);
