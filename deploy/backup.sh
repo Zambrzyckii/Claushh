@@ -36,8 +36,8 @@ dump() {
   "${compose[@]}" exec -T postgres sh -c 'exec pg_dump -U "$POSTGRES_USER" -Fc "$POSTGRES_DB"' >"$part"
   mv -- "$part" "$name"
   part=""
-  # -mtime +13: modified 14 or more days ago.
-  find "$backups" -maxdepth 1 -type f -name 'claushh-*.dump' -mtime +13 -delete
+  # -mtime +13: modified 14 or more days ago; a .part that a killed dump left is deleted once it is a day old.
+  find "$backups" -maxdepth 1 -type f \( -name 'claushh-*.dump' -mtime +13 -o -name 'claushh-*.dump.part' -mtime +0 \) -delete
   printf 'backup.sh: %s\n' "$name"
 }
 
@@ -61,9 +61,11 @@ restore() {
     printf 'backup.sh: restored %s into the database %s\n' "$file" "$database"
     return
   fi
-  if systemctl is-active --quiet claushh.service; then
-    die "the API is running: sudo systemctl stop claushh first"
-  fi
+  # Only with the API stopped: not while it runs, and not while systemd is about to start it again (activating).
+  case $(systemctl show --property=ActiveState --value claushh.service) in
+    inactive | failed) ;;
+    *) die "the API is not stopped: sudo systemctl stop claushh first" ;;
+  esac
   # The dump loads into a new database, which only then takes the live database's name; the live database stays as
   # before_restore_<time>. So the tables of a newer migration can neither block the restore nor survive it.
   stamp=$(date -u +%Y%m%d%H%M%S)

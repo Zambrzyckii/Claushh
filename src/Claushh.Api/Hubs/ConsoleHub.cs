@@ -20,10 +20,11 @@ public sealed class ConsoleHub(Conversations conversations) : Hub
 
     public Task<string> StartConversation(string? projectPath) => conversations.StartConversationAsync(projectPath);
 
-    // Returns once the prompt is written to the CLI; the turn's events follow on ConsoleEvent.
-    public async Task SendPrompt(PromptRequest request)
+    // Returns once the prompt is written to the CLI; the turn's events follow on ConsoleEvent. Without its argument it is
+    // an empty prompt.
+    public async Task SendPrompt(PromptRequest? request)
     {
-        if (request.Text is not { Length: >= 1 and <= MaxPrompt } text)
+        if (request is null || request.Text is not { Length: >= 1 and <= MaxPrompt } text)
         {
             throw new HubException("Nieprawidłowe polecenie");
         }
@@ -34,15 +35,17 @@ public sealed class ConsoleHub(Conversations conversations) : Hub
         await conversations.SendPromptAsync(request.ConversationId, text, new PromptOptions(request.Model!, request.Effort!, request.Mode!));
     }
 
-    // The decision is checked first; an unknown conversation or request, or one already answered, is silent.
-    public async Task AnswerPermission(AnswerRequest request)
+    // The decision is checked first (also a missing argument has none); an unknown conversation or request, or one
+    // already answered, is silent.
+    public async Task AnswerPermission(AnswerRequest? request)
     {
-        if (request.Decision is not { } decision || decision is not ("allow" or "allow-always" or "deny"))
+        if (request is null || request.Decision is not { } decision || decision is not ("allow" or "allow-always" or "deny"))
         {
             throw new HubException("Nieznana decyzja");
         }
         await conversations.AnswerPermissionAsync(request.ConversationId, request.RequestId, decision);
     }
 
-    public Task Interrupt(InterruptRequest request) => conversations.InterruptAsync(request.ConversationId);
+    // A missing argument is an unknown conversation: nothing happens.
+    public Task Interrupt(InterruptRequest? request) => conversations.InterruptAsync(request?.ConversationId);
 }

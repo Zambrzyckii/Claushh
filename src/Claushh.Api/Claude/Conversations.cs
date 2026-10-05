@@ -158,26 +158,38 @@ public sealed class Conversations(ClaudeCli cli, ConversationLog store, ProjectP
     // the turn's events follow from the reader. The conversation is busy from here to the end of its turn.
     public async Task SendPromptAsync(string? conversationId, string text, PromptOptions options)
     {
-        var state = await FindAsync(conversationId) ?? throw new HubException(UnknownConversation);
-        await state.Lock.WaitAsync();
-        try
+        ConversationState state;
+        while (true)
         {
-            if (state.Busy)
+            state = await FindAsync(conversationId) ?? throw new HubException(UnknownConversation);
+            await state.Lock.WaitAsync();
+            try
             {
-                throw new HubException(BusyConversation);
+                // Forgotten by the idle check meanwhile: the next lookup gives the conversation's current state.
+                if (state.Forgotten)
+                {
+                    continue;
+                }
+                if (state.Busy)
+                {
+                    throw new HubException(BusyConversation);
+                }
+                state.Busy = true;
+                state.LastUsed = clock.GetUtcNow();
+                break;
             }
-            state.Busy = true;
-            state.LastUsed = clock.GetUtcNow();
-        }
-        finally
-        {
-            state.Lock.Release();
+            finally
+            {
+                state.Lock.Release();
+            }
         }
         var opened = false;
         try
         {
             var process = await EnsureProcessAsync(state, options);
             await process.ApplyAsync(options);
+            // Outside the conversation's lock (LibGit2 can take a while on a large repository), before the prompt line.
+            var before = FileChanges.Status(repositories, state.ProjectPath);
             await state.Lock.WaitAsync();
             try
             {
@@ -186,7 +198,7 @@ public sealed class Conversations(ClaudeCli cli, ConversationLog store, ProjectP
                 {
                     throw new HubException(ClaudeProcess.Unresponsive);
                 }
-                state.Turn = new Turn(state.WorkingDirectory) { Before = FileChanges.Status(repositories, state.ProjectPath) };
+                state.Turn = new Turn(state.WorkingDirectory) { Before = before };
                 opened = true;
                 await EmitAsync(state, ConsoleEvents.Prompt(state.Key, text));
                 await EmitAsync(state, ConsoleEvents.Status(state.Key, "working"));
@@ -310,7 +322,9 @@ public sealed class Conversations(ClaudeCli cli, ConversationLog store, ProjectP
     }
 
     // Processes without a turn for IdleTimeout get EOF on stdin and are killed 5 s later if they still run; the next
-    // prompt resumes the conversation. Every minute, and directly from the tests.
+    // prompt resumes the conversation. A conversation with no process left (and none still closing) is forgotten after
+    // IdleTimeout too: what it needs is in the database, which its next use reads again, so one that retention deleted
+    // is then unknown. Every minute, and directly from the tests.
     public async Task CloseIdleAsync()
     {
         var now = clock.GetUtcNow();
@@ -319,10 +333,19 @@ public sealed class Conversations(ClaudeCli cli, ConversationLog store, ProjectP
             await state.Lock.WaitAsync();
             try
             {
-                if (!state.Busy && state.Process is { } process && now - state.LastUsed >= IdleTimeout)
+                if (state.Busy || now - state.LastUsed < IdleTimeout)
+                {
+                    continue;
+                }
+                if (state.Process is { } process)
                 {
                     state.Process = null;
                     state.Closing = process.CloseAsync(CloseWait);
+                }
+                else if (state.Closing.IsCompleted)
+                {
+                    state.Forgotten = true;
+                    _states.TryRemove(new KeyValuePair<Guid, ConversationState>(state.Id, state));
                 }
             }
             finally
@@ -537,9 +560,10 @@ public sealed class Conversations(ClaudeCli cli, ConversationLog store, ProjectP
                 if (state.Process == process)
                 {
                     state.Process = null;
-                    if (state.Turn is not null)
+                    if (state.Turn is { } turn)
                     {
-                        await EndTurnAsync(state, _stopped
+                        // A process that ends during an interrupt or a stop ends its turn as interrupted.
+                        await EndTurnAsync(state, _stopped || turn.Interrupting
                             ? ConsoleEvents.Status(state.Key, "idle", Interrupted)
                             : ConsoleEvents.Status(state.Key, "error", $"Proces konsoli zakończył się (kod {code})."));
                     }
@@ -786,9 +810,10 @@ public sealed class Conversations(ClaudeCli cli, ConversationLog store, ProjectP
             : StreamJson.Str(line, "subtype") == "success" && !StreamJson.True(line, "is_error")
                 ? ConsoleEvents.Status(state.Key, "idle")
                 : ConsoleEvents.Status(state.Key, "error", "Polecenie zakończone błędem: " + (detail.Length <= 500 ? detail : detail[..500]));
-        // A command can change files the CLI does not report: in a repository, every path whose git status changed since
-        // the prompt.
-        if (turn.RanCommand && FileChanges.Changed(turn.Before, FileChanges.Status(repositories, state.ProjectPath)) is { Count: > 0 } changed)
+        // A command can change files the CLI does not report: in a project that was a repository at the prompt, every
+        // path whose git status changed since then.
+        if (turn.RanCommand && turn.Before is { } before
+            && FileChanges.Changed(before, FileChanges.Status(repositories, state.ProjectPath)) is { Count: > 0 } changed)
         {
             await EmitAsync(state, ConsoleEvents.FilesChanged(state.Key, changed));
         }
@@ -1005,4 +1030,6 @@ internal sealed class ConversationState(Guid id, string projectPath, bool resuma
     public bool Busy { get; set; }
     public Turn? Turn { get; set; }
     public DateTimeOffset LastUsed { get; set; }
+    // Dropped from Conversations' memory by the idle check; a caller that still holds it looks the conversation up again.
+    public bool Forgotten { get; set; }
 }

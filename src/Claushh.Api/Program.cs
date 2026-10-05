@@ -202,18 +202,22 @@ app.MapFrontendFallback(frontend);
 
 // Production: once the host has started, other processes of the API's user can neither read its /proc files (its
 // environment holds the secrets) nor attach to it (docs/PLAN.md, "Limiting damage"). After the start, so a test host
-// that runs Program in Production only to see it refuse is never changed.
+// that runs Program in Production only to see it refuse is never changed. When that fails, the API logs errno and ends
+// with exit status 71 (EX_OSERR), which the unit does not restart (deploy/claushh.service, RestartPreventExitStatus=).
+const int NotDumpableFailed = 71;
+var exitCode = 0;
 if (app.Environment.IsProduction())
 {
     app.Lifetime.ApplicationStarted.Register(() =>
     {
-        if (!Libc.MakeNotDumpable())
+        if (!Libc.MakeNotDumpable(out var errno))
         {
-            app.Logger.LogCritical("Making the process non-dumpable failed; stopping.");
+            app.Logger.LogCritical("Making the process non-dumpable failed with errno {Errno}; stopping.", errno);
+            exitCode = NotDumpableFailed;
             app.Lifetime.StopApplication();
         }
     });
 }
 
 app.Run();
-return 0;
+return exitCode;

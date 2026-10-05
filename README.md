@@ -61,8 +61,9 @@ CLAUDE_CONFIG_DIR=~/.local/state/claushh/claude claude    # then /login, and /ex
 ```
 
 or put an Anthropic API key in a file with mode 0600 outside the projects directory and set `Console:ApiKeyFile` to
-its path (an `ANTHROPIC_API_KEY` in the API's environment never reaches the CLI). A "tak, zawsze" rule is saved per
-project in the database; to remove one:
+its path; the API checks both (the file's real path, and no group or other permissions) and otherwise leaves the
+console unavailable, with the reason in its log (an `ANTHROPIC_API_KEY` in the API's environment never reaches the
+CLI). A "tak, zawsze" rule is saved per project in the database; to remove one:
 
 ```bash
 docker compose -p claushh-dev -f deploy/docker-compose.yml --env-file deploy/.env exec postgres \
@@ -365,9 +366,10 @@ sudo docker compose -p claushh-prod -f /opt/claushh/deploy/docker-compose.yml --
 `sudo /opt/claushh/deploy/backup.sh restore <file>` loads a dump into a new database in one transaction and then gives
 it the live database's name; the replaced database stays as `before_restore_<time>` (drop it as in "Rollback" once the
 portal works), and a load or a rename that fails leaves the live database as it was, plus a new database
-`restore_<time>`, dropped the same way. It refuses while the API runs (`sudo systemctl stop claushh` first, `start`
-after). With a database name as a second argument it loads the dump into a new database of that name instead, as in
-phase A. The daily run: `systemctl list-timers claushh-backup.timer` and `journalctl -u claushh-backup`.
+`restore_<time>`, dropped the same way. It refuses unless the API is stopped (`inactive` or `failed`, also not while
+systemd is about to start it again after a failure): `sudo systemctl stop claushh` first, `start` after. With a
+database name as a second argument it loads the dump into a new database of that name instead, as in phase A. The
+daily run: `systemctl list-timers claushh-backup.timer` and `journalctl -u claushh-backup`.
 
 ## Frontend tests
 

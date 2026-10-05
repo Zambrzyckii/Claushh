@@ -296,18 +296,21 @@ Backend decisions (stage 3):
   the subscription login).
 - The process gets an allowlisted environment (as git and the terminal) and its own config directory; the API's
   `ANTHROPIC_API_KEY` never reaches it (it would silently replace the login). Authentication is the login in
-  `Console:ConfigDirectory`, or `Console:ApiKeyFile` through `apiKeyHelper`.
+  `Console:ConfigDirectory`, or `Console:ApiKeyFile` through `apiKeyHelper`: a file whose real path lies outside the
+  projects directory and whose mode has no group or other bit; the start check refuses any other, and the console is
+  then unavailable.
 - Model, effort and mode are launch flags and are sent again before every prompt, each reply awaited. Rejected:
   remembering and diffing them (an approved plan changes the mode inside the CLI).
 - A prompt that starts with `/` is marked `client_composed`, so the CLI gives it to the model as text; otherwise a
   typed `/effort` is answered by the CLI itself (also with `--disable-slash-commands`) and the panel's options would no
   longer show the truth.
 - Limits are constants: 8 live processes, 15 minutes idle, prompts up to 100,000 characters; the console hub alone
-  accepts messages up to 1 MiB.
-- A turn always ends: an interrupt has 10 s before the process tree is killed, a process that ends ends its turn, a
-  stop interrupts and gives 5 s, and at start the turns a crash left open end with an error. Exit codes are only
-  logged. The CLI's `--help` lists no `default` permission mode although the CLI accepts it, one more reason for the
-  version check.
+  accepts messages up to 1 MiB. A conversation with no process is dropped from memory after 15 idle minutes and read
+  again from the database at its next use.
+- A turn always ends: an interrupt has 10 s before the process tree is killed, a process that ends ends its turn (as
+  interrupted during an interrupt), a stop interrupts and gives 5 s, and at start the turns a crash left open end with
+  an error. Exit codes are only logged. The CLI's `--help` lists no `default` permission mode although the CLI accepts
+  it, one more reason for the version check.
 - Questions go over stdio: `can_use_tool` control requests on stdout, the answer on stdin, as the Agent SDK does. The
   value `stdio` is not in `--help`, and `--permission-prompts host` alone sends no question at all. Rejected: an MCP
   server in C# (its tool gets no rule suggestions, it needs a server per process, and the C# SDK's compatibility is
@@ -327,7 +330,8 @@ Backend decisions (stage 3):
 - Edit and write steps go out when their tool has run, with exact counts from the CLI's own diff, and a denied tool never
   shows as done. Rejected: steps at `tool_use` with counts guessed from the input.
 - `files-changed` comes from successful edits, and for commands from the repository's git status at the end of the turn
-  compared with the prompt's. Rejected: every status path at each turn (false "Plik zmienił się" notes) and classifying
+  compared with the prompt's, only when the project was a repository at the prompt; that status is read outside the
+  conversation's lock. Rejected: every status path at each turn (false "Plik zmienił się" notes) and classifying
   commands by their first word.
 - A step's output keeps its last 32,000 characters. Conversations are deleted 90 days after their last event, like login
   attempts; the rules stay.
@@ -600,12 +604,13 @@ Deployment decisions:
   `-p` would act on that project) and one project for both (they would share the data volume).
 - Backups: `claushh-backup.service` (root, oneshot) from a daily timer with `Persistent=true` (a day missed while the
   computer was off runs at the next start) runs `deploy/backup.sh`: the container's own `pg_dump -Fc` into
-  `/var/backups/claushh` (root, `0700`), first as `.part`, then renamed, kept 14 days. `backup.sh restore` loads a
-  dump into a new database in one transaction and then, only with the API stopped, gives it the live database's name;
-  the replaced database stays as `before_restore_<time>`. With a database name as a second argument it only loads the
-  dump into a new database of that name. Rejected: the host's `pg_dump` (another major version; its dump may not load
-  into 17), plain SQL (larger, no selective restore) and `pg_restore --clean` into the live database (the tables of a
-  newer migration would block it or survive it).
+  `/var/backups/claushh` (root, `0700`), first as `.part`, then renamed, kept 14 days; a `.part` that a killed dump
+  left is deleted once it is a day old. `backup.sh restore` loads a dump into a new database in one transaction and
+  then, only with the API stopped (`inactive` or `failed`, not while systemd is about to start it again), gives it the
+  live database's name; the replaced database stays as `before_restore_<time>`. With a database name as a second
+  argument it only loads the dump into a new database of that name. Rejected: the host's `pg_dump` (another major
+  version; its dump may not load into 17), plain SQL (larger, no selective restore) and `pg_restore --clean` into the
+  live database (the tables of a newer migration would block it or survive it).
 - The tunnel is remotely managed. `cloudflared` runs on the host, so its requests reach the API from loopback, which
   `ForwardedHeaders` trusts; it runs as `deploy/cloudflared.service` with a dynamic user, its own sandbox and the token
   as a credential (`LoadCredential=` from `/etc/cloudflared/tunnel-token`, root, `600`, passed as `--token-file`, which
@@ -638,13 +643,13 @@ Deployment decisions:
   environment). It is removed before the tunnel starts, and the `__Host-` cookie behind the tunnel shows that it is
   gone. Rejected: an `Environment=` drop-in (the environment file wins over it), a separate `systemd-run` shell (it
   would not test the terminal inside the service) and the tunnel first.
-- Cloudflare Access with the one-time PIN to the owner's e-mail is mandatory; its application and policy exist before
-  the tunnel's public hostname and before `cloudflared` starts.
 - In Production, once the host has started, the API makes its process non-dumpable (`prctl(PR_SET_DUMPABLE, 0)`,
   `Files/Libc.cs`): its `/proc` files belong to root, and no process of its user can attach to it. When that fails,
-  the API logs it and stops. Rejected: the first line of `Program.cs` (a test that runs the API in Production inside
-  the test process would change that process for the rest of the run), a setting that switches it off, and reading
-  `ASPNETCORE_ENVIRONMENT` directly (a host that defaults to Production without it would skip it). It has no automated
+  the API logs it with its errno and ends with exit status 71 (`EX_OSERR`); the unit's `RestartPreventExitStatus=71`
+  keeps systemd from starting it again, so the unit is left `failed`. Rejected: the first line of `Program.cs` (a test
+  that runs the API in Production inside the test process would change that process for the rest of the run), a
+  setting that switches it off, and reading `ASPNETCORE_ENVIRONMENT` directly (a host that defaults to Production
+  without it would skip it). It has no automated
   test: an in-process test would change the test host itself, and a test in a child process would need a second
   runnable API with a database, tmux and a frontend build; the acceptance check on the server covers it
   (`README.md`, "Deployment", phase A).

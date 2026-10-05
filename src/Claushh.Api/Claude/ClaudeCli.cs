@@ -7,12 +7,13 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using Claushh.Api.Files;
 using Claushh.Api.Processes;
 using Microsoft.Extensions.Options;
 
 namespace Claushh.Api.Claude;
 
-public sealed partial class ClaudeCli(IOptions<ConsoleOptions> options, ILogger<ClaudeCli> log)
+public sealed partial class ClaudeCli(IOptions<ConsoleOptions> options, ProjectPaths paths, ILogger<ClaudeCli> log)
 {
     public const string Unavailable = "Konsola niedostępna";
     public static readonly Version Minimum = new(2, 1, 285);
@@ -20,6 +21,10 @@ public sealed partial class ClaudeCli(IOptions<ConsoleOptions> options, ILogger<
     private static readonly TimeSpan VersionTimeout = TimeSpan.FromSeconds(10);
     // Passed through when the API has them, as git gets them, so that git push in a step reaches the credential helper.
     private static readonly string[] Passthrough = ["XDG_CONFIG_HOME", "XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS"];
+
+    // Any permission for the group or for others.
+    private const UnixFileMode GroupOrOther = UnixFileMode.GroupRead | UnixFileMode.GroupWrite | UnixFileMode.GroupExecute
+        | UnixFileMode.OtherRead | UnixFileMode.OtherWrite | UnixFileMode.OtherExecute;
 
     // One version check at a time (EnsureAvailableAsync).
     private readonly SemaphoreSlim _check = new(1, 1);
@@ -37,9 +42,9 @@ public sealed partial class ClaudeCli(IOptions<ConsoleOptions> options, ILogger<
             log.LogError("Console:ConfigDirectory is not an absolute path and neither XDG_STATE_HOME nor HOME is set: the console is unavailable.");
             return false;
         }
-        if (options.Value.ApiKeyFile is { } keyFile && !(Path.IsPathFullyQualified(keyFile) && File.Exists(keyFile)))
+        if (options.Value.ApiKeyFile is { } keyFile && KeyFileProblem(keyFile) is { } problem)
         {
-            log.LogError("Console:ApiKeyFile is not the absolute path of an existing file: the console is unavailable.");
+            log.LogError("Console:ApiKeyFile {Problem}: the console is unavailable.", problem);
             return false;
         }
         try
@@ -54,6 +59,21 @@ public sealed partial class ClaudeCli(IOptions<ConsoleOptions> options, ILogger<
             log.LogError(e, "The console is unavailable: preparing its config directory failed");
             return false;
         }
+    }
+
+    // Why Console:ApiKeyFile cannot be used, or null: it must be the absolute path of an existing file whose real path
+    // (symlinks resolved) lies outside the projects directory and whose mode has no group or other bit.
+    private string? KeyFileProblem(string keyFile)
+    {
+        if (!Path.IsPathFullyQualified(keyFile) || !File.Exists(keyFile) || Libc.RealPath(keyFile, out _) is not { } real)
+        {
+            return "is not the absolute path of an existing file";
+        }
+        if (real.StartsWith(paths.Root + "/", StringComparison.Ordinal))
+        {
+            return "lies in the projects directory";
+        }
+        return (File.GetUnixFileMode(real) & GroupOrOther) != 0 ? "has permissions for the group or others (use mode 0600)" : null;
     }
 
     // The config directory, then `claude --version` within 10 s, at least Minimum.

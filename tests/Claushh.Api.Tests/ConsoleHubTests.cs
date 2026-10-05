@@ -1,7 +1,10 @@
 using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Claushh.Api.Claude;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.AspNetCore.SignalR.Client;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Claushh.Api.Tests;
 
@@ -128,6 +131,61 @@ public sealed partial class ConsoleHubTests(ApiFactory api) : ApiTest(api)
         Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute, File.GetUnixFileMode(Api.ClaudeHome));
     }
 
+    // Console:ApiKeyFile is refused when its real path lies in the projects directory or its mode has a group or other
+    // bit; a file elsewhere with mode 0600 is used, also through a symlink and next to the projects directory.
+    [Theory]
+    [InlineData("in the projects directory", false)]
+    [InlineData("a link into the projects directory", false)]
+    [InlineData("group-readable", false)]
+    [InlineData("readable by others", false)]
+    [InlineData("outside", true)]
+    [InlineData("a link from outside", true)]
+    [InlineData("next to the projects directory", true)]
+    public async Task The_api_key_file_must_lie_outside_the_projects_directory_without_group_or_other_permissions(string where, bool usable)
+    {
+        using var outside = new OutsideDirectory();
+        var sibling = Api.ProjectsRoot + "-keys";
+        Directory.CreateDirectory(sibling);
+        try
+        {
+            var path = where switch
+            {
+                "in the projects directory" => Key(Api.ProjectPath("keys/api-key")),
+                "a link into the projects directory" => Link(outside.Child("api-key"), Key(Api.ProjectPath("keys/api-key"))),
+                "group-readable" => Key(outside.Child("api-key"), UnixFileMode.GroupRead),
+                "readable by others" => Key(outside.Child("api-key"), UnixFileMode.OtherRead),
+                "outside" => Key(outside.Child("api-key")),
+                "a link from outside" => Link(outside.Child("link"), Key(outside.Child("api-key"))),
+                _ => Key(Path.Join(sibling, "api-key")),
+            };
+            var cli = Api.Services.GetRequiredService<ClaudeCli>();
+            Api.SetApiKeyFile(path);
+
+            await cli.PrepareAsync(TestContext.Current.CancellationToken);
+
+            Assert.Equal(usable, cli.Available);
+        }
+        finally
+        {
+            Directory.Delete(sibling, recursive: true);
+        }
+    }
+
+    // Without its argument object a call gets the answer of empty fields.
+    [Fact]
+    public async Task Calls_without_their_argument_get_the_answers_of_empty_fields()
+    {
+        await using var tab = await TestConsole.ConnectAsync(Api, Client);
+        var deadline = TimeSpan.FromSeconds(20);
+
+        var prompt = await Assert.ThrowsAsync<HubException>(() => tab.Hub.InvokeAsync("SendPrompt", (object?)null).WaitAsync(deadline));
+        var answer = await Assert.ThrowsAsync<HubException>(() => tab.Hub.InvokeAsync("AnswerPermission", (object?)null).WaitAsync(deadline));
+        await tab.Hub.InvokeAsync("Interrupt", (object?)null).WaitAsync(deadline);
+
+        Assert.EndsWith("Nieprawidłowe polecenie", prompt.Message, StringComparison.Ordinal);
+        Assert.EndsWith("Nieznana decyzja", answer.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task The_console_hub_connects_only_with_a_session_and_an_allowed_origin()
     {
@@ -141,6 +199,21 @@ public sealed partial class ConsoleHubTests(ApiFactory api) : ApiTest(api)
         Assert.Contains("401", noSession.ToString(), StringComparison.Ordinal);
         Assert.Contains("403", noOrigin.ToString(), StringComparison.Ordinal);
         Assert.Null((await tab.GetAsync("")).ConversationId);
+    }
+
+    // A key file with mode 0600 plus `extra`.
+    private static string Key(string path, UnixFileMode extra = UnixFileMode.None)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, "test-key\n");
+        File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite | extra);
+        return path;
+    }
+
+    private static string Link(string path, string target)
+    {
+        File.CreateSymbolicLink(path, target);
+        return path;
     }
 
     [GeneratedRegex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")]

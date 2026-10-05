@@ -187,6 +187,10 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         Services.GetRequiredService<IOptionsMonitorCache<GitOptions>>().Clear();
     }
 
+    // Console:ApiKeyFile for the API (null: none). ClaudeCli reads its options at every check, so the next PrepareAsync
+    // uses it; ResetAsync puts back none.
+    public void SetApiKeyFile(string? path) => Services.GetRequiredService<IOptions<ConsoleOptions>>().Value.ApiKeyFile = path;
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
@@ -242,6 +246,7 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         // then the fake's scripts and logs go; a test that broke the version check gets it back.
         await Services.GetRequiredService<Conversations>().CloseAllAsync();
         Claude.Reset();
+        SetApiKeyFile(null);
         var cli = Services.GetRequiredService<ClaudeCli>();
         if (!cli.Available)
         {

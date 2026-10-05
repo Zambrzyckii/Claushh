@@ -65,7 +65,13 @@ internal static class Libc
     public static bool CanReadWriteAndSearch(string path) => AccessNative(path, AccessReadWriteSearch) == 0;
 
     // prctl(PR_SET_DUMPABLE, 0): the process's /proc files belong to root and no process of its user can attach to it.
-    public static bool MakeNotDumpable() => PrctlNative(PrSetDumpable, 0, 0, 0, 0) == 0;
+    // errno: why it failed (0 when it did not).
+    public static bool MakeNotDumpable(out int errno)
+    {
+        var made = PrctlNative(PrSetDumpable, 0, 0, 0, 0) == 0;
+        errno = made ? 0 : Marshal.GetLastPInvokeError();
+        return made;
+    }
 
     // kill(pid, SIGTERM): asks a process to end, so it can clean up first; false when there is no such process.
     public static bool Terminate(int pid) => KillNative(pid, SigTerm) == 0;

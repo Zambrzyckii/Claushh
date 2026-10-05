@@ -30,6 +30,8 @@ KillMode=mixed
 TimeoutStopSec=60
 Restart=on-failure
 RestartSec=5
+# 71: the API could not make itself non-dumpable (Program.cs); it is not started again, and the unit stays failed.
+RestartPreventExitStatus=71
 # No core dumps: a core file would hold the process's memory. The API's children inherit the limit.
 LimitCORE=0
 # The sandbox; the terminal and the console are the API's children and run inside it too.

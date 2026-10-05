@@ -306,6 +306,23 @@ public sealed class ConsoleTurnTests(ApiFactory api) : ApiTest(api)
     }
 
     [Fact]
+    public async Task An_exit_during_an_interrupt_ends_the_turn_as_interrupted()
+    {
+        await using var tab = await TestConsole.ConnectAsync(Api, Client);
+        var id = await tab.StartScriptedAsync(Api, "studia/lab", "turn-start.jsonl",
+            TestClaude.Emit(new { type = "stream_event", @event = new { type = "message_start", message = new { id = "msg_fixture30" } }, parent_tool_use_id = (string?)null }),
+            TestClaude.Emit(new { type = "stream_event", @event = new { type = "content_block_delta", index = 0, delta = new { type = "text_delta", text = "Liczę" } }, parent_tool_use_id = (string?)null }),
+            """{"await":"interrupt"}""", TestClaude.Exit(1));
+        await tab.SendAsync(id, "policz");
+        await tab.WaitForAsync(id, "text msg_fixture30:0 Liczę");
+
+        await tab.InterruptAsync(id);
+
+        await tab.WaitForAsync(id, "status idle przerwano");
+        Assert.DoesNotContain(tab.Shown(id), line => line.StartsWith("status error", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task Interrupt_of_an_idle_or_unknown_conversation_does_nothing()
     {
         await using var tab = await TestConsole.ConnectAsync(Api, Client);
@@ -443,6 +460,47 @@ public sealed class ConsoleTurnTests(ApiFactory api) : ApiTest(api)
         var launches = Api.Claude.Launches(id);
         Assert.Equal(2, launches.Count);
         Assert.Equal(new[] { "--resume", id }, launches[1].GetProperty("argv").EnumerateArray().Select(a => a.GetString()!).TakeLast(2));
+    }
+
+    [Fact]
+    public async Task A_conversation_forgotten_after_15_idle_minutes_is_read_again_and_resumes()
+    {
+        await using var tab = await TestConsole.ConnectAsync(Api, Client);
+        var id = await tab.StartScriptedAsync(Api, "studia/lab",
+            "turn-start.jsonl", "read-and-command.jsonl", TestClaude.Exit(0), "turn-start.jsonl", "read-and-command.jsonl");
+        await tab.SendAsync(id, "pierwsze");
+        await tab.WaitForAsync(id, "status idle");
+        await TestConsole.UntilAsync(() => !Conversations.IsRunning(id), "the end of the first process");
+
+        Api.Clock.Advance(Conversations.IdleTimeout);
+        await Conversations.CloseIdleAsync();
+        await tab.SendAsync(id, "drugie");
+        await TestConsole.UntilAsync(() => tab.Shown(id).Count(line => line == "status idle") == 2, "the resumed turn's end");
+
+        Assert.Equal(new[] { "--resume", id }, Api.Claude.Launches(id)[1].GetProperty("argv").EnumerateArray().Select(a => a.GetString()!).TakeLast(2));
+        Assert.Equal(tab.Events(id).Where(e => TestConsole.Str(e, "type") != "text").Select(e => e.GetRawText()),
+            (await tab.GetAsync("studia/lab")).Events.Where(e => TestConsole.Str(e, "type") != "text").Select(e => e.GetRawText()));
+    }
+
+    [Fact]
+    public async Task A_conversation_that_retention_deleted_is_unknown_after_the_idle_check()
+    {
+        string id;
+        await using (var tab = await TestConsole.ConnectAsync(Api, Client))
+        {
+            id = await tab.StartScriptedAsync(Api, "studia/lab", "turn-start.jsonl", TestClaude.Success);
+        }
+        // Sessions last 30 minutes: the jump of the clock needs a new login.
+        Api.Clock.Advance(ConversationCleanup.Retention + TimeSpan.FromMinutes(1));
+        await Client.LoginAsOwnerAsync();
+        await Api.Services.GetRequiredService<ConversationCleanup>().RunOnceAsync(TestContext.Current.CancellationToken);
+        await Conversations.CloseIdleAsync();
+        await using var again = await TestConsole.ConnectAsync(Api, Client);
+
+        var error = await Assert.ThrowsAsync<HubException>(() => again.SendAsync(id, "x"));
+
+        Assert.EndsWith("Nieznana rozmowa", error.Message, StringComparison.Ordinal);
+        Assert.Empty(Api.Claude.Launches(id));
     }
 
     [Fact]

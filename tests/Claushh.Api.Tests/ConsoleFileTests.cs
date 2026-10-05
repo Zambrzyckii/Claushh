@@ -122,6 +122,25 @@ public sealed class ConsoleFileTests(ApiFactory api) : ApiTest(api)
     }
 
     [Fact]
+    public async Task A_repository_that_a_turn_makes_reports_nothing_at_its_end()
+    {
+        Directory.CreateDirectory(Api.ProjectPath("studia/lab"));
+        await using var tab = await TestConsole.ConnectAsync(Api, Client);
+        var id = await tab.StartAsync("studia/lab");
+        Api.Claude.Script(id, "turn-start.jsonl", Command("toolu_fixture31", "git init"), TestClaude.AwaitFile("init"),
+            Ran("toolu_fixture31", ""), TestClaude.Success);
+
+        await tab.SendAsync(id, "zrób repozytorium");
+        await tab.WaitForAsync(id, "status working");
+        Api.Git.Init("studia/lab");
+        Api.WriteProjectFile("studia/lab/notatki.txt", "x\n");
+        Api.Claude.Release(id, "init");
+        await tab.WaitForAsync(id, "status idle");
+
+        Assert.Equal(new[] { "step command git init", "status idle" }, tab.Shown(id).Skip(3));
+    }
+
+    [Fact]
     public async Task Output_over_32000_characters_keeps_its_end_after_a_note()
     {
         var output = new string('a', 8_000) + new string('b', 32_000);

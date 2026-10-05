@@ -66,15 +66,14 @@ internal static class FileChanges
     }
 
     // The paths whose status differs between the prompt and now (new, gone or changed), in order.
-    public static List<string> Changed(Dictionary<string, string>? before, Dictionary<string, string>? after)
+    public static List<string> Changed(Dictionary<string, string> before, Dictionary<string, string>? after)
     {
         if (after is null)
         {
             return [];
         }
-        var earlier = before ?? new Dictionary<string, string>(StringComparer.Ordinal);
-        return [.. after.Keys.Union(earlier.Keys)
-            .Where(path => !earlier.TryGetValue(path, out var was) || !after.TryGetValue(path, out var now) || was != now)
+        return [.. after.Keys.Union(before.Keys)
+            .Where(path => !before.TryGetValue(path, out var was) || !after.TryGetValue(path, out var now) || was != now)
             .Order(StringComparer.Ordinal)];
     }
 

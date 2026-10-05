@@ -157,6 +157,7 @@ internal sealed class ClaudeProcess
         }
     }
 
+    // false: still running after `wait`. A process already released after its exit (ExitAsync) counts as ended.
     public async Task<bool> WaitForExitAsync(TimeSpan wait)
     {
         using var limit = new CancellationTokenSource(wait);
@@ -169,10 +170,14 @@ internal sealed class ClaudeProcess
         {
             return false;
         }
+        catch (InvalidOperationException)
+        {
+            return true;
+        }
     }
 
     // After the end of stdout: replies still awaited fail, then the exit code (a process that keeps running without
-    // stdout is killed after 5 s).
+    // stdout is killed after 5 s). Then stdout and the process are released; later calls find it gone.
     public async Task<int> ExitAsync()
     {
         _ended = true;
@@ -185,7 +190,10 @@ internal sealed class ClaudeProcess
             KillTree();
             await _process.WaitForExitAsync();
         }
-        return _process.ExitCode;
+        var code = _process.ExitCode;
+        await _stdout.CompleteAsync();
+        _process.Dispose();
+        return code;
     }
 
     // A control request of the API's own, awaited within `timeout`; one without its reply kills the process tree.
