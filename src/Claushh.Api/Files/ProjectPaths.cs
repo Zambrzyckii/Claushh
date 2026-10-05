@@ -30,7 +30,8 @@ public sealed class ProjectPaths(IOptions<ProjectsOptions> options)
     public string Root => _root.Value;
 
     // null: a bad path, one that leads outside the projects directory or into .git (also when its end does not exist), or
-    // one with a dangling or looping symlink anywhere in it; all of them are answered with 400.
+    // one with a symlink anywhere in it that cannot be resolved (dangling, looping, or pointing where the API cannot
+    // search); all of them are answered with 400.
     public ProjectPath? Resolve(string relative)
     {
         if (!IsWellFormed(relative))
@@ -42,7 +43,7 @@ public sealed class ProjectPaths(IOptions<ProjectsOptions> options)
         {
             return IsAllowed(real) ? new ProjectPath(relative, real, KindOf(real)) : null;
         }
-        // The name exists but does not resolve: a dangling symlink, or a loop.
+        // The name exists but does not resolve: a symlink that dangles, loops or points where the API cannot search.
         if (errno == Libc.ELOOP || Libc.FileType(joined) is not null)
         {
             return null;

@@ -38,7 +38,7 @@ test('the mock refuses clone addresses that the contract forbids, also when the 
   }
 });
 
-test('the mock saves like the files API: `absent` creates a file, over 5 MB is 413, a NUL character is 415', async ({ request }) => {
+test('the mock saves like the files API: `absent` creates a file, not a directory, over 5 MB is 413, a NUL character is 415', async ({ request }) => {
   await request.get('/api/auth/me');
   const anonymous = (await request.storageState()).cookies.find((c) => c.name === 'XSRF-TOKEN')!.value;
   await request.post('/api/auth/login', { headers: { 'X-XSRF-TOKEN': anonymous }, data: USER });
@@ -59,6 +59,10 @@ test('the mock saves like the files API: `absent` creates a file, over 5 MB is 4
   const taken = await save(created, { content: 'drugi\n', baseVersion: 'absent' });
   expect(taken.status()).toBe(409);
   expect((await taken.json()).currentVersion).not.toBe('absent');
+
+  // As in the backend: a save creates a file only in a directory that exists, and a file is no directory.
+  expect((await save('prywatne/brak/nowy.md', { content: 'x', baseVersion: 'absent' })).status()).toBe(404);
+  expect((await save(`${existing}/nowy.md`, { content: 'x', baseVersion: 'absent' })).status()).toBe(404);
 
   // More than 5 MB (counted in bytes, not characters) and a NUL character are refused, whatever the version.
   const limit = 5 * 1024 * 1024;

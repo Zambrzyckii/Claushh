@@ -210,17 +210,18 @@ Backend decisions (stage 2):
   result must be the projects directory or lie under it, so a link in the middle of a path cannot lead out either. When
   the end of the path does not exist (or cannot be reached), the nearest ancestor that `realpath` resolves decides, and
   containment is checked first: a path that leads outside the projects directory or into `.git` is `400` even then,
-  because the status code must not tell whether something exists there. A dangling or looping symlink anywhere in the
-  path is `400`, and so is a name longer than the file system allows. Any other path that does not exist, or that lies
-  under a directory that cannot be searched, is `404`. Other file system errors are a `500`: an unexpected error of
-  `realpath`, a directory that disappears while it is listed, or a projects directory that cannot be resolved when it is
-  first needed. An entry whose type cannot be read is left out of a listing (`404` when asked for directly), and a
-  directory that cannot be read lists as empty. Rejected: lexical checks (`Path.GetFullPath`), which do not see symlinks, and a managed walk over
-  `LinkTarget`, which would re-implement the kernel's path resolution with its corner cases.
+  because the status code must not tell whether something exists there. A symlink anywhere in the path that cannot be
+  resolved (dangling, looping, or pointing where the API cannot search) is `400`, and so is a name longer than the file
+  system allows. Any other path that does not exist, or that lies under a directory (not a symlink) that cannot be
+  searched, is `404`. Other file system errors are a `500`, for example: an unexpected error of `realpath`, a directory
+  that disappears while it is listed, or a projects directory that cannot be resolved when it is first needed. An entry
+  whose type cannot be read is left out of a listing (`404` when asked for directly), and a directory that cannot be
+  read lists as empty. Rejected: lexical checks (`Path.GetFullPath`), which do not see symlinks, and a managed walk
+  over `LinkTarget`, which would re-implement the kernel's path resolution with its corner cases.
 - Listings include dotfiles (`.gitignore`, `.env`): .NET's directory enumeration skips hidden entries by default (on
   Linux, names starting with `.`), so the listing asks for all of them. They leave out `.git`, names that are not valid
   paths (a `\` in the name) or not valid UTF-8 (.NET decodes those with U+FFFD, so the name resolves to nothing),
-  symlinks that lead outside, nowhere or in a loop, and special files. A symlink that stays inside is listed with its
+  symlinks that lead outside or cannot be resolved, and special files. A symlink that stays inside is listed with its
   target's kind and keeps its own path. Rejected: the default (dotfiles would vanish from the explorer).
 - `.git` (a directory or a file) is left out of listings, and a path with a `.git` segment, before or after resolution,
   is `400`. Rejected: only hiding it in the listing (the contract's minimum), because the editor could still read
@@ -372,11 +373,14 @@ Backend decisions (stage 4):
 - Creating: under one process-wide lock, the name must be free, then `mkdir`, then the row; if the row cannot be
   written, the directory is removed again and the request fails (`500`). Rejected: the row first (a failed `mkdir`
   would leave a name for a directory that does not exist).
-- The git CLI runs without a shell, stdin closed, with `-c protocol.allow=never -c protocol.https.allow=always -c
-  core.fsmonitor=false`, no prompts (`GIT_TERMINAL_PROMPT=0`, `GCM_INTERACTIVE=never`), English messages
-  (`LC_ALL=C.UTF-8`) and an environment built from a clean slate (see the next bullet), so git's own repository
-  variables are simply never set; hooks stay. Rejected: a shell command line (quoting mistakes) and disabling hooks
-  (a pre-push hook of the owner's would silently not run from the panel).
+- The git CLI runs without a shell, stdin closed, with `-c core.fsmonitor=false` and `GIT_ALLOW_PROTOCOL=https`, no
+  prompts (`GIT_TERMINAL_PROMPT=0`, `GCM_INTERACTIVE=never`), English messages (`LC_ALL=C.UTF-8`) and an environment
+  built from a clean slate (see the next bullet), so git's own repository variables are simply never set; hooks stay.
+  `GIT_ALLOW_PROTOCOL` makes git allow only the listed transports and read no protocol rule from its configuration
+  files; `Git:Environment:GIT_ALLOW_PROTOCOL` replaces the list (the tests add `file` for their local remotes).
+  Rejected: a shell command line (quoting mistakes), disabling hooks (a pre-push hook of the owner's would silently
+  not run from the panel) and `-c protocol.allow=never -c protocol.https.allow=always` (a `protocol.<name>.allow` in
+  any configuration file wins over it).
 - git's environment (`Processes/ChildEnvironment`, owner's decision 2026-10-02) is built from an allowlist (`HOME`,
   `USER`, `LOGNAME`, `SHELL`, `PATH`, `LANG`, `LANGUAGE`, every `LC_*`, `TZ`), not inherited and then trimmed by a
   denylist: a denylist only ever catches variables someone already thought of, and the API's own process picks up new
@@ -388,9 +392,11 @@ Backend decisions (stage 4):
   `ConnectionStrings__*`).
 - Time limits: one deadline per clone, pull or push request, `Git:NetworkTimeout` (100 s) from its start, covering the
   lock wait and every git step, which keeps the answer under Cloudflare's 125 s; local steps also at most 30 s each. On
-  a timeout the process tree is killed, a partial clone is removed, and the answer is `502` with
-  "Git nie skończył w ciągu N s i został przerwany.". Rejected: `504` (the frontend shows "błąd serwera" without the
-  reason) and a limit per git step (a pull waiting behind another operation could pass 125 s).
+  a timeout git's process tree gets SIGTERM, so git removes its lock files, and whatever still runs 1 s later is
+  killed; a partial clone is removed, and the answer is `502` with "Git nie skończył w ciągu N s i został
+  przerwany.". Rejected: `504` (the frontend shows "błąd serwera" without the reason), a limit per git step (a pull
+  waiting behind another operation could pass 125 s) and killing at once (git's `*.lock` files would stay and block
+  the next git command in that repository).
 - The clone URL is checked with the frontend's rule in .NET terms (`[0-9]` and `\z` in the pattern, then the WHATWG
   canonical-form checks for ports, `.`/`..` segments and IPv4 hosts), and git gets exactly that string after `--`.
   Rejected: .NET's `Uri` (canonicalises differently from WHATWG) and validating punycode with `IdnMapping` (a different
@@ -399,13 +405,13 @@ Backend decisions (stage 4):
   Rejected: cloning into a temporary name and renaming (a second place where a half-finished clone can stay).
 - One `SemaphoreSlim` per repository path, shared by clone (target), pull, push and the background fetch; a request
   waits for it within its deadline. The background fetch skips a busy repository, and a request that finds a
-  background fetch holding the lock cancels it (its process tree is killed; a pull fetches anyway). Rejected: striped
+  background fetch holding the lock cancels it (its process tree is stopped; a pull fetches anyway). Rejected: striped
   locks as in the files API (a pull could wait behind an operation on an unrelated repository that shares its stripe)
   and refusing a second pull with `409` (the panel already disables its buttons while a request is pending).
 - ↑/↓ come from the local remote-tracking branches. When `GET /api/repos` has built the list, every repository with an
   upstream whose last fetch attempt is at least 5 minutes old (by `TimeProvider`) is fetched in the background with the
   network limit; the response does not wait, a failure is logged and tried again after another 5 minutes, a busy
-  repository is skipped, and running fetches are killed when the API stops. So ↑/↓ show the remote's state within about
+  repository is skipped, and running fetches are stopped when the API stops. So ↑/↓ show the remote's state within about
   5 minutes of using the panel (owner's decision). Rejected: a timer for all repositories (network traffic while nobody
   uses the portal) and a fetch inside the request (every save would wait for GitHub).
 - Pull is the contract's `git pull --ff-only` run as its two steps, so that the status follows the step that failed: no

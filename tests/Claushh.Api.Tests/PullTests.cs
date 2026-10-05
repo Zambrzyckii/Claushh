@@ -116,7 +116,8 @@ public sealed class PullTests(ApiFactory api) : ApiTest(api)
     {
         var lab = Api.Git.MakeTrackedRepo("studia/lab");
         Api.Git.Run(lab, "remote", "set-url", "origin", Api.Git.RemotePath("lab"));
-        Api.WriteGitConfig(allowFileTransport: false);
+        // The test configuration still allows the file transport; the API's git does not.
+        Api.AllowFileTransport(false);
 
         var response = await PullAsync("studia/lab");
 
@@ -211,6 +212,45 @@ public sealed class PullTests(ApiFactory api) : ApiTest(api)
         Assert.Equal(HttpStatusCode.BadRequest, (await PullAsync("studia")).StatusCode);
         Client.SendXsrf = false;
         Assert.Equal(HttpStatusCode.BadRequest, (await PullAsync("studia/lab")).StatusCode);
+    }
+
+    // git holds its ref locks while the reference-transaction hook runs for "prepared"; the hook outlasts the 2 s limit,
+    // so the API stops git while it holds them.
+    [Fact]
+    public async Task A_pull_stopped_at_its_time_limit_leaves_no_lock_file()
+    {
+        var lab = Api.Git.MakeTrackedRepo("studia/lab");
+        var elsewhere = Api.Git.CloneElsewhere(Api.Git.RemoteUrl("lab"));
+        Api.Git.Commit(elsewhere, "a.txt", "a\n", "a");
+        Api.Git.Run(elsewhere, "push", "-q", "origin", "main");
+        var hook = Path.Join(lab, ".git", "hooks", "reference-transaction");
+        File.WriteAllText(hook, "#!/bin/sh\n[ \"$1\" = prepared ] && sleep 5\nexit 0\n");
+        File.SetUnixFileMode(hook, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        Api.SetNetworkTimeout(TimeSpan.FromSeconds(2));
+
+        var response = await PullAsync("studia/lab");
+
+        Assert.Equal(HttpStatusCode.BadGateway, response.StatusCode);
+        Assert.Equal("Git nie skończył w ciągu 2 s i został przerwany.", (await response.Content.ReadFromJsonAsync<MessageBody>())!.Message);
+        Assert.Empty(Directory.GetFiles(Path.Join(lab, ".git"), "*.lock", SearchOption.AllDirectories));
+    }
+
+    [Fact]
+    public async Task Git_s_messages_name_the_repository_by_its_api_path()
+    {
+        var lab = Api.Git.MakeTrackedRepo("studia/lab");
+        var elsewhere = Api.Git.CloneElsewhere(Api.Git.RemoteUrl("lab"));
+        Api.Git.Commit(elsewhere, "a.txt", "a\n", "a");
+        Api.Git.Run(elsewhere, "push", "-q", "origin", "main");
+        // A lock file a crashed git left behind: the merge refuses to start and names it.
+        File.WriteAllText(Path.Join(lab, ".git", "index.lock"), "");
+
+        var response = await PullAsync("studia/lab");
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        var message = (await response.Content.ReadFromJsonAsync<MessageBody>())!.Message;
+        Assert.Contains("'studia/lab/.git/index.lock'", message, StringComparison.Ordinal);
+        Assert.DoesNotContain(Api.ProjectsRoot, message, StringComparison.Ordinal);
     }
 
     private Task<HttpResponseMessage> PullAsync(string repo) =>

@@ -48,12 +48,12 @@ internal static class FileChanges
     {
         try
         {
-            if (repositories.Find(projectPath) is not { Kind: PathKind.Directory } repo)
+            if (repositories.Find(projectPath) is not { Kind: PathKind.Directory } repo || repositories.Status(repo) is not { } repoStatus)
             {
                 return null;
             }
             var status = new Dictionary<string, string>(StringComparer.Ordinal);
-            foreach (var file in repositories.Status(repo).Files)
+            foreach (var file in repoStatus.Files)
             {
                 status[file.Path] = file.Status;
             }

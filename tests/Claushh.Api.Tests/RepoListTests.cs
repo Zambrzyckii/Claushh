@@ -47,6 +47,8 @@ public sealed class RepoListTests(ApiFactory api) : ApiTest(api)
         Directory.CreateDirectory(Api.ProjectPath("studia/plain"));
         Api.WriteProjectFile("studia/file.txt", "x");
         Api.WriteProjectFile("studia/worktree/.git", $"gitdir: {Api.ProjectPath("studia/zeta/.git")}\n");
+        Directory.CreateDirectory(Api.ProjectPath("studia/gitlink"));
+        Api.Link("studia/gitlink/.git", Api.ProjectPath("studia/zeta/.git"));
         Api.WriteProjectFile("studia/broken/.git/HEAD", "ref: refs/heads/main\n");
         Api.Git.Run(Api.ProjectPath("studia"), "init", "-q", "--ref-format=reftable", "-b", "main", "reftable");
 

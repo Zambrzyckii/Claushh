@@ -123,15 +123,19 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
 
     public TestGit Git { get; }
 
-    // The global git configuration of the test run: https://git.test/<name>.git leads to RemotesRoot, and the file
-    // transport that this needs is allowed. TestGit sets its own HOME to GitHome, which resolves to this file by
-    // itself; the API's git gets it through Git:Environment:GIT_CONFIG_GLOBAL (ConfigureWebHost), not through the
-    // test process's own environment, which ChildEnvironment no longer passes through. The API's own
-    // -c protocol.allow=never still refuses every other transport but https.
+    // The global git configuration of the test run: https://git.test/<name>.git leads to RemotesRoot through the file
+    // transport. TestGit sets its own HOME to GitHome, which resolves to this file by itself; the API's git gets it
+    // through Git:Environment:GIT_CONFIG_GLOBAL (ConfigureWebHost), not through the test process's own environment,
+    // which ChildEnvironment does not pass through. The file also allows the file transport (protocol.file.allow); the
+    // API's git ignores that and uses the transport only while Git:Environment:GIT_ALLOW_PROTOCOL allows it
+    // (AllowFileTransport).
     public string GitConfig => Path.Join(GitHome, ".gitconfig");
 
     // Git:NetworkTimeout for the API; null: the configured value.
     private TimeSpan? _networkTimeout;
+    // Whether the API's git may use the file transport of the remotes in RemotesRoot (GIT_ALLOW_PROTOCOL "https:file");
+    // false: the API's own default, https only.
+    private bool _fileTransport = true;
 
     public ApiFactory()
     {
@@ -150,9 +154,15 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         WriteFrontend();
     }
 
-    public void WriteGitConfig(bool allowFileTransport = true) =>
-        File.WriteAllText(GitConfig, $"[url \"{RemotesRoot}/\"]\n\tinsteadOf = https://git.test/\n"
-            + (allowFileTransport ? "[protocol \"file\"]\n\tallow = always\n" : ""));
+    public void WriteGitConfig() =>
+        File.WriteAllText(GitConfig, $"[url \"{RemotesRoot}/\"]\n\tinsteadOf = https://git.test/\n[protocol \"file\"]\n\tallow = always\n");
+
+    // The API reads Git:Environment through IOptionsMonitor, so emptying its cache applies the change at once.
+    public void AllowFileTransport(bool allowed)
+    {
+        _fileTransport = allowed;
+        Services.GetRequiredService<IOptionsMonitorCache<GitOptions>>().Clear();
+    }
 
     // Each file holds its own relative path, so a test can tell which file it got.
     private void WriteFrontend()
@@ -199,7 +209,14 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         {
             services.AddSingleton<TimeProvider>(Clock);
             services.AddSingleton<IStartupFilter, TestRemoteIp>();
-            services.PostConfigure<GitOptions>(options => options.NetworkTimeout = _networkTimeout ?? options.NetworkTimeout);
+            services.PostConfigure<GitOptions>(options =>
+            {
+                options.NetworkTimeout = _networkTimeout ?? options.NetworkTimeout;
+                if (_fileTransport)
+                {
+                    options.Environment["GIT_ALLOW_PROTOCOL"] = "https:file";
+                }
+            });
             // Nested inside HubSessionFilter (registered after it here), so HubConnectionTests can make the connect
             // pipeline fail once the session check has passed (TestHubThrow).
             services.Configure<HubOptions>(options => options.AddFilter<TestHubThrow>());
@@ -236,6 +253,7 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         Directory.Delete(RemotesRoot, recursive: true);
         Directory.CreateDirectory(RemotesRoot);
         WriteGitConfig();
+        _fileTransport = true;
         SetNetworkTimeout(null);
         Clock.Reset();
         await using var scope = Services.CreateAsyncScope();

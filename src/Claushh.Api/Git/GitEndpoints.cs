@@ -27,7 +27,9 @@ public static class GitEndpoints
         {
             return Results.BadRequest();
         }
-        return repository.Kind == PathKind.Directory ? Results.Ok(repositories.Status(repository)) : Results.NotFound();
+        return repository.Kind == PathKind.Directory && repositories.Status(repository) is { } status
+            ? Results.Ok(status)
+            : Results.NotFound();
     }
 
     // `path` must be a valid path inside `repo`; it is looked up in HEAD, so a file deleted on disk still has content.

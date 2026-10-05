@@ -63,7 +63,7 @@ public sealed class FileStore
                 return new(SaveStatus.Invalid);
         }
         // Only text that the next read accepts is written: no NUL character, and no lone UTF-16 surrogate, which has no
-        // UTF-8 form.
+        // UTF-8 form (over HTTP the JSON binder already refuses one with 400; this covers every other caller).
         if (content.Contains('\0'))
         {
             return new(SaveStatus.NotText);

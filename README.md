@@ -151,8 +151,6 @@ home network's address (e.g. `192.168.1.0`).
      git clone https://github.com/<owner>/<repository>.git /srv/projects/<workspace>/<repository>
      ```
      Give the token as the password: the helper writes it to that file, readable only by `workspace`;
-   - `git config --show-origin --get-regexp '^protocol\.'` prints nothing: a `protocol.<name>.allow` there would win
-     over the API's `protocol.allow=never` (`install.sh install` refuses then too);
    - Podman's socket in the home directory, where the API's unit sees it:
      ```bash
      install -D -m 0644 /opt/claushh/deploy/podman-socket.conf ~/.config/systemd/user/podman.socket.d/claushh.conf
@@ -255,7 +253,7 @@ sudo docker compose -p claushh-prod -f /opt/claushh/deploy/docker-compose.yml --
   - `env` shows no connection string, ntfy URL, `ASPNETCORE_*` or `DOTNET_*` (your dotfiles may set their own);
     `ls /tmp/dotnet-diagnostic-*` finds nothing;
   - `docker -H unix:///run/docker.sock ps` is refused;
-  - the protocol check of step 8 prints nothing, and a push of a branch through the token works;
+  - a push of a branch through the token works;
   - after `sudo systemctl restart claushh` (as you), saving in the editor tab that stayed open works.
 - **Containers.** In a portal terminal:
   - `docker info` shows Podman's server, rootless;

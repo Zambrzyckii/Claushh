@@ -61,6 +61,18 @@ public sealed class GitShowTests(ApiFactory api) : ApiTest(api)
     }
 
     [Fact]
+    public async Task A_file_that_a_checkout_makes_bigger_than_5_MB_is_413()
+    {
+        var lab = Api.Git.MakeRepo("studia/lab");
+        Api.WriteProjectFile("studia/lab/.gitattributes", "*.crlf text eol=crlf\n");
+        // 3 MB in the repository, 6 MB once a checkout writes every LF as CRLF.
+        Api.WriteProjectFile("studia/lab/grows.crlf", Enumerable.Repeat((byte)'\n', 3 * 1024 * 1024).ToArray());
+        Api.Git.CommitAll(lab, "grows");
+
+        Assert.Equal(HttpStatusCode.RequestEntityTooLarge, (await ShowAsync("studia/lab", "studia/lab/grows.crlf")).StatusCode);
+    }
+
+    [Fact]
     public async Task What_head_has_no_file_for_is_404()
     {
         var lab = Api.Git.MakeRepo("studia/lab");

@@ -44,19 +44,6 @@ build() {
   printf '\ninstall.sh: built into %s. Install it with:\n  sudo %s install %s\n' "$out" "$repo/deploy/install.sh" "$out"
 }
 
-# A protocol.<name>.allow in the git config of workspace would win over the API's -c protocol.allow=never. Read as the
-# API's git reads it under systemd: HOME set, no XDG_CONFIG_HOME, outside any repository.
-check_git_protocols() {
-  local found status=0
-  found=$(runuser -u workspace -- env -i HOME=/home/workspace PATH=/usr/bin \
-    git -C / config --show-origin --get-regexp '^protocol\.') || status=$?
-  case $status in
-    0) die "the git config of workspace sets protocol rules (README.md, \"Deployment\", step 8):"$'\n'"$found" ;;
-    1) ;;
-    *) die "reading the git config of workspace failed (exit status $status)" ;;
-  esac
-}
-
 # Whether the production database's container runs (compose labels its containers with the project).
 database_runs() {
   [[ -n $(docker ps --quiet --filter label=com.docker.compose.project=claushh-prod --filter status=running 2>/dev/null) ]]
@@ -101,7 +88,6 @@ install_build() {
   id -u workspace >/dev/null 2>&1 || die "the user workspace does not exist (README.md, \"Deployment\", step 2)"
   [[ $(stat -c '%U' -- /srv/projects 2>/dev/null) == workspace ]] \
     || die "/srv/projects must exist and belong to workspace (README.md, \"Deployment\", step 4)"
-  check_git_protocols
   # The copies are made while the API still runs, so a failed copy (a full disk) leaves it running.
   install -d -o root -g root -m 0755 "$prefix"
   for part in api web deploy; do

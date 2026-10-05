@@ -108,6 +108,27 @@ public sealed class FileListTests(ApiFactory api) : ApiTest(api)
     }
 
     [Theory]
+    [InlineData("repo/to-locked")]
+    [InlineData("repo/to-locked/x")]
+    public async Task A_link_into_a_directory_of_the_projects_directory_that_cannot_be_searched_is_400(string path)
+    {
+        // Directory permissions do not bind root.
+        Assert.SkipWhen(Environment.IsPrivilegedProcess, "root can search every directory");
+        var locked = Directory.CreateDirectory(Api.ProjectPath("locked/inner")).Parent!.FullName;
+        Api.Link("repo/to-locked", Api.ProjectPath("locked/inner"));
+        File.SetUnixFileMode(locked, UnixFileMode.None);
+        try
+        {
+            Assert.Equal(HttpStatusCode.BadRequest, await ListStatusAsync(path));
+        }
+        finally
+        {
+            // ApiFactory.ResetAsync has to be able to delete it.
+            File.SetUnixFileMode(locked, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+    }
+
+    [Theory]
     [InlineData("missing")]
     [InlineData("notes.txt")]
     [InlineData("missing/x")]

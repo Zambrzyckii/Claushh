@@ -1,8 +1,10 @@
 // The git CLI, used only for the network (clone, fetch, pull, push) and the local steps around it (docs/ARCHITECTURE.md,
 // "Backend" → "Workspaces and git"; decisions: docs/PLAN.md, "Backend decisions (stage 4)"): no shell, no prompts, only
-// https, and a time limit after which the whole process tree is killed.
+// https, and a time limit after which the whole process tree gets SIGTERM, then a kill 1 s later.
 using System.Diagnostics;
+using System.Globalization;
 using System.Text;
+using Claushh.Api.Files;
 using Claushh.Api.Processes;
 using Microsoft.Extensions.Options;
 
@@ -53,11 +55,12 @@ public sealed class GitDeadline : IDisposable
 public sealed class GitRunner(ILogger<GitRunner> log, IOptionsMonitor<GitOptions> options)
 {
     public static readonly TimeSpan LocalStepLimit = TimeSpan.FromSeconds(30);
+    // How long git and its helpers have after SIGTERM before the tree is killed.
+    private static readonly TimeSpan TerminateWait = TimeSpan.FromSeconds(1);
 
     private const int TailBytes = 64 * 1024;
     private const int MaxMessage = 4000;
-    private static readonly string[] SafetyOptions =
-        ["-c", "protocol.allow=never", "-c", "protocol.https.allow=always", "-c", "core.fsmonitor=false"];
+    private static readonly string[] SafetyOptions = ["-c", "core.fsmonitor=false"];
     // Passed through from the API's own environment when set: git's config lookup and credential helpers such as
     // libsecret need them.
     private static readonly string[] Passthrough = ["XDG_CONFIG_HOME", "XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS"];
@@ -112,9 +115,11 @@ public sealed class GitRunner(ILogger<GitRunner> log, IOptionsMonitor<GitOptions
         {
             start.ArgumentList.Add(argument);
         }
-        // A clean environment (ChildEnvironment), then: the variables git's config lookup and credential helpers need,
-        // then Git:Environment:* (configuration), then git's own variables, which always win.
-        var overrides = new Dictionary<string, string>();
+        // A clean environment (ChildEnvironment), then: https as the only transport (GIT_ALLOW_PROTOCOL; git then reads no
+        // protocol rule from its configuration files), the variables git's config lookup and credential helpers need,
+        // then Git:Environment:* (configuration, which may replace GIT_ALLOW_PROTOCOL), then git's own variables, which
+        // always win.
+        var overrides = new Dictionary<string, string> { ["GIT_ALLOW_PROTOCOL"] = "https" };
         foreach (var name in Passthrough)
         {
             if (Environment.GetEnvironmentVariable(name) is { } value)
@@ -134,18 +139,69 @@ public sealed class GitRunner(ILogger<GitRunner> log, IOptionsMonitor<GitOptions
         return start;
     }
 
-    // git starts helpers (git-remote-https, the transport) as its children: all of them go.
+    // git starts helpers (git-remote-https, the transport, hooks) as its children: all of them go. SIGTERM first, which
+    // lets git remove its lock files; whatever still runs 1 s later is killed with the whole tree.
     private static void KillTree(Process git)
     {
-        try
+        if (git.HasExited)
         {
-            git.Kill(entireProcessTree: true);
+            return;
         }
-        catch (InvalidOperationException)
+        foreach (var pid in Descendants(git.Id).Prepend(git.Id))
         {
-            // It exited in the meantime.
+            Libc.Terminate(pid);
+        }
+        if (!git.WaitForExit(TerminateWait))
+        {
+            try
+            {
+                git.Kill(entireProcessTree: true);
+            }
+            catch (InvalidOperationException)
+            {
+                // It exited in the meantime.
+            }
         }
         git.WaitForExit(TimeSpan.FromSeconds(5));
+    }
+
+    // The processes below `root`, from /proc/<pid>/task/<tid>/children (Linux); empty where the kernel has no such file.
+    private static List<int> Descendants(int root)
+    {
+        var found = new List<int>();
+        var parents = new Queue<int>([root]);
+        while (parents.TryDequeue(out var parent))
+        {
+            string[] tasks;
+            try
+            {
+                tasks = Directory.GetDirectories($"/proc/{parent}/task");
+            }
+            catch (IOException)
+            {
+                // It has exited.
+                continue;
+            }
+            foreach (var task in tasks)
+            {
+                string children;
+                try
+                {
+                    children = File.ReadAllText(Path.Join(task, "children"));
+                }
+                catch (IOException)
+                {
+                    continue;
+                }
+                foreach (var child in children.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+                {
+                    var pid = int.Parse(child, CultureInfo.InvariantCulture);
+                    found.Add(pid);
+                    parents.Enqueue(pid);
+                }
+            }
+        }
+        return found;
     }
 
     // The last TailBytes bytes of a stream, decoded as UTF-8.

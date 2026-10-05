@@ -106,12 +106,39 @@ public sealed class GitStatusTests(ApiFactory api) : ApiTest(api)
         Assert.Equal(HttpStatusCode.NotFound, (await StatusAsync("studia/lab")).StatusCode);
     }
 
+    [Fact]
+    public async Task A_repository_whose_status_cannot_be_read_is_404_and_not_listed()
+    {
+        Api.Git.MakeRepo("studia/lab");
+        // Too short to be an index: libgit2 opens the repository but cannot read its status.
+        Api.WriteProjectFile("studia/lab/.git/index", "garbage\n");
+
+        var list = await Client.Http.GetFromJsonAsync<List<RepoListTests.RepoBody>>("/api/repos?workspace=studia");
+
+        Assert.Empty(list!);
+        Assert.Equal(HttpStatusCode.NotFound, (await StatusAsync("studia/lab")).StatusCode);
+    }
+
+    [Fact]
+    public async Task A_repository_inside_an_untracked_directory_is_one_untracked_entry_for_its_directory()
+    {
+        Api.Git.MakeRepo("studia/lab");
+        Api.WriteProjectFile("studia/lab/vendor/note.txt", "x\n");
+        Api.Git.MakeRepo("studia/lab/vendor/lib");
+
+        var status = await StatusOkAsync("studia/lab");
+
+        Assert.Equal(new[] { new FileBody("studia/lab/vendor/lib", "untracked"), new FileBody("studia/lab/vendor/note.txt", "untracked") },
+            status.Files.OrderBy(file => file.Path, StringComparer.Ordinal));
+    }
+
     [Theory]
     [InlineData("studia/missing")]
     [InlineData("studia/plain")]
     [InlineData("studia/file.txt")]
     [InlineData("studia/linked")]
     [InlineData("studia/worktree")]
+    [InlineData("studia/gitlink")]
     [InlineData("studia/reftable")]
     [InlineData(".hidden/lab")]
     public async Task What_is_not_a_repository_is_404(string repo)
@@ -122,6 +149,8 @@ public sealed class GitStatusTests(ApiFactory api) : ApiTest(api)
         Api.WriteProjectFile("studia/file.txt", "x");
         Api.Link("studia/linked", Api.ProjectPath("studia/lab"));
         Api.WriteProjectFile("studia/worktree/.git", $"gitdir: {Api.ProjectPath("studia/lab/.git")}\n");
+        Directory.CreateDirectory(Api.ProjectPath("studia/gitlink"));
+        Api.Link("studia/gitlink/.git", Api.ProjectPath("studia/lab/.git"));
         Api.Git.Run(Api.ProjectPath("studia"), "init", "-q", "--ref-format=reftable", "-b", "main", "reftable");
 
         Assert.Equal(HttpStatusCode.NotFound, (await StatusAsync(repo)).StatusCode);

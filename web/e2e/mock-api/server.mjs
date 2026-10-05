@@ -177,6 +177,12 @@ function listDir(dir) {
   return [...out.values()];
 }
 
+/** Whether `dir` is a directory of the mock: the projects directory, a workspace or repository, or a parent of a file. */
+function directoryExists(dir) {
+  if (dir === '' || state.workspaces.has(dir) || state.repos.has(dir)) return true;
+  return [...state.files.keys(), ...state.workspaces.keys(), ...state.repos.keys()].some((p) => p.startsWith(dir + '/'));
+}
+
 function gitFiles(repoPath) {
   const repo = state.repos.get(repoPath);
   const files = [];
@@ -562,6 +568,9 @@ async function handle(req, res) {
       state.log.push({ path: 'write', p, xsrf: ok });
       if (!ok) return json(res, 400);
       if (typeof body?.content !== 'string' || typeof body?.baseVersion !== 'string') return json(res, 400);
+      // As in the backend: a file can only be saved in a directory that exists (a file is no directory), before any
+      // content or version check.
+      if (!directoryExists(p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : '')) return json(res, 404);
       // As in the backend, whatever the version: text that a read would refuse, and more than 5 MB, is not saved.
       if (body.content.includes('\u0000')) return json(res, 415);
       if (Buffer.byteLength(body.content, 'utf8') > MAX_FILE_BYTES) return json(res, 413);

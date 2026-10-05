@@ -314,6 +314,19 @@ public sealed class FileContentTests(ApiFactory api) : ApiTest(api)
         Assert.False(File.Exists(Api.ProjectPath("repo/new.c")));
     }
 
+    // A lone UTF-16 surrogate has no UTF-8 form; the JSON binder refuses it before the save, like a malformed body.
+    [Fact]
+    public async Task Content_with_a_lone_surrogate_is_400_and_writes_nothing()
+    {
+        Directory.CreateDirectory(Api.ProjectPath("repo"));
+        using var body = new StringContent("""{"content":"a\ud800b","baseVersion":"absent"}""", Encoding.UTF8, "application/json");
+
+        var response = await Client.Http.PutAsync(Url("repo/new.c"), body);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.False(File.Exists(Api.ProjectPath("repo/new.c")));
+    }
+
     [Fact]
     public async Task Error_responses_have_no_body()
     {

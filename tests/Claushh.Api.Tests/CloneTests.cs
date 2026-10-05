@@ -170,12 +170,12 @@ public sealed class CloneTests(ApiFactory api) : ApiTest(api)
     }
 
     [Fact]
-    public async Task Git_gets_no_transport_but_https()
+    public async Task Git_gets_no_transport_but_https_whatever_its_configuration_files_allow()
     {
-        // Without the test configuration's protocol.file.allow, the local remote behind https://git.test/ is refused:
-        // the API's -c protocol.allow=never is in force (git's own default would allow a local path).
+        // The test configuration allows the file transport that the remote behind https://git.test/ needs
+        // (protocol.file.allow); without the tests' own GIT_ALLOW_PROTOCOL the API's git still refuses it.
         var url = Api.Git.MakeSeededRemote("lab");
-        Api.WriteGitConfig(allowFileTransport: false);
+        Api.AllowFileTransport(false);
 
         var response = await CloneAsync("studia", url);
 

@@ -21,7 +21,7 @@ public sealed class BackgroundFetchTests(ApiFactory api) : ApiTest(api)
         Api.Git.Commit(elsewhere, "a.txt", "a\n", "a");
         Api.Git.Run(elsewhere, "push", "-q", "origin", "main");
 
-        // The answer never waits for the fetch it starts.
+        // The list shows the state before the fetch it starts; the fetch's result shows in a later list.
         Assert.Equal(0, (await LabAsync()).Behind);
         await WaitUntilBehindAsync(1);
 
@@ -49,9 +49,34 @@ public sealed class BackgroundFetchTests(ApiFactory api) : ApiTest(api)
     }
 
     [Fact(Timeout = 60_000)]
-    public async Task A_pull_or_push_takes_the_repository_from_a_background_fetch()
+    public async Task The_list_answers_while_its_background_fetch_still_runs()
     {
         var lab = Api.Git.MakeTrackedRepo("studia/lab");
+        // A remote that never answers: the fetch would run until Git:NetworkTimeout (100 s).
+        using var silent = new TcpListener(IPAddress.Loopback, 0);
+        silent.Start();
+        Api.Git.Run(lab, "remote", "set-url", "origin", $"https://127.0.0.1:{((IPEndPoint)silent.LocalEndpoint).Port}/lab.git");
+        var watch = Stopwatch.StartNew();
+
+        await LabAsync();
+        var answered = watch.Elapsed;
+        using var connection = await silent.AcceptTcpClientAsync(TestContext.Current.CancellationToken).AsTask()
+            .WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+
+        Assert.InRange(answered, TimeSpan.Zero, TimeSpan.FromSeconds(10));
+        // The fetch is still connected after the answer.
+        Assert.False(await ClosedWithinAsync(connection, TimeSpan.FromSeconds(1)), "the background fetch ended before its time limit");
+    }
+
+    [Theory(Timeout = 60_000)]
+    [InlineData("push", "Nic do wypchnięcia.")]
+    [InlineData("pull", "Pobrano 1 commit.")]
+    public async Task A_pull_or_push_takes_the_repository_from_a_background_fetch_and_ends_its_process_tree(string operation, string message)
+    {
+        var lab = Api.Git.MakeTrackedRepo("studia/lab");
+        var elsewhere = Api.Git.CloneElsewhere(Api.Git.RemoteUrl("lab"));
+        Api.Git.Commit(elsewhere, "a.txt", "a\n", "a");
+        Api.Git.Run(elsewhere, "push", "-q", "origin", "main");
         // A remote that never answers: the fetch would hold the repository for Git:NetworkTimeout (100 s).
         using var silent = new TcpListener(IPAddress.Loopback, 0);
         silent.Start();
@@ -60,13 +85,17 @@ public sealed class BackgroundFetchTests(ApiFactory api) : ApiTest(api)
         // The fetch is running (and holds the lock) once git has connected.
         using var connection = await silent.AcceptTcpClientAsync(TestContext.Current.CancellationToken).AsTask()
             .WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+        // The request's own fetch (a pull's) goes to the real remote.
+        Api.Git.Run(lab, "remote", "set-url", "origin", Api.Git.RemoteUrl("lab"));
         var watch = Stopwatch.StartNew();
 
-        var response = await Client.Http.PostAsync("/api/git/push?repo=studia%2Flab", null, TestContext.Current.CancellationToken);
+        var response = await Client.Http.PostAsync($"/api/git/{operation}?repo=studia%2Flab", null, TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal(new PushTests.MessageBody("Nic do wypchnięcia."), await response.Content.ReadFromJsonAsync<PushTests.MessageBody>());
+        Assert.Equal(message, (await response.Content.ReadFromJsonAsync<PushTests.MessageBody>(TestContext.Current.CancellationToken))!.Message);
         Assert.InRange(watch.Elapsed, TimeSpan.Zero, TimeSpan.FromSeconds(10));
+        // The fetch's whole process tree has ended: the helper that held the connection is gone.
+        Assert.True(await ClosedWithinAsync(connection, TimeSpan.FromSeconds(5)), "the background fetch's connection is still open");
     }
 
     private async Task<RepoListTests.RepoBody> LabAsync()
@@ -74,6 +103,30 @@ public sealed class BackgroundFetchTests(ApiFactory api) : ApiTest(api)
         var response = await Client.Http.GetAsync("/api/repos?workspace=studia", TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         return Assert.Single((await response.Content.ReadFromJsonAsync<List<RepoListTests.RepoBody>>())!);
+    }
+
+    // Whether the other end closes the connection within `limit`; what git sent (its TLS hello) is read first.
+    private static async Task<bool> ClosedWithinAsync(TcpClient connection, TimeSpan limit)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        timeout.CancelAfter(limit);
+        var buffer = new byte[4096];
+        try
+        {
+            while (await connection.GetStream().ReadAsync(buffer, timeout.Token) > 0)
+            {
+            }
+            return true;
+        }
+        catch (OperationCanceledException)
+        {
+            return false;
+        }
+        catch (IOException)
+        {
+            // Reset by the other end: closed as well.
+            return true;
+        }
     }
 
     // The fetch runs in the background: the list shows its result at a later refresh.

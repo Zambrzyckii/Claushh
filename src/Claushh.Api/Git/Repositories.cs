@@ -80,12 +80,13 @@ public sealed class Repositories(ProjectPaths paths, ILogger<Repositories> log)
         return repository.Head.Commits.Count();
     }
 
-    public RepoStatus Status(ProjectPath repo)
+    // null when libgit2 cannot read the status (e.g. a broken index): logged, and answered as not a repository (404),
+    // as the list leaves such a repository out.
+    public RepoStatus? Status(ProjectPath repo) => Open(repo, (repository, directory) =>
     {
-        using var repository = new Repository(repo.FullPath);
         var head = HeadOf(repository);
-        return new RepoStatus(head.Branch, head.Ahead, head.Behind, Changes(repository, repo.Relative));
-    }
+        return new RepoStatus(head.Branch, head.Ahead, head.Behind, Changes(repository, directory.Relative));
+    });
 
     // The file at `path` (relative to the projects directory, inside `repo`) as HEAD has it, through the filters a
     // checkout applies (line endings and ident from .gitattributes), so the diff view compares like with like.
@@ -148,7 +149,7 @@ public sealed class Repositories(ProjectPaths paths, ILogger<Repositories> log)
         }
         catch (LibGit2SharpException e)
         {
-            log.LogWarning(e, "The repository {Path} cannot be read and is not listed", directory.Relative);
+            log.LogWarning(e, "The repository {Path} cannot be read", directory.Relative);
             return null;
         }
     }
@@ -200,8 +201,8 @@ public sealed class Repositories(ProjectPaths paths, ILogger<Repositories> log)
             repository.Config.Get<string>("remote.origin.url") is not null);
     }
 
-    // What `git status` shows, one entry per file (also inside untracked directories), paths relative to the projects
-    // directory.
+    // What `git status` shows, one entry per file (also inside untracked directories; a repository inside them is one
+    // entry for its directory, without git's trailing "/"), paths relative to the projects directory.
     private static List<FileChange> Changes(Repository repository, string repo)
     {
         var options = new StatusOptions
@@ -217,7 +218,7 @@ public sealed class Repositories(ProjectPaths paths, ILogger<Repositories> log)
         {
             if (StatusOf(entry.State) is { } status)
             {
-                changes.Add(new FileChange($"{repo}/{entry.FilePath}", status));
+                changes.Add(new FileChange($"{repo}/{entry.FilePath.TrimEnd('/')}", status));
             }
         }
         return changes;
