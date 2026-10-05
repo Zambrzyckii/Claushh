@@ -296,9 +296,9 @@ Backend decisions (stage 3):
   the subscription login).
 - The process gets an allowlisted environment (as git and the terminal) and its own config directory; the API's
   `ANTHROPIC_API_KEY` never reaches it (it would silently replace the login). Authentication is the login in
-  `Console:ConfigDirectory`, or `Console:ApiKeyFile` through `apiKeyHelper`: a file whose real path lies outside the
-  projects directory and whose mode has no group or other bit; the start check refuses any other, and the console is
-  then unavailable.
+  `Console:ConfigDirectory`, or `Console:ApiKeyFile` through `apiKeyHelper`: a file that lies outside the projects
+  directory as written and with symlinks resolved, and whose mode has no group or other bit; the start check refuses
+  any other, and the console is then unavailable.
 - Model, effort and mode are launch flags and are sent again before every prompt, each reply awaited. Rejected:
   remembering and diffing them (an approved plan changes the mode inside the CLI).
 - A prompt that starts with `/` is marked `client_composed`, so the CLI gives it to the model as text; otherwise a
@@ -398,8 +398,8 @@ Backend decisions (stage 4):
   `ConnectionStrings__*`).
 - Time limits: one deadline per clone, pull or push request, `Git:NetworkTimeout` (100 s) from its start, covering the
   lock wait and every git step, which keeps the answer under Cloudflare's 125 s; local steps also at most 30 s each. On
-  a timeout git's process tree gets SIGTERM, so git removes its lock files, and whatever still runs 1 s later is
-  killed; a partial clone is removed, and the answer is `502` with "Git nie skończył w ciągu N s i został
+  a timeout git's process tree gets SIGTERM, so git removes its lock files, and if git still runs 1 s later, the whole
+  tree is killed; a partial clone is removed, and the answer is `502` with "Git nie skończył w ciągu N s i został
   przerwany.". Rejected: `504` (the frontend shows "błąd serwera" without the reason), a limit per git step (a pull
   waiting behind another operation could pass 125 s) and killing at once (git's `*.lock` files would stay and block
   the next git command in that repository).
@@ -649,10 +649,9 @@ Deployment decisions:
   keeps systemd from starting it again, so the unit is left `failed`. Rejected: the first line of `Program.cs` (a test
   that runs the API in Production inside the test process would change that process for the rest of the run), a
   setting that switches it off, and reading `ASPNETCORE_ENVIRONMENT` directly (a host that defaults to Production
-  without it would skip it). It has no automated
-  test: an in-process test would change the test host itself, and a test in a child process would need a second
-  runnable API with a database, tmux and a frontend build; the acceptance check on the server covers it
-  (`README.md`, "Deployment", phase A).
+  without it would skip it). It has no automated test: an in-process test would change the test host itself, and a
+  test in a child process would need a second runnable API with a database, tmux and a frontend build; the acceptance
+  check on the server covers it (`README.md`, "Deployment", phase A).
 
 ## Stages
 

@@ -136,6 +136,7 @@ public sealed partial class ConsoleHubTests(ApiFactory api) : ApiTest(api)
     [Theory]
     [InlineData("in the projects directory", false)]
     [InlineData("a link into the projects directory", false)]
+    [InlineData("a link in the projects directory", false)]
     [InlineData("group-readable", false)]
     [InlineData("readable by others", false)]
     [InlineData("outside", true)]
@@ -152,6 +153,7 @@ public sealed partial class ConsoleHubTests(ApiFactory api) : ApiTest(api)
             {
                 "in the projects directory" => Key(Api.ProjectPath("keys/api-key")),
                 "a link into the projects directory" => Link(outside.Child("api-key"), Key(Api.ProjectPath("keys/api-key"))),
+                "a link in the projects directory" => Link(Api.ProjectPath("keys/api-key"), Key(outside.Child("api-key"))),
                 "group-readable" => Key(outside.Child("api-key"), UnixFileMode.GroupRead),
                 "readable by others" => Key(outside.Child("api-key"), UnixFileMode.OtherRead),
                 "outside" => Key(outside.Child("api-key")),
@@ -212,6 +214,7 @@ public sealed partial class ConsoleHubTests(ApiFactory api) : ApiTest(api)
 
     private static string Link(string path, string target)
     {
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.CreateSymbolicLink(path, target);
         return path;
     }

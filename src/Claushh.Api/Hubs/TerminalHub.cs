@@ -19,17 +19,18 @@ public sealed class TerminalHub(Terminals terminals) : Hub
 
     public IReadOnlyList<TerminalInfo> ListTerminals() => terminals.List();
 
-    public Task<TerminalInfo> OpenTerminal(OpenRequest request) =>
-        terminals.OpenAsync(request.ProjectPath, request.Cols, request.Rows);
+    public Task<TerminalInfo> OpenTerminal(OpenRequest? request) =>
+        terminals.OpenAsync(request?.ProjectPath, request?.Cols ?? 0, request?.Rows ?? 0);
 
-    public Task<Attachment> Attach(AttachRequest request) =>
-        terminals.Find(request.Id).AttachAsync(TerminalSession.Cols(request.Cols), TerminalSession.Rows(request.Rows),
-            request.Client is { Length: >= 1 and <= MaxClient } client ? client : null, Context.ConnectionId);
+    public Task<Attachment> Attach(AttachRequest? request) =>
+        terminals.Find(request?.Id).AttachAsync(TerminalSession.Cols(request?.Cols ?? 0),
+            TerminalSession.Rows(request?.Rows ?? 0),
+            request?.Client is { Length: >= 1 and <= MaxClient } client ? client : null, Context.ConnectionId);
 
     // The result is the acknowledgement; an unknown or exited terminal is skipped without an error.
-    public async Task Input(InputRequest request)
+    public async Task Input(InputRequest? request)
     {
-        if (request.Client is not { Length: >= 1 and <= MaxClient } client || request.Seq < 1
+        if (request?.Client is not { Length: >= 1 and <= MaxClient } client || request.Seq < 1
             || request.Data is not { Length: <= MaxBatch } data)
         {
             throw new HubException("Nieprawidłowa paczka");
@@ -40,14 +41,14 @@ public sealed class TerminalHub(Terminals terminals) : Hub
         }
     }
 
-    // A send: an unknown terminal is ignored.
-    public async Task Resize(ResizeRequest request)
+    // A send: an unknown terminal or a missing argument is ignored.
+    public async Task Resize(ResizeRequest? request)
     {
-        if (terminals.TryFind(request.Id) is { } terminal)
+        if (request is not null && terminals.TryFind(request.Id) is { } terminal)
         {
             await terminal.ResizeAsync(TerminalSession.Cols(request.Cols), TerminalSession.Rows(request.Rows));
         }
     }
 
-    public Task CloseTerminal(CloseRequest request) => terminals.CloseAsync(request.Id);
+    public Task CloseTerminal(CloseRequest? request) => terminals.CloseAsync(request?.Id);
 }

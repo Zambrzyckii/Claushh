@@ -61,15 +61,19 @@ public sealed partial class ClaudeCli(IOptions<ConsoleOptions> options, ProjectP
         }
     }
 
-    // Why Console:ApiKeyFile cannot be used, or null: it must be the absolute path of an existing file whose real path
-    // (symlinks resolved) lies outside the projects directory and whose mode has no group or other bit.
+    // Why Console:ApiKeyFile cannot be used, or null: it must be the absolute path of an existing file that lies outside
+    // the projects directory as written and with symlinks resolved (its directory and the file itself), and whose mode
+    // has no group or other bit.
     private string? KeyFileProblem(string keyFile)
     {
-        if (!Path.IsPathFullyQualified(keyFile) || !File.Exists(keyFile) || Libc.RealPath(keyFile, out _) is not { } real)
+        if (!Path.IsPathFullyQualified(keyFile) || !File.Exists(keyFile) || Libc.RealPath(keyFile, out _) is not { } real
+            || Libc.RealPath(Path.GetDirectoryName(Path.GetFullPath(keyFile))!, out _) is not { } directory)
         {
             return "is not the absolute path of an existing file";
         }
-        if (real.StartsWith(paths.Root + "/", StringComparison.Ordinal))
+        var inside = paths.Root + "/";
+        if (Path.GetFullPath(keyFile).StartsWith(inside, StringComparison.Ordinal) || directory == paths.Root
+            || directory.StartsWith(inside, StringComparison.Ordinal) || real.StartsWith(inside, StringComparison.Ordinal))
         {
             return "lies in the projects directory";
         }

@@ -12,9 +12,9 @@ public sealed class ConsoleOptions
     // ~/.local/state/claushh/claude.
     public string? ConfigDirectory { get; set; }
 
-    // A file with an Anthropic API key, read through the CLI's apiKeyHelper; its real path must lie outside the projects
-    // directory and its mode must have no group or other bit (ClaudeCli.PrepareDirectory). null: the login in
-    // ConfigDirectory.
+    // A file with an Anthropic API key, read through the CLI's apiKeyHelper; it must lie outside the projects
+    // directory as written and with symlinks resolved, and its mode must have no group or other bit
+    // (ClaudeCli.PrepareDirectory). null: the login in ConfigDirectory.
     public string? ApiKeyFile { get; set; }
 
     // Variables for the claude process on top of its allowlisted environment.

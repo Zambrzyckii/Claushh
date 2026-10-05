@@ -199,6 +199,25 @@ public sealed class TerminalTests(ApiFactory api) : ApiTest(api)
         await tab.WaitForAsync(terminal.Id, "koniec");
     }
 
+    // Without its argument object a call gets the answer of empty fields.
+    [Fact]
+    public async Task Calls_without_their_argument_get_the_answers_of_empty_fields()
+    {
+        await using var tab = await TestTerminal.ConnectAsync(Api, Client);
+        var deadline = TimeSpan.FromSeconds(20);
+
+        var open = await Assert.ThrowsAsync<HubException>(() => tab.Hub.InvokeAsync("OpenTerminal", (object?)null).WaitAsync(deadline));
+        var attach = await Assert.ThrowsAsync<HubException>(() => tab.Hub.InvokeAsync("Attach", (object?)null).WaitAsync(deadline));
+        var input = await Assert.ThrowsAsync<HubException>(() => tab.Hub.InvokeAsync("Input", (object?)null).WaitAsync(deadline));
+        await tab.Hub.InvokeAsync("CloseTerminal", (object?)null).WaitAsync(deadline);
+        await tab.Hub.SendAsync("Resize", (object?)null);
+
+        Assert.EndsWith("Nieprawidłowa ścieżka", open.Message, StringComparison.Ordinal);
+        Assert.EndsWith("Nieznany terminal", attach.Message, StringComparison.Ordinal);
+        Assert.EndsWith("Nieprawidłowa paczka", input.Message, StringComparison.Ordinal);
+        Assert.Empty(await tab.ListAsync());
+    }
+
     // Types a line into the terminal's pane with the tmux CLI.
     private void Type(string id, string line)
     {

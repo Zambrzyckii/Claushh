@@ -61,9 +61,9 @@ CLAUDE_CONFIG_DIR=~/.local/state/claushh/claude claude    # then /login, and /ex
 ```
 
 or put an Anthropic API key in a file with mode 0600 outside the projects directory and set `Console:ApiKeyFile` to
-its path; the API checks both (the file's real path, and no group or other permissions) and otherwise leaves the
-console unavailable, with the reason in its log (an `ANTHROPIC_API_KEY` in the API's environment never reaches the
-CLI). A "tak, zawsze" rule is saved per project in the database; to remove one:
+its path; the API checks both (the path as written and with symlinks resolved, and no group or other permissions)
+and otherwise leaves the console unavailable, with the reason in its log (an `ANTHROPIC_API_KEY` in the API's
+environment never reaches the CLI). A "tak, zawsze" rule is saved per project in the database; to remove one:
 
 ```bash
 docker compose -p claushh-dev -f deploy/docker-compose.yml --env-file deploy/.env exec postgres \

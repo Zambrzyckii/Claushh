@@ -16,7 +16,8 @@ public sealed record GitResult(int ExitCode, string Output, string Message)
     public bool Succeeded => ExitCode == 0;
 }
 
-// Git ran out of its time limit (the request's deadline or a local step's cap) and its process tree was killed.
+// Git ran out of its time limit (the request's deadline or a local step's cap) and its process tree was stopped:
+// SIGTERM, then a kill when git still ran 1 s later.
 public sealed class GitTimeoutException(TimeSpan limit) : Exception($"git did not finish within {(int)limit.TotalSeconds} s")
 {
     public string ResponseMessage { get; } = $"Git nie skończył w ciągu {(int)limit.TotalSeconds} s i został przerwany.";
@@ -139,8 +140,8 @@ public sealed class GitRunner(ILogger<GitRunner> log, IOptionsMonitor<GitOptions
         return start;
     }
 
-    // git starts helpers (git-remote-https, the transport, hooks) as its children: all of them go. SIGTERM first, which
-    // lets git remove its lock files; whatever still runs 1 s later is killed with the whole tree.
+    // git starts helpers (git-remote-https, the transport, hooks) as its children: all of them get SIGTERM first,
+    // which lets git remove its lock files; when git still runs 1 s later, the whole tree is killed.
     private static void KillTree(Process git)
     {
         if (git.HasExited)
@@ -177,7 +178,7 @@ public sealed class GitRunner(ILogger<GitRunner> log, IOptionsMonitor<GitOptions
             {
                 tasks = Directory.GetDirectories($"/proc/{parent}/task");
             }
-            catch (IOException)
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
             {
                 // It has exited.
                 continue;
@@ -189,7 +190,7 @@ public sealed class GitRunner(ILogger<GitRunner> log, IOptionsMonitor<GitOptions
                 {
                     children = File.ReadAllText(Path.Join(task, "children"));
                 }
-                catch (IOException)
+                catch (Exception e) when (e is IOException or UnauthorizedAccessException)
                 {
                     continue;
                 }
