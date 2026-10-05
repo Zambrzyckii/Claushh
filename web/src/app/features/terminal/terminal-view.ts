@@ -23,7 +23,7 @@ import { onFontsLoaded } from '../../core/browser/fonts';
 import { TerminalInfo } from '../../core/realtime/terminal-protocol';
 import { countLabel } from '../../core/text/format';
 import { previewText } from '../../core/text/visible-text';
-import { MAX_PENDING_INPUT, lineBreaks, sanitizePaste } from './terminal-input';
+import { MAX_PENDING_INPUT, lineBreaks, sanitizePaste, withCtrl } from './terminal-input';
 import { TerminalStore } from './terminal-store';
 import { TERMINAL_FONT, loadXterm, terminalOptions } from './xterm-loader';
 
@@ -57,9 +57,12 @@ const PASTE_MARGIN = 16;
  * - OSC 8 links are disabled (the link text could pretend to be a different address),
  * - terminal queries are left to tmux on the server, which answers some of them (an answer from every open view would reach the program),
  * - focus after attaching only when the user is not typing somewhere else at that time.
+ * - on a phone a row of keys (Esc, Tab, a sticky Ctrl, the arrows, Paste) types through `term.input`, so its keys go
+ *   through the same queue; Paste goes through `pasteText`, the same check as a paste.
  */
 @Component({
   selector: 'app-terminal-view',
+  host: { '[class.phone]': 'layout.phone()' },
   template: `
     <div #host class="host"></div>
     @if (loadFailed()) {
@@ -90,6 +93,20 @@ const PASTE_MARGIN = 16;
       </div>
     } @else if (inputNotice(); as notice) {
       <p class="notice" role="status">{{ notice }}</p>
+    }
+    @if (layout.phone()) {
+      <div class="keys" role="toolbar" aria-label="Terminal keys">
+        @for (key of keys; track key.id) {
+          <button type="button" [attr.aria-label]="key.label" [attr.aria-pressed]="key.id === 'ctrl' ? ctrl() : null"
+                  (pointerdown)="$event.preventDefault()" (mousedown)="$event.preventDefault()" (click)="press(key.id)">
+            @if (key.icon) {
+              <span [class]="'codicon codicon-' + key.icon" aria-hidden="true"></span>
+            } @else {
+              {{ key.label }}
+            }
+          </button>
+        }
+      </div>
     }
   `,
   styles: `
@@ -154,6 +171,35 @@ const PASTE_MARGIN = 16;
         border-color: var(--border-strong);
       }
     }
+    .keys {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 40px;
+      display: flex;
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+    }
+    .keys button {
+      flex: 1 1 0;
+      min-width: 0;
+      height: 100%;
+      padding: 0;
+      border-radius: 0;
+      font-family: var(--font-mono);
+      font-size: 12px;
+    }
+    .keys button[aria-pressed='true'] {
+      color: var(--accent);
+    }
+    :host(.phone) .host {
+      bottom: 40px;
+    }
+    :host(.phone) .notice,
+    :host(.phone) .decision:not(.decision--top) {
+      bottom: 48px;
+    }
   `
 })
 export class TerminalView {
@@ -184,6 +230,20 @@ export class TerminalView {
 
   /** Unique identifiers of panel elements (there are several terminals in the panel at once). */
   protected readonly ids = panelIds(`term-${crypto.randomUUID()}`);
+
+  /** The phone keys, in the row's order. */
+  protected readonly keys: readonly { id: PhoneKey; label: string; icon?: string }[] = [
+    { id: 'esc', label: 'Esc' },
+    { id: 'tab', label: 'Tab' },
+    { id: 'ctrl', label: 'Ctrl' },
+    { id: 'left', label: 'Left', icon: 'arrow-left' },
+    { id: 'up', label: 'Up', icon: 'arrow-up' },
+    { id: 'down', label: 'Down', icon: 'arrow-down' },
+    { id: 'right', label: 'Right', icon: 'arrow-right' },
+    { id: 'paste', label: 'Paste', icon: 'clippy' }
+  ];
+  /** Sticky Ctrl: the next typed character becomes its control code (`withCtrl`), then Ctrl turns off. */
+  protected readonly ctrl = signal(false);
 
   protected readonly loadFailed = signal(false);
   /** Pasted text with line endings waiting for a decision ("Paste" / "Cancel"). */
@@ -291,8 +351,10 @@ export class TerminalView {
       if (this.terminal().exited) {
         return;
       }
+      const input = this.ctrl() ? withCtrl(data) : data;
+      this.ctrl.set(false);
       const queue = this.inputQueue();
-      if (!queue.push(data) && !queue.state().overflow) {
+      if (!queue.push(input) && !queue.state().overflow) {
         // A single fragment larger than the whole queue (in practice only a very long paste).
         this.dialogs.alert('The text is too long for the terminal and was not sent. Save it to a file in the editor.');
       }
@@ -363,6 +425,36 @@ export class TerminalView {
     this.term?.focus();
   }
 
+  /** A phone key. Ctrl toggles; the others turn it off and type through `term.input`, so they reach the same queue. */
+  protected press(key: PhoneKey): void {
+    const term = this.term;
+    if (!term || this.terminal().exited) {
+      return;
+    }
+    if (key === 'ctrl') {
+      this.ctrl.update((on) => !on);
+      return;
+    }
+    this.ctrl.set(false);
+    if (key === 'paste') {
+      void this.pasteFromClipboard();
+      return;
+    }
+    term.input(keySequence(key, term.modes.applicationCursorKeysMode));
+  }
+
+  /** The Paste key: the clipboard through the same check as a paste. */
+  private async pasteFromClipboard(): Promise<void> {
+    let raw: string;
+    try {
+      raw = await navigator.clipboard.readText();
+    } catch {
+      this.dialogs.alert('Could not read the clipboard.');
+      return;
+    }
+    this.pasteText(raw);
+  }
+
   protected confirmPaste(): void {
     const request = this.pasteRequest();
     this.pasteRequest.set(null);
@@ -381,11 +473,19 @@ export class TerminalView {
   private onPaste(event: ClipboardEvent): void {
     event.preventDefault();
     event.stopImmediatePropagation();
+    this.pasteText(event.clipboardData?.getData('text/plain') ?? '');
+  }
+
+  /**
+   * Every paste, from the keyboard or the Paste key: cleaned of control characters, within the queue's limit, and
+   * with line endings only after a decision in the panel.
+   */
+  private pasteText(raw: string): void {
     const term = this.term;
     if (!term || this.terminal().exited) {
       return;
     }
-    const text = sanitizePaste(event.clipboardData?.getData('text/plain') ?? '');
+    const text = sanitizePaste(raw);
     if (!text) {
       return;
     }
@@ -451,6 +551,21 @@ export class TerminalView {
     term.options.fontFamily = TERMINAL_FONT;
     this.fitToContainer();
   }
+}
+
+type PhoneKey = 'esc' | 'tab' | 'ctrl' | 'left' | 'up' | 'down' | 'right' | 'paste';
+
+const ARROWS = { left: 'D', up: 'A', down: 'B', right: 'C' } as const;
+
+/** Esc, Tab and the arrows as a terminal sends them; arrows follow the application cursor mode. */
+function keySequence(key: 'esc' | 'tab' | keyof typeof ARROWS, applicationCursor: boolean): string {
+  if (key === 'esc') {
+    return '\x1b';
+  }
+  if (key === 'tab') {
+    return '\t';
+  }
+  return (applicationCursor ? '\x1bO' : '\x1b[') + ARROWS[key];
 }
 
 function panelIds(prefix: string) {

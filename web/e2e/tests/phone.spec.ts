@@ -11,6 +11,7 @@ import {
   repoRow,
   resetMock,
   setSessionTimeout,
+  terminalInputs,
   terminalText,
   typeInTerminal
 } from './helpers';
@@ -155,4 +156,37 @@ test('a phone in landscape keeps the phone layout', async ({ page }) => {
   await login(page);
   await expect(tab(page, 'Editor')).toBeVisible();
   expect(await noSidewaysScroll(page)).toBe(true);
+});
+
+test('the extra keys send Esc, Tab, an arrow and a sticky Ctrl, and keep the focus in the terminal', async ({ page, request }) => {
+  await login(page);
+  await tab(page, 'Terminal').click();
+  const terminal = activeTerminal(page);
+  await terminal.locator('.xterm-screen').click();
+  const keys = terminal.getByRole('toolbar', { name: 'Terminal keys' });
+  await keys.getByRole('button', { name: 'Esc' }).tap();
+  await keys.getByRole('button', { name: 'Tab' }).tap();
+  expect(await page.evaluate(() => document.activeElement?.classList.contains('xterm-helper-textarea'))).toBe(true);
+  await keys.getByRole('button', { name: 'Up' }).tap();
+  const ctrl = keys.getByRole('button', { name: 'Ctrl' });
+  await ctrl.tap();
+  await expect(ctrl).toHaveAttribute('aria-pressed', 'true');
+  await page.keyboard.type('c');
+  await expect(ctrl).toHaveAttribute('aria-pressed', 'false');
+  await expect.poll(() => terminalInputs(request)).toBe('\x1b\t\x1b[A\x03');
+});
+
+test('the Paste key pastes through the same check as a paste', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await login(page);
+  await tab(page, 'Terminal').click();
+  const terminal = activeTerminal(page);
+  await terminal.locator('.xterm-screen').click();
+  await page.evaluate(() => navigator.clipboard.writeText('echo jeden\necho dwa\n'));
+  await terminal.getByRole('toolbar', { name: 'Terminal keys' }).getByRole('button', { name: 'Paste' }).tap();
+  const question = terminal.getByRole('alertdialog');
+  await expect(question).toContainText('The pasted text has 2 line breaks');
+  await question.getByRole('button', { name: 'Paste' }).click();
+  await expect.poll(() => terminalText(page)).toMatch(/^jeden\s*$/m);
+  await expect.poll(() => terminalText(page)).toMatch(/^dwa\s*$/m);
 });

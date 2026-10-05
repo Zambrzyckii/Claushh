@@ -84,6 +84,12 @@ Frontend decisions (UI refresh):
   Rejected: tying this to the phone layout (a tablet in the desktop layout could not send without Shift+Enter).
 - Monaco stays the editor on the phone, as best effort with a Save button; whether a phone editor is needed is
   decided after a check on the owner's phone.
+- The phone's terminal has a row of keys a phone keyboard lacks (Esc, Tab, a sticky Ctrl, the arrows and Paste); they
+  type through `term.input`, so the queue's no-loss and no-duplicate rule holds, and Paste goes through the same check
+  as a paste. Rejected: a minimal row without Paste (a keyboard's clipboard chip may skip the paste check) and no row.
+- iOS Safari does not resize the page for the soft keyboard (`interactive-widget` is not supported there), so in the
+  phone layout the page keeps room at the bottom for the part of the screen `visualViewport` says the keyboard covers.
+  Rejected: letting the keyboard cover the phone keys and the console's Send button.
 
 ## Tech stack
 

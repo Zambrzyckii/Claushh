@@ -4,6 +4,7 @@ import { AuthService } from '../../core/auth/auth.service';
 import { SessionTimer } from '../../core/auth/session-timer';
 import { DeviceLayout } from '../../core/browser/device-layout';
 import { Dialogs } from '../../core/browser/dialogs';
+import { KeyboardInset } from '../../core/browser/keyboard-inset';
 import { ProjectContext } from '../../core/project/project-context';
 import { RepoStatusStore } from '../../core/project/repo-status';
 import { ConsoleConnection } from '../../core/realtime/console-connection';
@@ -94,6 +95,9 @@ export class Workspace {
   protected readonly menuOpen = signal(false);
 
   constructor() {
+    // Started with the logged-in view; it acts only in the phone layout.
+    inject(KeyboardInset);
+
     // Opening a repository in the Workspace sheet closes the sheet.
     effect(() => {
       this.project.path();

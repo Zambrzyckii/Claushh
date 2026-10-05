@@ -109,7 +109,7 @@ td {
 
 // On a phone (docs/ARCHITECTURE.md, "Frontend" → "Phone layout"): a full-screen sheet with the tables as stacked rows.
 dialog.sheet {
-  padding: 0 16px 16px;
+  padding: 0 16px calc(16px + var(--keyboard-inset, 0px));
 
   .head {
     position: sticky;

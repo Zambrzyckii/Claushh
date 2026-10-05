@@ -234,3 +234,22 @@ export function sanitizePaste(text: string): string {
 export function lineBreaks(text: string): number {
   return text.match(/\r\n|\r|\n/g)?.length ?? 0;
 }
+
+/**
+ * A character typed after the sticky Ctrl key of the phone keys, as a terminal sends it: @, A-Z (either case), [, \, ],
+ * ^ and _ to their control codes, space to NUL, ? to DEL. Anything else, also more than one character, passes unchanged.
+ */
+export function withCtrl(data: string): string {
+  if (data.length !== 1) {
+    return data;
+  }
+  if (data === ' ') {
+    return '\x00';
+  }
+  if (data === '?') {
+    return '\x7f';
+  }
+  const code = data.charCodeAt(0);
+  const upper = code >= 0x61 && code <= 0x7a ? code - 0x20 : code;
+  return upper >= 0x40 && upper <= 0x5f ? String.fromCharCode(upper & 0x1f) : data;
+}

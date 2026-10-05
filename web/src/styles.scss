@@ -167,7 +167,7 @@ dialog.sheet {
   max-width: none;
   max-height: none;
   margin: 0;
-  padding: 0;
+  padding: 0 0 var(--keyboard-inset, 0px);
   border: none;
   border-radius: 0;
   background: var(--surface);

@@ -258,3 +258,9 @@
     overflow: hidden;
   }
 }
+
+// iOS does not resize the page for the keyboard: the phone shell keeps that much room at the bottom (KeyboardInset).
+:host(.phone) {
+  box-sizing: border-box;
+  padding-bottom: var(--keyboard-inset, 0px);
+}
