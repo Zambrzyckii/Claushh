@@ -1,6 +1,7 @@
 import { Component, ElementRef, inject, signal, viewChild } from '@angular/core';
 
 import { RepoSummary } from '../../core/api/workspaces-api';
+import { DeviceLayout } from '../../core/browser/device-layout';
 import { ProjectContext } from '../../core/project/project-context';
 import { countLabel, timeAgo } from '../../core/text/format';
 import { WorkspacesStore } from './workspaces-store';
@@ -12,12 +13,14 @@ import { WorkspacesStore } from './workspaces-store';
  */
 @Component({
   selector: 'app-workspaces-panel',
+  host: { '[class.phone]': 'layout.phone()' },
   templateUrl: './workspaces-panel.html',
   styleUrl: './workspaces-panel.scss'
 })
 export class WorkspacesPanel {
   protected readonly store = inject(WorkspacesStore);
   protected readonly project = inject(ProjectContext);
+  protected readonly layout = inject(DeviceLayout);
 
   protected readonly creating = signal(false);
   protected readonly createError = signal<string | null>(null);

@@ -387,7 +387,7 @@ daily run: `systemctl list-timers claushh-backup.timer` and `journalctl -u claus
 cd web
 npm test                          # integration (Vitest)
 npx playwright install chromium   # once, browser for e2e
-npm run e2e                       # build + e2e on the mock backend (e2e/mock-api)
+npm run e2e                       # build + e2e on the mock backend (e2e/mock-api), desktop and phone (Pixel 7)
 ```
 
 Run the tests through npm: `web/.npmrc` starts Node with `--no-experimental-webstorage`, because from Node 25 on

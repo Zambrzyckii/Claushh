@@ -16,6 +16,7 @@ import type { FitAddon } from '@xterm/addon-fit';
 import type { Terminal } from '@xterm/xterm';
 import { Subscription } from 'rxjs';
 
+import { DeviceLayout } from '../../core/browser/device-layout';
 import { Dialogs } from '../../core/browser/dialogs';
 import { isTypingElsewhere } from '../../core/browser/focus';
 import { onFontsLoaded } from '../../core/browser/fonts';
@@ -160,6 +161,7 @@ export class TerminalView {
 
   private readonly store = inject(TerminalStore);
   private readonly dialogs = inject(Dialogs);
+  protected readonly layout = inject(DeviceLayout);
   private readonly injector = inject(Injector);
   private readonly host = viewChild.required<ElementRef<HTMLElement>>('host');
   private readonly cancelPasteButton = viewChild<ElementRef<HTMLButtonElement>>('cancelPasteButton');
@@ -308,7 +310,7 @@ export class TerminalView {
     this.resizeObserver.observe(host);
 
     await this.attach();
-    if (!this.destroyed && !isTypingElsewhere(host)) {
+    if (!this.destroyed && !this.layout.touch() && !isTypingElsewhere(host)) {
       term.focus();
     }
   }

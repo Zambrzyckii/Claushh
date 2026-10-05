@@ -198,3 +198,66 @@ td {
     color: var(--error);
   }
 }
+
+// On a phone (docs/ARCHITECTURE.md, "Frontend" → "Phone layout"): the workspaces above the repositories, which become
+// cards; the header keeps only the Refresh button.
+:host(.phone) {
+  display: block;
+  height: auto;
+
+  .workspaces {
+    width: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+
+  table,
+  tbody,
+  tr,
+  td {
+    display: block;
+  }
+
+  thead tr {
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  th:not(.actions-head) {
+    display: none;
+  }
+
+  th.actions-head {
+    position: static;
+    width: auto;
+    padding: 4px 8px;
+    border: none;
+  }
+
+  tr.repo {
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  td {
+    padding: 2px 0;
+    border: none;
+    white-space: normal;
+
+    &[data-label]::before {
+      content: attr(data-label);
+      display: inline-block;
+      width: 100px;
+      color: var(--text-faint);
+    }
+  }
+
+  .actions {
+    padding: 8px 0 0;
+    text-align: left;
+  }
+
+  .repo-message td {
+    padding: 0 16px 8px;
+  }
+}

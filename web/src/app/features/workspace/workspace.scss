@@ -1,13 +1,15 @@
 :host {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: 100dvh;
   overflow: hidden;
 }
 
 .topbar {
   height: 40px;
   flex-shrink: 0;
+  position: relative;
+  z-index: 2;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -190,4 +192,69 @@
 .placeholder {
   margin: 16px;
   color: var(--text-faint);
+}
+
+// Phone layout (docs/ARCHITECTURE.md, "Frontend" → "Phone layout").
+.topbar--phone {
+  gap: 8px;
+  padding: 0 4px 0 8px;
+}
+
+.topbar__repo-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 0 6px;
+
+  .topbar__repo {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .topbar__branch {
+    margin-left: 0;
+    flex-shrink: 0;
+  }
+}
+
+.menu-backdrop {
+  position: fixed;
+  inset: 0;
+}
+
+.menu {
+  position: absolute;
+  top: 40px;
+  right: 6px;
+  min-width: 180px;
+  display: flex;
+  flex-direction: column;
+  padding: 4px 0;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  box-shadow: 0 6px 18px var(--scrim);
+
+  [role='menuitem'] {
+    justify-content: flex-start;
+    border-radius: 0;
+    padding: 0 16px;
+    text-align: left;
+  }
+}
+
+.statusbar--phone {
+  height: 22px;
+  gap: 12px;
+  padding: 0 8px;
+  font-size: 11px;
+  white-space: nowrap;
+
+  .statusbar__group {
+    gap: 10px;
+    min-width: 0;
+    overflow: hidden;
+  }
 }

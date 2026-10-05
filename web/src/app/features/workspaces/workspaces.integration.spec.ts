@@ -1,9 +1,10 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, TestRequest, provideHttpClientTesting } from '@angular/common/http/testing';
-import { Component, inject } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 
+import { DeviceLayout } from '../../core/browser/device-layout';
 import { ProjectContext } from '../../core/project/project-context';
 import { RepoStatusStore } from '../../core/project/repo-status';
 import { EditorStore } from '../editor/editor-store';
@@ -48,8 +49,15 @@ const LAB = {
 describe('Workspaces (integration)', () => {
   let http: HttpTestingController;
 
-  async function setup() {
-    TestBed.configureTestingModule({ providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])] });
+  async function setup(layout?: { phone: boolean }) {
+    TestBed.configureTestingModule({
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        ...(layout ? [{ provide: DeviceLayout, useValue: { phone: signal(layout.phone), touch: signal(layout.phone) } }] : [])
+      ]
+    });
     http = TestBed.inject(HttpTestingController);
     const fixture = TestBed.createComponent(Host);
     const root = fixture.nativeElement as HTMLElement;
@@ -73,8 +81,8 @@ describe('Workspaces (integration)', () => {
     }
   }
 
-  async function loaded() {
-    const ctx = await setup();
+  async function loaded(layout?: { phone: boolean }) {
+    const ctx = await setup(layout);
     flushAll('/api/workspaces', WORKSPACES);
     await ctx.settle();
     flushAll('/api/repos', [LAB]);
@@ -189,5 +197,17 @@ describe('Workspaces (integration)', () => {
     const message = root.querySelector('.repo-message [role="alert"]')!.textContent!;
     expect(message).toContain('Push refused');
     expect(message).toContain('[rejected]');
+  });
+
+  it('on a phone the panel is marked for its card layout and keeps the same rows and cells', async () => {
+    const { root } = await loaded({ phone: true });
+    expect(root.querySelector('app-workspaces-panel')!.classList.contains('phone')).toBe(true);
+    expect(texts(root, 'tr.repo td').slice(0, 5)).toEqual(['lab', 'main', '2 changes', 'init · 5 minutes ago', 'origin ↑1']);
+    expect(Array.from(root.querySelectorAll('tr.repo td[data-label]')).map((td) => td.getAttribute('data-label'))).toEqual([
+      'Branch',
+      'Status',
+      'Last commit',
+      'Remote'
+    ]);
   });
 });

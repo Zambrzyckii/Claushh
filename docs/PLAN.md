@@ -40,7 +40,7 @@ Fonts: IBM Plex Sans (interface) and JetBrains Mono (code, console, terminal), s
 terminal the Nerd Font version comes first when the device has it, so that the icons from the dotfiles prompt work.
 Icons: codicons.
 
-Devices: mainly laptop and PC. The phone is secondary.
+Devices: laptop and PC, and a phone with every function in three tabs (Editor, Terminal, Console).
 
 Frontend decisions (UI refresh):
 - Everything the owner reads is English, in one language without a switch: the interface, the backend's own texts,
@@ -65,6 +65,25 @@ Frontend decisions (UI refresh):
   motion. The console column and the bottom panel use Angular's `animate.enter`/`animate.leave`, without a package.
   Rejected: animating width or height (xterm would refit and resize tmux on every frame) and `@angular/animations`
   (deprecated, and a package).
+- Phone layout: below 768 px, or with a coarse pointer and at most 500 px of height (a phone in landscape), the page
+  has the tabs Editor · Terminal · Console instead of the columns. Every desktop function stays reachable: the
+  explorer as a drawer, the Workspace panel and Security as full-screen sheets, Log out in a menu, a Save button and
+  a Send button. Rejected: bottom tabs (they fight the keyboard) and a third tab named after the product (the
+  console's rule).
+- The two layouts are two template branches, so crossing the breakpoint recreates the views: Monaco's undo history
+  is lost, the text is kept and terminals attach again. Rejected: one DOM tree placed by CSS (every pane would have
+  to work in both layouts).
+- Inside the phone layout nothing is destroyed: inactive tabs are hidden with `visibility`, the terminal mounts on
+  its first visit (opening it starts a tmux session), and the explorer drawer stays mounted and slides with a CSS
+  transition, so it keeps its expanded folders. The sheets are native `<dialog>`s opened with `showModal()` (Esc, a
+  focus trap and an inert page come with it) that slide with `@starting-style`; browsers without `overlay`
+  transitions close them without the slide. Rejected: `@if` with `animate.leave` for the drawer (each close would
+  lose the tree) and for the sheets (Esc, the focus trap and the inert page by hand).
+- Touch is separate from the phone layout: with a coarse pointer, Enter in the console makes a new line and a Send
+  button sends, and the editor and the terminal never take the focus on their own (the soft keyboard would open).
+  Rejected: tying this to the phone layout (a tablet in the desktop layout could not send without Shift+Enter).
+- Monaco stays the editor on the phone, as best effort with a Save button; whether a phone editor is needed is
+  decided after a check on the owner's phone.
 
 ## Tech stack
 
@@ -778,4 +797,4 @@ The order is chosen so that only already secured things reach the internet.
         mock only on `127.0.0.1`), verified in several rounds of independent review, with integration and e2e tests.
   - [x] Backend: passkeys.
   - [ ] Frontend: passkeys (Security dialog, login button).
-  - [ ] Colors (the owner will refine them in later iterations), a possible phone view (low priority).
+  - [x] Colors (the owner will refine them in later iterations), a possible phone view (low priority).

@@ -47,16 +47,16 @@
         @for (repo of store.repos(); track repo.path) {
           <tr class="repo" [class.repo--open]="isOpen(repo)">
             <td class="repo__name">{{ repo.name }}</td>
-            <td class="mono">{{ repo.branch ?? '(detached HEAD)' }}</td>
-            <td [class.changed]="repo.changes > 0" [class.faint]="repo.changes === 0">{{ state(repo) }}</td>
-            <td class="commit" [title]="repo.lastCommit?.message ?? ''">
+            <td class="mono" data-label="Branch">{{ repo.branch ?? '(detached HEAD)' }}</td>
+            <td data-label="Status" [class.changed]="repo.changes > 0" [class.faint]="repo.changes === 0">{{ state(repo) }}</td>
+            <td class="commit" data-label="Last commit" [title]="repo.lastCommit?.message ?? ''">
               @if (repo.lastCommit; as commit) {
                 {{ commit.message }} <span class="faint">· {{ when(repo) }}</span>
               } @else {
                 <span class="faint">no commits</span>
               }
             </td>
-            <td class="mono faint">{{ remote(repo) }}</td>
+            <td class="mono faint" data-label="Remote">{{ remote(repo) }}</td>
             <td class="actions">
               <button type="button" [class.is-on]="isOpen(repo)" [disabled]="isOpen(repo)"
                       [attr.aria-label]="(isOpen(repo) ? 'Opened: ' : 'Open ') + repo.name" (click)="store.open(repo)">

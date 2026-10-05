@@ -1,12 +1,15 @@
 dialog {
-  width: min(860px, calc(100vw - 48px));
-  max-height: calc(100vh - 96px);
-  padding: 20px 24px;
   background: var(--surface);
   color: var(--text);
-  border: 1px solid var(--border-strong);
-  border-radius: 6px;
   font-size: 13px;
+
+  &:not(.sheet) {
+    width: min(860px, calc(100vw - 48px));
+    max-height: calc(100dvh - 96px);
+    padding: 20px 24px;
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+  }
 
   &::backdrop {
     background: var(--scrim);
@@ -102,4 +105,50 @@ td {
 .actions button,
 .buttons button {
   border-color: var(--border-strong);
+}
+
+// On a phone (docs/ARCHITECTURE.md, "Frontend" → "Phone layout"): a full-screen sheet with the tables as stacked rows.
+dialog.sheet {
+  padding: 0 16px 16px;
+
+  .head {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    height: 40px;
+    background: var(--surface);
+  }
+
+  table,
+  tbody,
+  tr,
+  td {
+    display: block;
+  }
+
+  thead {
+    display: none;
+  }
+
+  tr {
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  td {
+    padding: 2px 0;
+    border: none;
+
+    &[data-label]::before {
+      content: attr(data-label);
+      display: inline-block;
+      width: 104px;
+      color: var(--text-faint);
+    }
+  }
+
+  .actions {
+    padding-top: 6px;
+    text-align: left;
+  }
 }

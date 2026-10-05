@@ -12,7 +12,7 @@ export const test = base.extend<{
   allowCspViolations: boolean;
   problems: string[];
   pageChecks: void;
-  /** A new browser with separate cookies ("second device"), also under CSP checks. */
+  /** A new browser with separate cookies ("second device"), with the project's device options, also under CSP checks. */
   newDevice: () => Promise<Page>;
 }>({
   allowCspViolations: [false, { option: true }],
@@ -27,10 +27,10 @@ export const test = base.extend<{
     },
     { auto: true }
   ],
-  newDevice: async ({ browser, baseURL, problems, allowCspViolations }, use) => {
+  newDevice: async ({ browser, baseURL, problems, allowCspViolations, viewport, userAgent, deviceScaleFactor, isMobile, hasTouch, reducedMotion }, use) => {
     const contexts: BrowserContext[] = [];
     await use(async () => {
-      const context = await browser.newContext({ baseURL, viewport: { width: 1440, height: 900 } });
+      const context = await browser.newContext({ baseURL, viewport, userAgent, deviceScaleFactor, isMobile, hasTouch, reducedMotion });
       contexts.push(context);
       watch(context, problems, allowCspViolations);
       return context.newPage();

@@ -12,6 +12,7 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
+import { DeviceLayout } from '../../core/browser/device-layout';
 import { Dialogs } from '../../core/browser/dialogs';
 import { ProjectContext } from '../../core/project/project-context';
 import { ConsoleEffort, ConsoleMode, ConsoleModel, PermissionDecision, StepKind } from '../../core/realtime/console-protocol';
@@ -42,6 +43,7 @@ export const PERMISSION_ARM_MS = 600;
 export class ConsolePanel {
   protected readonly store = inject(ConsoleStore);
   protected readonly project = inject(ProjectContext);
+  protected readonly layout = inject(DeviceLayout);
   private readonly dialogs = inject(Dialogs);
   readonly collapse = output<void>();
 
@@ -135,8 +137,9 @@ export class ConsolePanel {
     this.store.options.update((o) => ({ ...o, mode: value }));
   }
 
+  /** Enter sends, Shift+Enter makes a new line; with a coarse pointer Enter makes a new line and Send sends. */
   protected onKeydown(event: KeyboardEvent): void {
-    if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+    if (event.key === 'Enter' && !event.shiftKey && !event.isComposing && !this.layout.touch()) {
       event.preventDefault();
       void this.submit();
     } else if (event.key === 'Escape') {

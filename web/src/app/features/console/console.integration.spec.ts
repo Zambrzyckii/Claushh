@@ -6,6 +6,7 @@ import { provideRouter } from '@angular/router';
 import { Subject } from 'rxjs';
 import { vi } from 'vitest';
 
+import { DeviceLayout } from '../../core/browser/device-layout';
 import { Dialogs } from '../../core/browser/dialogs';
 import { ProjectContext } from '../../core/project/project-context';
 import { ConnectionState, ConsoleConnection } from '../../core/realtime/console-connection';
@@ -67,11 +68,17 @@ class Host {
 describe('Console (integration)', () => {
   let confirm: ReturnType<typeof vi.fn>;
 
-  async function setup(snapshot?: ConversationSnapshot) {
+  async function setup(snapshot?: ConversationSnapshot, layout?: { phone: boolean; touch: boolean }) {
     FakeConnection.nextSnapshot = snapshot ?? { conversationId: null, events: [] };
     confirm = vi.fn(() => true);
     TestBed.configureTestingModule({
-      providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([]), { provide: Dialogs, useValue: { confirm } }]
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        { provide: Dialogs, useValue: { confirm } },
+        ...(layout ? [{ provide: DeviceLayout, useValue: { phone: signal(layout.phone), touch: signal(layout.touch) } }] : [])
+      ]
     });
     const fixture = TestBed.createComponent(Host);
     const host = fixture.componentInstance;
@@ -317,5 +324,30 @@ describe('Console (integration)', () => {
     await settle();
     http.expectNone((r) => r.url === '/api/files/content');
     expect(host.editor.active()).toMatchObject({ value: 'mine', changedOnDisk: true });
+  });
+
+  it('on a phone Enter makes a new line, Send sends the trimmed prompt once, and there is no Hide', async () => {
+    const { host, root, settle } = await setup(undefined, { phone: true, touch: true });
+    const labels = () => Array.from(root.querySelectorAll<HTMLButtonElement>('button')).map((b) => b.textContent!.trim());
+    expect(labels()).not.toContain('Hide');
+    const textarea = root.querySelector('textarea')!;
+    textarea.value = '  napisz testy\n';
+    textarea.dispatchEvent(new Event('input'));
+    const enter = new KeyboardEvent('keydown', { key: 'Enter', cancelable: true });
+    textarea.dispatchEvent(enter);
+    await settle();
+    expect(enter.defaultPrevented).toBe(false);
+    expect(host.connection.sent).toEqual([]);
+
+    const send = root.querySelector<HTMLButtonElement>('.composer__send')!;
+    expect(send.textContent!.trim()).toBe('Send');
+    send.click();
+    send.click();
+    await settle();
+    expect(host.connection.sent).toEqual([
+      { conversationId: 'c-new', text: 'napisz testy', model: 'opus', effort: 'medium', mode: 'default' }
+    ]);
+    // While the console works, "interrupt" takes the Send button's place.
+    expect(root.querySelector('.composer__send')).toBeNull();
   });
 });

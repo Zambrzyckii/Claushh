@@ -1,7 +1,8 @@
-import { Component, HostListener, computed, inject, signal, viewChild } from '@angular/core';
+import { Component, ElementRef, HostListener, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
 
 import { AuthService } from '../../core/auth/auth.service';
 import { SessionTimer } from '../../core/auth/session-timer';
+import { DeviceLayout } from '../../core/browser/device-layout';
 import { Dialogs } from '../../core/browser/dialogs';
 import { ProjectContext } from '../../core/project/project-context';
 import { RepoStatusStore } from '../../core/project/repo-status';
@@ -18,21 +19,23 @@ import { TerminalPanel } from '../terminal/terminal-panel';
 import { TerminalStore } from '../terminal/terminal-store';
 import { WorkspacesPanel } from '../workspaces/workspaces-panel';
 import { WorkspacesStore } from '../workspaces/workspaces-store';
+import { PhonePanes, PhoneTab } from './phone-panes';
 
 /**
- * Main view after login (layout as in the mockup):
- * file explorer | editor | console, below it the Workspace/Terminal panel, at the bottom the status bar.
+ * Main view after login. On a desktop (layout as in the mockup): file explorer | editor | console, below it the
+ * Workspace/Terminal panel, at the bottom the status bar. On a phone (docs/ARCHITECTURE.md, "Frontend" → "Phone layout"):
+ * a condensed top bar with a menu, the tabs Editor · Terminal · Console (PhonePanes), the Workspace panel as a sheet.
  *
- * The open repository is chosen in the bottom panel (Workspace tab) and is stored in the URL (`?repo=`).
+ * The open repository is chosen in the Workspace panel and is stored in the URL (`?repo=`).
  * Without it the explorer, the console and new terminals work on the whole projects directory.
  *
  * State services (project, git status, editor, console, workspaces, terminals) are provided here, so they live
- * as long as this view. The console keeps running after the panel is collapsed, terminals live on the server. Changing the repository does not close open
- * editor tabs (their paths are full, so they still point to the right files).
+ * as long as this view and survive a switch of layout. The console keeps running after the panel is collapsed,
+ * terminals live on the server. Changing the repository does not close open editor tabs (their paths are full).
  */
 @Component({
   selector: 'app-workspace',
-  imports: [Explorer, EditorPane, ConsolePanel, WorkspacesPanel, TerminalPanel, SecurityDialog],
+  imports: [Explorer, EditorPane, ConsolePanel, WorkspacesPanel, TerminalPanel, SecurityDialog, PhonePanes],
   providers: [
     SessionTimer,
     ProjectContext,
@@ -44,12 +47,14 @@ import { WorkspacesStore } from '../workspaces/workspaces-store';
     TerminalConnection,
     TerminalStore
   ],
+  host: { '[class.phone]': 'layout.phone()' },
   templateUrl: './workspace.html',
   styleUrl: './workspace.scss'
 })
 export class Workspace {
   private readonly auth = inject(AuthService);
   private readonly dialogs = inject(Dialogs);
+  protected readonly layout = inject(DeviceLayout);
   protected readonly editor = inject(EditorStore);
   protected readonly project = inject(ProjectContext);
   protected readonly console = inject(ConsoleStore);
@@ -57,6 +62,7 @@ export class Workspace {
   protected readonly workspaces = inject(WorkspacesStore);
   protected readonly sessionTimer = inject(SessionTimer);
   private readonly securityDialog = viewChild.required(SecurityDialog);
+  private readonly workspaceSheet = viewChild<ElementRef<HTMLDialogElement>>('workspaceSheet');
 
   protected readonly changesLabel = computed(() => {
     const count = this.repoStatus.changeCount();
@@ -83,6 +89,17 @@ export class Workspace {
   protected readonly consoleOpen = signal(true);
   protected readonly bottomOpen = signal(true);
   protected readonly bottomTab = signal<'workspace' | 'terminal'>('workspace');
+  /** The phone's active tab, in memory only: a reload starts on Editor. */
+  protected readonly phoneTab = signal<PhoneTab>('editor');
+  protected readonly menuOpen = signal(false);
+
+  constructor() {
+    // Opening a repository in the Workspace sheet closes the sheet.
+    effect(() => {
+      this.project.path();
+      untracked(() => this.workspaceSheet()?.nativeElement.close());
+    });
+  }
 
   protected toggleConsole(): void {
     this.consoleOpen.update((open) => !open);
@@ -93,7 +110,15 @@ export class Workspace {
   }
 
   protected openSecurity(): void {
+    this.menuOpen.set(false);
     this.securityDialog().open();
+  }
+
+  protected openWorkspaceSheet(): void {
+    const sheet = this.workspaceSheet()?.nativeElement;
+    if (sheet && !sheet.open) {
+      sheet.showModal();
+    }
   }
 
   protected explorerRefreshed(): void {
@@ -116,11 +141,15 @@ export class Workspace {
   }
 
   /**
-   * Ctrl+S / Cmd+S saves the active file, also when focus is outside the editor, instead of opening "Save Page As".
-   * Exception: in a terminal the shortcut belongs to the program in the terminal (e.g. nano), so we do not intercept it.
+   * Esc closes the phone menu. Ctrl+S / Cmd+S saves the active file, also when focus is outside the editor, instead of
+   * opening "Save Page As". Exception: in a terminal the shortcut belongs to the program in the terminal (e.g. nano).
    */
   @HostListener('document:keydown', ['$event'])
   protected onKeydown(event: KeyboardEvent): void {
+    if (event.key === 'Escape' && this.menuOpen()) {
+      this.menuOpen.set(false);
+      return;
+    }
     if (event.target instanceof Element && event.target.closest('.xterm')) {
       return;
     }

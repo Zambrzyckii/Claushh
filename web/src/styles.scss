@@ -157,6 +157,64 @@ textarea:focus-visible,
   color: var(--text-muted);
 }
 
+// Phone sheets (docs/ARCHITECTURE.md, "Frontend" → "Phone layout"): full-screen <dialog>s opened with showModal() that
+// slide up; browsers without overlay transitions close them without the slide.
+dialog.sheet {
+  box-sizing: border-box;
+  inset: 0;
+  width: 100%;
+  height: 100dvh;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: var(--surface);
+  color: var(--text);
+  overflow-y: auto;
+  transform: translateY(100%);
+  transition:
+    transform var(--motion-out),
+    overlay 150ms allow-discrete,
+    display 150ms allow-discrete;
+
+  &[open] {
+    transform: none;
+    transition:
+      transform var(--motion-in),
+      overlay 200ms allow-discrete,
+      display 200ms allow-discrete;
+  }
+
+  &::backdrop {
+    background: var(--scrim);
+  }
+}
+
+@starting-style {
+  dialog.sheet[open] {
+    transform: translateY(100%);
+  }
+}
+
+.sheet__head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 4px 0 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+
+  h2 {
+    margin: 0;
+  }
+}
+
 @media (pointer: coarse) {
   button {
     min-height: 36px;

@@ -11,6 +11,7 @@ import {
 } from '@angular/core';
 import type * as MonacoApi from 'monaco-editor';
 
+import { DeviceLayout } from '../../core/browser/device-layout';
 import { isTypingElsewhere } from '../../core/browser/focus';
 import { EditorStore, OpenDocument } from './editor-store';
 import { MONACO_THEME, Monaco, loadMonaco } from './monaco-loader';
@@ -74,6 +75,7 @@ const EDITOR_OPTIONS: MonacoApi.editor.IEditorOptions & MonacoApi.editor.IGlobal
 export class CodeEditor {
   private readonly store = inject(EditorStore);
   private readonly element: HTMLElement = inject(ElementRef).nativeElement;
+  private readonly layout = inject(DeviceLayout);
   private readonly host = viewChild.required<ElementRef<HTMLElement>>('host');
   private readonly diffHost = viewChild.required<ElementRef<HTMLElement>>('diffHost');
 
@@ -266,9 +268,10 @@ export class CodeEditor {
   /**
    * Focus to the editor after showing a file, but not when the user is typing somewhere else at that time
    * (e.g. in the console or a terminal): the file loads asynchronously and focus would jump while typing.
+   * Never with a coarse pointer: the soft keyboard would open on its own.
    */
   private focus(editor: MonacoApi.editor.ICodeEditor): void {
-    if (!isTypingElsewhere(this.element)) {
+    if (!this.layout.touch() && !isTypingElsewhere(this.element)) {
       editor.focus();
     }
   }

@@ -1,4 +1,4 @@
-<dialog #dialog aria-labelledby="security-title" (cancel)="close()">
+<dialog #dialog [class.sheet]="layout.phone()" aria-labelledby="security-title" (cancel)="close()">
   <div class="head">
     <h2 id="security-title">Security</h2>
     <button type="button" class="icon" aria-label="Close" (click)="close()"><span class="codicon codicon-close" aria-hidden="true"></span></button>
@@ -27,10 +27,10 @@
       <tbody>
         @for (s of sessions(); track s.id) {
           <tr class="session" [class.session--current]="s.current">
-            <td>{{ s.device }}</td>
-            <td class="mono">{{ s.ip }}</td>
-            <td>{{ date(s.createdAt) }}</td>
-            <td>{{ date(s.lastActivityAt) }}</td>
+            <td data-label="Device">{{ s.device }}</td>
+            <td class="mono" data-label="IP">{{ s.ip }}</td>
+            <td data-label="Logged in">{{ date(s.createdAt) }}</td>
+            <td data-label="Last activity">{{ date(s.lastActivityAt) }}</td>
             <td class="actions">
               @if (s.current) {
                 <span class="muted">this session</span>
@@ -65,10 +65,10 @@
       <tbody>
         @for (l of logins(); track $index) {
           <tr class="login" [class.login--failed]="!l.success">
-            <td>{{ date(l.at) }}</td>
-            <td class="mono">{{ l.ip }}</td>
-            <td>{{ l.device }}</td>
-            <td>{{ l.success ? 'succeeded' : 'failed' }}</td>
+            <td data-label="Date">{{ date(l.at) }}</td>
+            <td class="mono" data-label="IP">{{ l.ip }}</td>
+            <td data-label="Device">{{ l.device }}</td>
+            <td data-label="Result">{{ l.success ? 'succeeded' : 'failed' }}</td>
           </tr>
         } @empty {
           <tr><td colspan="4" class="muted">{{ logins() === null ? 'Loading…' : 'No entries.' }}</td></tr>

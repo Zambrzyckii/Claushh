@@ -2,7 +2,7 @@
   <span class="header__title">CONSOLE · {{ project.label() }}</span>
   <div class="header__actions">
     <button type="button" class="link" [disabled]="!store.canSend()" (click)="store.newConversation()">New</button>
-    <button type="button" class="link" (click)="collapse.emit()">Hide</button>
+    @if (!layout.phone()) { <button type="button" class="link" (click)="collapse.emit()">Hide</button> }
   </div>
 </div>
 
@@ -110,6 +110,8 @@
     </label>
     @if (store.state() === 'working' || store.state() === 'waiting') {
       <button type="button" class="link composer__hint" (click)="store.interrupt()">interrupt</button>
+    } @else if (layout.touch()) {
+      <button type="button" class="primary composer__send" [disabled]="!store.canSend()" (click)="submit()">Send</button>
     } @else {
       <span class="composer__hint">Enter to send</span>
     }

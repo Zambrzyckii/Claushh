@@ -3,13 +3,14 @@ import { firstValueFrom } from 'rxjs';
 
 import { ActiveSession, LoginAttempt, SessionsApi } from '../../core/api/sessions-api';
 import { SessionTimer } from '../../core/auth/session-timer';
+import { DeviceLayout } from '../../core/browser/device-layout';
 import { Dialogs } from '../../core/browser/dialogs';
 import { formatDateTime } from '../../core/text/format';
 
 /**
  * The Security window (opened by the user name in the top bar): time until the session ends, active sessions that can be
  * ended, login history, "Log out other sessions" and "Log out everywhere".
- * Native `<dialog>` with `showModal()`: focus stays in the window, Esc closes it.
+ * Native `<dialog>` with `showModal()`: focus stays in the window, Esc closes it. On a phone it is a full-screen sheet.
  */
 @Component({
   selector: 'app-security-dialog',
@@ -20,6 +21,7 @@ export class SecurityDialog {
   private readonly api = inject(SessionsApi);
   private readonly dialogs = inject(Dialogs);
   protected readonly timer = inject(SessionTimer);
+  protected readonly layout = inject(DeviceLayout);
 
   /** Number of unsaved files. "Log out everywhere" asks about them right away, together with the confirmation. */
   readonly unsavedCount = input(0);
