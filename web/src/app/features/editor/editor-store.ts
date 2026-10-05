@@ -12,7 +12,7 @@ import { ProjectContext } from '../../core/project/project-context';
  *
  * Does not depend on Monaco (thanks to this it can be tested). The CodeEditor component holds the Monaco models
  * and passes every content change here through `updateValue`. When the store replaces the content itself
- * (e.g. "Wczytaj z dysku" (load from disk)), it increments `revision`, and CodeEditor copies it into the model.
+ * (e.g. "Load from disk"), it increments `revision`, and CodeEditor copies it into the model.
  *
  * Provided at the Workspace component level, so it disappears together with it (and on logout,
  * because that is a full page reload).
@@ -126,7 +126,7 @@ export class EditorStore {
       const original = await firstValueFrom(this.git.show(repo, path));
       this.patch(path, (d) => (d.diff ? { ...d, diff: { status: 'ready', original: original ?? '', isNew: original === null } } : d));
     } catch {
-      this.patch(path, (d) => (d.diff ? { ...d, diff: { status: 'error', error: 'Nie udało się wczytać wersji z ostatniego commita.' } } : d));
+      this.patch(path, (d) => (d.diff ? { ...d, diff: { status: 'error', error: 'Could not load the version from the last commit.' } } : d));
     }
   }
 
@@ -280,7 +280,7 @@ export class EditorStore {
           conflict: { currentVersion: error.currentVersion ?? null }
         }));
       } else {
-        this.patch(doc.path, (d) => ({ ...d, saving: false, error: `Nie zapisano. ${messageOf(error)}` }));
+        this.patch(doc.path, (d) => ({ ...d, saving: false, error: `Not saved. ${messageOf(error)}` }));
       }
     }
   }

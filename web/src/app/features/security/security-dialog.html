@@ -1,11 +1,11 @@
 <dialog #dialog aria-labelledby="security-title" (cancel)="close()">
   <div class="head">
-    <h2 id="security-title">Bezpieczeństwo</h2>
-    <button type="button" class="close" aria-label="Zamknij" (click)="close()">×</button>
+    <h2 id="security-title">Security</h2>
+    <button type="button" class="close" aria-label="Close" (click)="close()">×</button>
   </div>
 
   @if (timer.label(); as remaining) {
-    <p class="muted">Sesja wygaśnie za {{ remaining }} bez aktywności. Każda aktywność na stronie ją przedłuża.</p>
+    <p class="muted">The session expires in {{ remaining }} without activity. Any activity on the page extends it.</p>
   }
 
   @if (error(); as message) {
@@ -13,15 +13,15 @@
   }
 
   <section aria-labelledby="sessions-title">
-    <h3 id="sessions-title">Aktywne sesje</h3>
+    <h3 id="sessions-title">Active sessions</h3>
     <table>
       <thead>
         <tr>
-          <th scope="col">Urządzenie</th>
+          <th scope="col">Device</th>
           <th scope="col">IP</th>
-          <th scope="col">Zalogowano</th>
-          <th scope="col">Ostatnia aktywność</th>
-          <th scope="col"><span class="visually-hidden">Akcje</span></th>
+          <th scope="col">Logged in</th>
+          <th scope="col">Last activity</th>
+          <th scope="col"><span class="visually-hidden">Actions</span></th>
         </tr>
       </thead>
       <tbody>
@@ -33,33 +33,33 @@
             <td>{{ date(s.lastActivityAt) }}</td>
             <td class="actions">
               @if (s.current) {
-                <span class="muted">ta sesja</span>
+                <span class="muted">this session</span>
               } @else {
-                <button type="button" [disabled]="busy()" [attr.aria-label]="'Wyloguj sesję ' + s.device + ' ' + s.ip"
-                        (click)="revoke(s)">Wyloguj</button>
+                <button type="button" [disabled]="busy()" [attr.aria-label]="'Log out session ' + s.device + ' ' + s.ip"
+                        (click)="revoke(s)">Log out</button>
               }
             </td>
           </tr>
         } @empty {
-          <tr><td colspan="5" class="muted">{{ sessions() === null ? 'Wczytywanie…' : 'Brak sesji.' }}</td></tr>
+          <tr><td colspan="5" class="muted">{{ sessions() === null ? 'Loading…' : 'No sessions.' }}</td></tr>
         }
       </tbody>
     </table>
     <div class="buttons">
-      <button type="button" [disabled]="busy() || otherSessions() === 0" (click)="revokeOthers()">Wyloguj pozostałe sesje</button>
-      <button type="button" class="danger" [disabled]="busy()" (click)="everywhere()">Wyloguj wszędzie</button>
+      <button type="button" [disabled]="busy() || otherSessions() === 0" (click)="revokeOthers()">Log out other sessions</button>
+      <button type="button" class="danger" [disabled]="busy()" (click)="everywhere()">Log out everywhere</button>
     </div>
   </section>
 
   <section aria-labelledby="logins-title">
-    <h3 id="logins-title">Historia logowań</h3>
+    <h3 id="logins-title">Login history</h3>
     <table>
       <thead>
         <tr>
-          <th scope="col">Data</th>
+          <th scope="col">Date</th>
           <th scope="col">IP</th>
-          <th scope="col">Urządzenie</th>
-          <th scope="col">Wynik</th>
+          <th scope="col">Device</th>
+          <th scope="col">Result</th>
         </tr>
       </thead>
       <tbody>
@@ -68,13 +68,13 @@
             <td>{{ date(l.at) }}</td>
             <td class="mono">{{ l.ip }}</td>
             <td>{{ l.device }}</td>
-            <td>{{ l.success ? 'udane' : 'nieudane' }}</td>
+            <td>{{ l.success ? 'succeeded' : 'failed' }}</td>
           </tr>
         } @empty {
-          <tr><td colspan="4" class="muted">{{ logins() === null ? 'Wczytywanie…' : 'Brak wpisów.' }}</td></tr>
+          <tr><td colspan="4" class="muted">{{ logins() === null ? 'Loading…' : 'No entries.' }}</td></tr>
         }
       </tbody>
     </table>
-    <p class="muted hint">Nie rozpoznajesz logowania? Wyloguj wszędzie i zmień hasło.</p>
+    <p class="muted hint">Don't recognize a login? Log out everywhere and change the password.</p>
   </section>
 </dialog>

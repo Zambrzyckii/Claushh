@@ -34,7 +34,7 @@ export class Explorer {
   /** Badges from the git status: path → letter (M, U, …) or `•` for a directory with changes. */
   readonly decorations = input<ReadonlyMap<string, string>>(new Map());
   readonly openFile = output<string>();
-  /** The user clicked "Odśwież" (refresh) (e.g. to also refresh the git status). */
+  /** The user clicked "Refresh" (e.g. to also refresh the git status). */
   readonly refreshed = output<void>();
 
   private readonly directories = signal<ReadonlyMap<string, DirectoryState>>(new Map());
@@ -114,7 +114,7 @@ export class Explorer {
   private appendRows(rows: ExplorerRow[], path: string, depth: number): void {
     const state = this.directories().get(path);
     if (!state || state.status === 'loading') {
-      rows.push({ kind: 'status', text: 'Wczytywanie…', depth, error: false });
+      rows.push({ kind: 'status', text: 'Loading…', depth, error: false });
       return;
     }
     if (state.status === 'error') {
@@ -122,7 +122,7 @@ export class Explorer {
       return;
     }
     if (state.entries.length === 0) {
-      rows.push({ kind: 'status', text: 'Pusty katalog', depth, error: false });
+      rows.push({ kind: 'status', text: 'Empty directory', depth, error: false });
       return;
     }
     const expanded = this.expanded();
@@ -137,15 +137,16 @@ export class Explorer {
 }
 
 const MARK_LABELS: Record<string, string> = {
-  M: 'zmieniony',
-  A: 'dodany',
-  D: 'usunięty',
-  R: 'przeniesiony',
-  U: 'nieśledzony',
-  '!': 'konflikt',
-  '•': 'zawiera zmiany'
+  M: 'modified',
+  A: 'added',
+  D: 'deleted',
+  R: 'renamed',
+  U: 'untracked',
+  '!': 'conflict',
+  '•': 'contains changes'
 };
 
+// File names sort the owner's way (ł after l): a choice apart from the interface's language.
 const collator = new Intl.Collator('pl', { numeric: true, sensitivity: 'base' });
 
 /** Directories before files, alphabetically within a group (with numbers in natural order). */

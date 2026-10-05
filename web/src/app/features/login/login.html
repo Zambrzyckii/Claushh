@@ -6,19 +6,19 @@
   }
   @if (logoutUnconfirmed()) {
     <button type="button" class="secondary" [disabled]="retryingLogout() || submitting()" (click)="retryLogout()">
-      {{ retryingLogout() ? 'Wylogowywanie…' : 'Ponów wylogowanie' }}
+      {{ retryingLogout() ? 'Logging out…' : 'Retry logout' }}
     </button>
   }
 
-  <label for="userName">Login</label>
+  <label for="userName">User name</label>
   <input id="userName" formControlName="userName" type="text"
          autocomplete="username" autocapitalize="none" spellcheck="false" required>
 
-  <label for="password">Hasło</label>
+  <label for="password">Password</label>
   <input id="password" formControlName="password" type="password"
          autocomplete="current-password" required>
 
-  <label for="totpCode">Kod z aplikacji</label>
+  <label for="totpCode">Authenticator code</label>
   <input id="totpCode" formControlName="totpCode" type="text" inputmode="numeric"
          autocomplete="one-time-code" spellcheck="false" maxlength="6" required>
 
@@ -27,6 +27,6 @@
   }
 
   <button type="submit" [disabled]="submitting()">
-    {{ submitting() ? 'Logowanie…' : 'Zaloguj' }}
+    {{ submitting() ? 'Logging in…' : 'Log in' }}
   </button>
 </form>

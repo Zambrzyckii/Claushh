@@ -18,24 +18,24 @@ test.beforeEach(async ({ request }) => resetMock(request));
 const countdown = (page: Page) => page.getByRole('timer');
 
 async function openSecurity(page: Page): Promise<void> {
-  await page.getByRole('button', { name: /Bezpieczeństwo i sesje/ }).click();
-  await expect(page.getByRole('dialog', { name: 'Bezpieczeństwo' })).toBeVisible();
+  await page.getByRole('button', { name: /Security and sessions/ }).click();
+  await expect(page.getByRole('dialog', { name: 'Security' })).toBeVisible();
 }
 
 test('the top bar counts down the session', async ({ page }) => {
   await login(page);
-  await expect(countdown(page)).toHaveText(/Sesja wygasa za (29:5\d|30:00)/);
-  await expect(page.getByRole('button', { name: 'Przedłuż' })).toHaveCount(0);
+  await expect(countdown(page)).toHaveText(/Session expires in (29:5\d|30:00)/);
+  await expect(page.getByRole('button', { name: 'Extend' })).toHaveCount(0);
 });
 
 test('near the end the countdown warns and can be extended', async ({ page, request }) => {
   await setSessionTimeout(request, 100);
   await login(page);
-  await expect(countdown(page)).toHaveText(/Sesja wygasa za 1:(3\d|40)/);
+  await expect(countdown(page)).toHaveText(/Session expires in 1:(3\d|40)/);
   await expect(countdown(page)).toHaveClass(/topbar__session--warning/);
   await expect(countdown(page)).toHaveText(/1:3[0-7]/, { timeout: 8000 });
 
-  await page.getByRole('button', { name: 'Przedłuż' }).click();
+  await page.getByRole('button', { name: 'Extend' }).click();
   await expect(countdown(page)).toHaveText(/1:(39|40)/);
   expect((await mockState(request)).log.filter((l) => l.path === 'keepalive')).toHaveLength(1);
 });
@@ -70,15 +70,15 @@ test('the security dialog lists sessions and logins and can end another session'
   await login(page);
 
   await openSecurity(page);
-  const dialog = page.getByRole('dialog', { name: 'Bezpieczeństwo' });
+  const dialog = page.getByRole('dialog', { name: 'Security' });
   await expect(dialog.locator('tr.session')).toHaveCount(2);
-  await expect(dialog.locator('tr.session--current')).toContainText('ta sesja');
+  await expect(dialog.locator('tr.session--current')).toContainText('this session');
   await expect(dialog.locator('tr.session').first()).toContainText(/Chrome · (Windows|Linux|macOS)/);
   await expect(dialog.locator('tr.login')).toHaveCount(3);
   await expect(dialog.locator('tr.login--failed')).toHaveCount(1);
-  await expect(dialog.locator('tr.login').last()).toContainText('nieudane');
+  await expect(dialog.locator('tr.login').last()).toContainText('failed');
 
-  await dialog.locator('tr.session:not(.session--current)').getByRole('button', { name: /Wyloguj sesję/ }).click();
+  await dialog.locator('tr.session:not(.session--current)').getByRole('button', { name: /Log out session/ }).click();
   await expect(dialog.locator('tr.session')).toHaveCount(1);
   await expect(phone).toHaveURL(/\/login\?reason=expired/);
 
@@ -87,14 +87,14 @@ test('the security dialog lists sessions and logins and can end another session'
   await expect(page.locator('.topbar__user')).toBeVisible();
 });
 
-test('"Wyloguj wszędzie" ends every session, including this one', async ({ page, newDevice, request }) => {
+test('"Log out everywhere" ends every session, including this one', async ({ page, newDevice, request }) => {
   const laptop = await newDevice();
   await login(laptop);
   await login(page);
 
   await openSecurity(page);
   page.once('dialog', (d) => d.accept());
-  await page.getByRole('button', { name: 'Wyloguj wszędzie' }).click();
+  await page.getByRole('button', { name: 'Log out everywhere' }).click();
   await expect(page).toHaveURL('/login?logout=ok');
   await expect(laptop).toHaveURL(/\/login\?reason=expired/);
   const log = (await mockState(request)).log.map((l) => l.path);
@@ -115,7 +115,7 @@ test('without an answer from the server the session still ends on this screen af
   });
 
   await page.clock.fastForward('00:06');
-  await expect(countdown(page)).toHaveText('Sesja wygasa za 0:00');
+  await expect(countdown(page)).toHaveText('Session expires in 0:00');
   await expect.poll(() => checks).toBeGreaterThanOrEqual(1);
   await page.clock.fastForward('00:15');
   await expect.poll(() => checks).toBeGreaterThanOrEqual(2);
@@ -130,24 +130,24 @@ test('the server closes the live connections of a session that expired', async (
   // The countdown in the browser still shows almost 30 minutes: only the server can notice the shortened expiry,
   // by closing the session's open WebSockets (without that the page would stay logged in).
   await login(page);
-  await expect(page.locator('app-console-panel')).toContainText('Pusta rozmowa');
+  await expect(page.locator('app-console-panel')).toContainText('Empty conversation');
   await setSessionTimeout(request, 1);
   await expect(page).toHaveURL(/\/login\?reason=expired/, { timeout: 10_000 });
 });
 
 test('a hub call with a session the server no longer has closes the connection', async ({ page, request }) => {
   await login(page);
-  await expect(page.locator('app-console-panel')).toContainText('Pusta rozmowa');
+  await expect(page.locator('app-console-panel')).toContainText('Empty conversation');
   // The session disappears on the server, but open WebSockets stay: only the check on a hub invocation will notice it.
   await killSessions(request, { keepSockets: true });
-  const prompt = page.getByRole('textbox', { name: 'Polecenie' });
+  const prompt = page.getByRole('textbox', { name: 'Prompt' });
   await prompt.fill('dodaj komentarz');
   await prompt.press('Enter');
   await expect(page).toHaveURL(/\/login\?reason=expired/);
   expect((await mockState(request)).prompts).toHaveLength(0);
 });
 
-test('"Wyloguj wszędzie" with unsaved files asks a single question before ending any session', async ({ page, request }) => {
+test('"Log out everywhere" with unsaved files asks a single question before ending any session', async ({ page, request }) => {
   await login(page);
   await openFile(page, MAIN);
   await expectEditorToContain(page, 'int main');
@@ -161,12 +161,12 @@ test('"Wyloguj wszędzie" with unsaved files asks a single question before endin
     questions.push(dialog.message());
     void (questions.length === 1 ? dialog.dismiss() : dialog.accept());
   });
-  await page.getByRole('button', { name: 'Wyloguj wszędzie' }).click();
-  await expect.poll(() => questions).toEqual(['Wylogować wszystkie sesje, także tę? Niezapisane pliki (1) zostaną porzucone.']);
+  await page.getByRole('button', { name: 'Log out everywhere' }).click();
+  await expect.poll(() => questions).toEqual(['Log out every session, this one too? Unsaved files (1) will be discarded.']);
   expect((await mockState(request)).log.map((l) => l.path)).not.toContain('revoke-others');
   await expect(page.locator('.topbar__user')).toBeVisible();
 
-  await page.getByRole('button', { name: 'Wyloguj wszędzie' }).click();
+  await page.getByRole('button', { name: 'Log out everywhere' }).click();
   await expect(page).toHaveURL('/login?logout=ok');
   expect(questions).toHaveLength(2);
   const log = (await mockState(request)).log.map((l) => l.path);

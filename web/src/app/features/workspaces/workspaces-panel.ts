@@ -2,12 +2,12 @@ import { Component, ElementRef, inject, signal, viewChild } from '@angular/core'
 
 import { RepoSummary } from '../../core/api/workspaces-api';
 import { ProjectContext } from '../../core/project/project-context';
-import { countLabel, timeAgo } from '../../core/text/polish';
+import { countLabel, timeAgo } from '../../core/text/format';
 import { WorkspacesStore } from './workspaces-store';
 
 /**
  * The "Workspace" tab in the bottom panel: workspaces on the left, on the right a table of repositories of the selected
- * workspace (branch, state, last commit, remotes) with Otwórz (open) / Pull / Push actions, cloning below.
+ * workspace (branch, state, last commit, remotes) with Open / Pull / Push actions, cloning below.
  * State and operations: WorkspacesStore.
  */
 @Component({
@@ -30,12 +30,12 @@ export class WorkspacesPanel {
   private readonly cloneUrl = viewChild<ElementRef<HTMLInputElement>>('cloneUrl');
 
   protected state(repo: RepoSummary): string {
-    return repo.changes === 0 ? 'czysto' : countLabel(repo.changes, 'zmiana', 'zmiany', 'zmian');
+    return repo.changes === 0 ? 'clean' : countLabel(repo.changes, 'change', 'changes');
   }
 
   protected remote(repo: RepoSummary): string {
     if (!repo.upstream) {
-      return 'brak';
+      return 'none';
     }
     const remote = repo.upstream.split('/', 1)[0];
     const arrows = [repo.ahead ? `↑${repo.ahead}` : '', repo.behind ? `↓${repo.behind}` : ''].filter(Boolean).join(' ');
@@ -48,6 +48,10 @@ export class WorkspacesPanel {
 
   protected isOpen(repo: RepoSummary): boolean {
     return repo.path === this.project.path();
+  }
+
+  protected repoCount(count: number): string {
+    return countLabel(count, 'repo', 'repos');
   }
 
   protected startCreating(): void {

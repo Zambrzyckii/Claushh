@@ -48,7 +48,7 @@ const EDITOR_OPTIONS: MonacoApi.editor.IEditorOptions & MonacoApi.editor.IGlobal
     <div #host class="host" [class.hidden]="showDiff()"></div>
     <div #diffHost class="host" [class.hidden]="!showDiff()"></div>
     @if (loadFailed()) {
-      <p class="failed" role="alert">Nie udało się załadować edytora. Odśwież stronę.</p>
+      <p class="failed" role="alert">Could not load the editor. Reload the page.</p>
     }
   `,
   styles: `

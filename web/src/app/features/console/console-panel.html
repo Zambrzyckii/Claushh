@@ -1,8 +1,8 @@
 <div class="header">
-  <span class="header__title">KONSOLA · {{ project.label() }}</span>
+  <span class="header__title">CONSOLE · {{ project.label() }}</span>
   <div class="header__actions">
-    <button type="button" class="link" [disabled]="!store.canSend()" (click)="store.newConversation()">Nowa</button>
-    <button type="button" class="link" (click)="collapse.emit()">Zwiń</button>
+    <button type="button" class="link" [disabled]="!store.canSend()" (click)="store.newConversation()">New</button>
+    <button type="button" class="link" (click)="collapse.emit()">Hide</button>
   </div>
 </div>
 
@@ -10,7 +10,7 @@
   @for (entry of store.entries(); track $index) {
     @switch (entry.kind) {
       @case ('session') {
-        <div class="line faint">sesja · rozpoczęta {{ time(entry.startedAt) }}</div>
+        <div class="line faint">session · started {{ time(entry.startedAt) }}</div>
       }
       @case ('prompt') {
         <div class="prompt">&gt; {{ entry.text }}</div>
@@ -31,20 +31,20 @@
       @case ('permission') {
         @if (entry.decision === null) {
           <div class="permission" role="group" [attr.data-request-id]="entry.requestId"
-               [attr.aria-label]="'Zezwolić na: ' + reveal(entry.description)">
-            <span class="permission__text">Zezwolić na: {{ reveal(entry.description) }}?</span>
+               [attr.aria-label]="'Allow: ' + reveal(entry.description)">
+            <span class="permission__text">Allow: {{ reveal(entry.description) }}?</span>
             @if (entry.alwaysRule; as rule) {
-              <span class="permission__rule">„tak, zawsze” zapisze regułę: {{ reveal(rule) }}</span>
+              <span class="permission__rule">“yes, always” saves the rule: {{ reveal(rule) }}</span>
             }
             @if (lengthNote(entry.description); as note) {
               <span class="permission__rule">{{ note }}</span>
             }
             <div class="permission__buttons">
-              <button type="button" [disabled]="!armed().has(entry.requestId)" (click)="answer(entry.requestId, 'allow')">tak</button>
+              <button type="button" [disabled]="!armed().has(entry.requestId)" (click)="answer(entry.requestId, 'allow')">yes</button>
               @if (entry.alwaysRule; as rule) {
-                <button type="button" [disabled]="!armed().has(entry.requestId)" (click)="answerAlways(entry.requestId, rule)">tak, zawsze</button>
+                <button type="button" [disabled]="!armed().has(entry.requestId)" (click)="answerAlways(entry.requestId, rule)">yes, always</button>
               }
-              <button type="button" (click)="answer(entry.requestId, 'deny')">nie</button>
+              <button type="button" (click)="answer(entry.requestId, 'deny')">no</button>
             </div>
           </div>
         } @else {
@@ -57,23 +57,23 @@
     }
   } @empty {
     @if (store.connectionState() === 'connected') {
-      <div class="line faint">Pusta rozmowa. Napisz polecenie poniżej.</div>
+      <div class="line faint">Empty conversation. Type a prompt below.</div>
     }
   }
 
   @if (store.state() === 'working') {
-    <div class="line faint">pracuje… (Esc przerywa)</div>
+    <div class="line faint">working… (Esc interrupts)</div>
   }
   @if (store.connectionState() === 'connecting') {
-    <div class="line faint">łączenie…</div>
+    <div class="line faint">connecting…</div>
   } @else if (store.connectionState() === 'reconnecting') {
-    <div class="line faint">rozłączono, łączenie ponownie…</div>
+    <div class="line faint">disconnected, reconnecting…</div>
   }
   @if (store.error(); as error) {
     <div class="line error" role="alert">
       {{ error }}
       @if (store.connectionState() === 'disconnected') {
-        <button type="button" class="link" (click)="store.retryConnection()">połącz ponownie</button>
+        <button type="button" class="link" (click)="store.retryConnection()">reconnect</button>
       }
     </div>
   }
@@ -82,7 +82,7 @@
 <div class="composer">
   <div class="composer__input">
     <span class="composer__prompt" aria-hidden="true">&gt;</span>
-    <textarea #input rows="3" aria-label="Polecenie" placeholder="napisz polecenie…"
+    <textarea #input rows="3" aria-label="Prompt" placeholder="type a prompt…"
               spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"
               (keydown)="onKeydown($event)"></textarea>
   </div>
@@ -101,7 +101,7 @@
         }
       </select>
     </label>
-    <label>tryb
+    <label>mode
       <select [ngModel]="store.options().mode" (ngModelChange)="setMode($event)">
         @for (m of modes; track m.value) {
           <option [ngValue]="m.value">{{ m.label }}</option>
@@ -109,9 +109,9 @@
       </select>
     </label>
     @if (store.state() === 'working' || store.state() === 'waiting') {
-      <button type="button" class="link composer__hint" (click)="store.interrupt()">przerwij</button>
+      <button type="button" class="link composer__hint" (click)="store.interrupt()">interrupt</button>
     } @else {
-      <span class="composer__hint">Enter wyślij</span>
+      <span class="composer__hint">Enter to send</span>
     }
   </div>
 </div>

@@ -49,9 +49,9 @@ describe('Login wait after 429 (integration)', () => {
   });
 
   it.each([
-    ['30', 'Zbyt wiele prób. Spróbuj ponownie za 30 s.'],
-    ['900', 'Zbyt wiele prób. Spróbuj ponownie za 15 min.'],
-    ['86400', 'Zbyt wiele prób. Spróbuj ponownie za 24 godz.']
+    ['30', 'Too many attempts. Try again in 30 s.'],
+    ['900', 'Too many attempts. Try again in 15 min.'],
+    ['86400', 'Too many attempts. Try again in 24 h.']
   ])('Retry-After %s reads "%s"', async (retryAfter, text) => {
     const harness = await RouterTestingHarness.create();
     const navigation = harness.navigateByUrl('/login');

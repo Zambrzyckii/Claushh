@@ -89,7 +89,7 @@ export class ConsoleStore {
       untracked(() => void this.init());
     });
 
-    // Automatic connection attempts have ended (e.g. a long network outage): show "połącz ponownie" (reconnect).
+    // Automatic connection attempts have ended (e.g. a long network outage): show "reconnect".
     let wasConnected = false;
     effect(() => {
       const state = this.connection.state();
@@ -97,7 +97,7 @@ export class ConsoleStore {
         if (state === 'connected') {
           wasConnected = true;
         } else if (state === 'disconnected' && wasConnected && !this.failure()) {
-          this.failure.set('Brak połączenia z konsolą.');
+          this.failure.set('No connection to the console.');
         }
       });
     });
@@ -119,13 +119,13 @@ export class ConsoleStore {
         conversationId = await this.connection.startConversation(this.project.path());
         this.switchTo(conversationId);
       }
-      // The "pracuje" (working) state right away, so that it cannot be sent a second time before the server responds.
+      // The "working" state right away, so that it cannot be sent a second time before the server responds.
       this.stateSignal.set('working');
       await this.connection.sendPrompt({ conversationId, text: trimmed, ...this.options() });
       return true;
     } catch {
       this.stateSignal.set('idle');
-      this.failure.set('Nie udało się wysłać polecenia.');
+      this.failure.set('Could not send the prompt.');
       return false;
     } finally {
       this.sending.set(false);
@@ -140,14 +140,14 @@ export class ConsoleStore {
     try {
       await this.connection.answerPermission(conversationId, requestId, decision);
     } catch {
-      this.failure.set('Nie udało się wysłać odpowiedzi.');
+      this.failure.set('Could not send the answer.');
     }
   }
 
   async interrupt(): Promise<void> {
     const conversationId = this.conversationId();
     if (conversationId && (this.stateSignal() === 'working' || this.stateSignal() === 'waiting')) {
-      await this.connection.interrupt(conversationId).catch(() => this.failure.set('Nie udało się przerwać.'));
+      await this.connection.interrupt(conversationId).catch(() => this.failure.set('Could not interrupt.'));
     }
   }
 
@@ -162,7 +162,7 @@ export class ConsoleStore {
     try {
       this.switchTo(await this.connection.startConversation(this.project.path()));
     } catch {
-      this.failure.set('Nie udało się rozpocząć nowej rozmowy.');
+      this.failure.set('Could not start a new conversation.');
     } finally {
       this.sending.set(false);
     }
@@ -175,7 +175,7 @@ export class ConsoleStore {
   private async init(): Promise<void> {
     this.failure.set(null);
     if (!(await this.connection.connect())) {
-      this.failure.set('Brak połączenia z konsolą.');
+      this.failure.set('No connection to the console.');
       return;
     }
     await this.loadConversation();
@@ -196,7 +196,7 @@ export class ConsoleStore {
         this.apply(event);
       }
     } catch {
-      this.failure.set('Nie udało się wczytać rozmowy.');
+      this.failure.set('Could not load the conversation.');
     } finally {
       this.loading.set(false);
     }
@@ -296,7 +296,7 @@ export class ConsoleStore {
       case 'status':
         this.stateSignal.set(event.state);
         if (event.state === 'error') {
-          this.push({ kind: 'notice', text: event.message ?? 'Wystąpił błąd.', error: true });
+          this.push({ kind: 'notice', text: event.message ?? 'An error occurred.', error: true });
         } else if (event.message) {
           this.push({ kind: 'notice', text: event.message, error: false });
         }

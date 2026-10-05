@@ -4,8 +4,8 @@ import { fillLogin, killSessions, login, mockState, openRepo, resetMock } from '
 test.beforeEach(async ({ request }) => resetMock(request));
 
 async function openSecurity(page: import('@playwright/test').Page): Promise<void> {
-  await page.getByRole('button', { name: /Bezpieczeństwo i sesje/ }).click();
-  await expect(page.getByRole('dialog', { name: 'Bezpieczeństwo' })).toBeVisible();
+  await page.getByRole('button', { name: /Security and sessions/ }).click();
+  await expect(page.getByRole('dialog', { name: 'Security' })).toBeVisible();
 }
 
 test('anonymous user is sent to login with a return address', async ({ page }) => {
@@ -16,7 +16,7 @@ test('anonymous user is sent to login with a return address', async ({ page }) =
 test('wrong credentials show a generic error and clear secret fields', async ({ page, request }) => {
   await page.goto('/login');
   await fillLogin(page, { password: 'wrong' });
-  await expect(page.getByRole('alert')).toHaveText('Nieprawidłowe dane logowania.');
+  await expect(page.getByRole('alert')).toHaveText('Invalid login details.');
   await expect(page.locator('#password')).toHaveValue('');
   await expect(page.locator('#totpCode')).toHaveValue('');
   await expect(page.locator('#userName')).toHaveValue('owner');
@@ -42,9 +42,9 @@ test('logout ends the server session, clears every tab and blocks the back butto
   await expect(second.locator('.topbar__user')).toBeVisible();
   await page.evaluate(() => localStorage.setItem('probe', 'x'));
 
-  await page.getByRole('button', { name: 'Wyloguj' }).click();
+  await page.getByRole('button', { name: 'Log out' }).click();
   await expect(page).toHaveURL('/login?logout=ok');
-  await expect(page.getByRole('status')).toHaveText('Wylogowano.');
+  await expect(page.getByRole('status')).toHaveText('Logged out.');
   await expect(second).toHaveURL(/\/login/);
 
   const logout = (await mockState(request)).log.find((l) => l.path === '/api/auth/logout');
@@ -76,11 +76,11 @@ test('too many attempts show the waiting time', async ({ page }) => {
 
 test('a 401 from the API sends the user back to login', async ({ page, request }) => {
   await login(page);
-  await expect(page.locator('app-console-panel')).toContainText('Pusta rozmowa'); // console connected
+  await expect(page.locator('app-console-panel')).toContainText('Empty conversation'); // console connected
   await killSessions(request, { keepSockets: true });
-  await page.getByRole('navigation', { name: 'Eksplorator plików' }).getByRole('button', { name: 'Odśwież' }).click();
+  await page.getByRole('navigation', { name: 'File explorer' }).getByRole('button', { name: 'Refresh' }).click();
   await expect(page).toHaveURL(/\/login\?reason=expired/);
-  await expect(page.getByRole('status')).toHaveText('Sesja wygasła. Zaloguj się ponownie.');
+  await expect(page.getByRole('status')).toHaveText('Session expired. Log in again.');
 });
 
 test('an unconfirmed logout stays on the login page and ends the session once the server answers', async ({ page, context, request }) => {
@@ -96,11 +96,11 @@ test('an unconfirmed logout stays on the login page and ends the session once th
     return route.fulfill({ status: 502 });
   });
 
-  await page.getByRole('button', { name: 'Wyloguj' }).click();
+  await page.getByRole('button', { name: 'Log out' }).click();
   await expect(page).toHaveURL('/login?logout=unconfirmed');
-  await expect(page.getByRole('status')).toHaveText('Wylogowano. Serwer potwierdził zakończenie sesji.');
+  await expect(page.getByRole('status')).toHaveText('Logged out. The server confirmed the session ended.');
   await expect(second).toHaveURL('/login?logout=unconfirmed');
-  await expect(second.getByRole('status')).toHaveText('Wylogowano. Serwer potwierdził zakończenie sesji.');
+  await expect(second.getByRole('status')).toHaveText('Logged out. The server confirmed the session ended.');
   await expect(page.locator('.topbar__user')).toHaveCount(0);
 
   expect((await mockState(request)).log.filter((l) => l.path === '/api/auth/logout').some((l) => l.hadSession)).toBe(true);
@@ -109,7 +109,7 @@ test('an unconfirmed logout stays on the login page and ends the session once th
 
 test('after logging out one can log in again right away', async ({ page }) => {
   await login(page);
-  await page.getByRole('button', { name: 'Wyloguj' }).click();
+  await page.getByRole('button', { name: 'Log out' }).click();
   await expect(page).toHaveURL('/login?logout=ok');
   await fillLogin(page);
   await page.waitForURL('/');
@@ -121,7 +121,7 @@ test('while the logout is unconfirmed, Back and a new tab do not return to the a
   await openRepo(page, 'lab-3-sieci'); // history entry with an open repository
   // The server (tunnel) does not confirm the logout, although the session on the server stays alive.
   await context.route('**/api/auth/logout', (route) => route.fulfill({ status: 502 }));
-  await page.getByRole('button', { name: 'Wyloguj' }).click();
+  await page.getByRole('button', { name: 'Log out' }).click();
   await expect(page).toHaveURL('/login?logout=unconfirmed');
 
   await page.goBack();
@@ -131,7 +131,7 @@ test('while the logout is unconfirmed, Back and a new tab do not return to the a
   const other = await context.newPage();
   await other.goto('/');
   await expect(other).toHaveURL('/login?logout=unconfirmed');
-  await expect(other.getByRole('status')).toContainText('serwer nie potwierdził');
+  await expect(other.getByRole('status')).toContainText('the server did not confirm');
 });
 
 test('after an unconfirmed logout one can log in again even with an outdated XSRF token', async ({ page, context, request }) => {
@@ -143,9 +143,9 @@ test('after an unconfirmed logout one can log in again even with an outdated XSR
     blockedChecks++;
     return route.abort('internetdisconnected');
   });
-  await page.getByRole('button', { name: 'Wyloguj' }).click();
+  await page.getByRole('button', { name: 'Log out' }).click();
   await expect(page).toHaveURL('/login?logout=unconfirmed');
-  await expect(page.getByRole('status')).toContainText('serwer nie potwierdził');
+  await expect(page.getByRole('status')).toContainText('the server did not confirm');
   await expect.poll(() => blockedChecks).toBeGreaterThan(0); // the first retry from the login screen did not get through
   // The old session expires on the server, and the XSRF token in the browser is still issued for it. Then the network comes back
   // (the next retry only in 3 s, so the login below will not get a token from it).
@@ -161,7 +161,7 @@ test('after an unconfirmed logout one can log in again even with an outdated XSR
 test('logging in again ends the old session that the unconfirmed logout left alive', async ({ page, context, request }) => {
   await login(page);
   await context.route('**/api/auth/logout', (route) => route.fulfill({ status: 502 })); // logout does not get through
-  await page.getByRole('button', { name: 'Wyloguj' }).click();
+  await page.getByRole('button', { name: 'Log out' }).click();
   await expect(page).toHaveURL('/login?logout=unconfirmed');
   const oldSession = await page.evaluate(() => localStorage.getItem('claushh-pending-logout'));
   expect(oldSession).toBeTruthy();
@@ -171,7 +171,7 @@ test('logging in again ends the old session that the unconfirmed logout left ali
   // The new session ends the old one by id (with its own XSRF token), because it could not log it out itself.
   await expect.poll(async () => (await mockState(request)).log.filter((l) => l.path === 'revoke').map((l) => l.id)).toContain(oldSession);
   await openSecurity(page);
-  await expect(page.getByRole('dialog', { name: 'Bezpieczeństwo' }).locator('tr.session')).toHaveCount(1);
+  await expect(page.getByRole('dialog', { name: 'Security' }).locator('tr.session')).toHaveCount(1);
   expect(await page.evaluate(() => localStorage.getItem('claushh-pending-logout'))).toBeNull();
 
   // The login screen is not in history: "Back" does not return to a stale logout warning.
@@ -206,9 +206,9 @@ test.describe('Content-Security-Policy', () => {
       const attempt = (action: () => void) => {
         try {
           action();
-          return 'dozwolone';
+          return 'allowed';
         } catch {
-          return 'zablokowane';
+          return 'blocked';
         }
       };
       return {
@@ -221,11 +221,11 @@ test.describe('Content-Security-Policy', () => {
       };
     });
     expect(results).toEqual({
-      innerHTML: 'zablokowane',
-      scriptSrc: 'zablokowane',
-      workerInSubdirectory: 'zablokowane',
-      workerWithQuery: 'zablokowane',
-      workerNotJs: 'zablokowane'
+      innerHTML: 'blocked',
+      scriptSrc: 'blocked',
+      workerInSubdirectory: 'blocked',
+      workerWithQuery: 'blocked',
+      workerNotJs: 'blocked'
     });
   });
 });
@@ -248,7 +248,7 @@ test.describe('embedding in a frame', () => {
       await route.fulfill({ response, headers });
     });
     await page.setContent(`<iframe src="${baseURL}/login"></iframe>`);
-    await expect(page.frameLocator('iframe').locator('body')).toHaveText('Ta strona nie może być wyświetlana w ramce.');
+    await expect(page.frameLocator('iframe').locator('body')).toHaveText('This page cannot be shown in a frame.');
     await expect(page.frameLocator('iframe').locator('#userName')).toHaveCount(0);
   });
 });

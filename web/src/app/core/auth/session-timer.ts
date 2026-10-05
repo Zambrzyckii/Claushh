@@ -2,7 +2,7 @@ import { DOCUMENT, DestroyRef, Injectable, computed, inject, signal } from '@ang
 
 import { AuthService } from './auth.service';
 
-/** How many milliseconds before the end the countdown warns and shows "Przedłuż" (extend). */
+/** How many milliseconds before the end the countdown warns and shows "Extend". */
 export const SESSION_WARNING_MS = 2 * 60_000;
 /** Activity extends the session at most once per this many milliseconds. */
 export const KEEPALIVE_INTERVAL_MS = 60_000;
@@ -66,7 +66,7 @@ export class SessionTimer {
     });
   }
 
-  /** The "Przedłuż" button: immediately, without the once-a-minute limit. */
+  /** The "Extend" button: immediately, without the once-a-minute limit. */
   extend(): Promise<void> {
     this.lastKeepAlive = Date.now();
     return this.auth.keepAlive();

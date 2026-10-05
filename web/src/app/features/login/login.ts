@@ -78,7 +78,7 @@ export class Login {
 
   /**
    * One attempt to end the session from the marker. The marker is read every time, because another tab could have changed it
-   * (e.g. a new unconfirmed logout of another session). "Wylogowano" (logged out) only when the marker is gone.
+   * (e.g. a new unconfirmed logout of another session). "Logged out" only when the marker is gone.
    */
   protected retryLogout(): Promise<void> {
     if (this.stopRetries || !this.logoutUnconfirmed()) {
@@ -101,7 +101,7 @@ export class Login {
           this.markConfirmed();
         } else {
           // That session is gone, but the browser has a newer one (e.g. a login in another tab or a login here
-          // after which the session could not be checked): this is not "wylogowano", just a regular session, so on to the app.
+          // after which the session could not be checked): this is not "logged out", just a regular session, so on to the app.
           this.cancelLogoutRetries();
           await this.router.navigateByUrl('/', { replaceUrl: true });
         }
@@ -140,7 +140,7 @@ export class Login {
     this.form.controls.totpCode.reset();
     this.error.set(errorMessage(result));
     this.submitting.set(false);
-    // There is no new session, so the retry (and the "Ponów wylogowanie" (retry logout) button) can end the previous one again.
+    // There is no new session, so the retry (and the "Retry logout" button) can end the previous one again.
     this.stopRetries = false;
     if (this.logoutUnconfirmed()) {
       void this.autoRetry(LOGOUT_RETRY_DELAYS_MS.length);
@@ -154,7 +154,7 @@ export class Login {
 
   /**
    * The marker is gone, so another tab finished the logout or logged in again. We only check:
-   * no session → "Wylogowano", a (new) session exists → on to the app, as with every login screen with a session.
+   * no session → "Logged out", a (new) session exists → on to the app, as with every login screen with a session.
    */
   private async checkWithoutMarker(): Promise<void> {
     if (await this.auth.hasNoSession()) {
@@ -168,7 +168,7 @@ export class Login {
   private markConfirmed(): void {
     this.cancelLogoutRetries();
     this.logoutUnconfirmed.set(false);
-    this.notice.set({ text: 'Wylogowano. Serwer potwierdził zakończenie sesji.', warning: false });
+    this.notice.set({ text: 'Logged out. The server confirmed the session ended.', warning: false });
   }
 
   private cancelLogoutRetries(): void {
@@ -189,21 +189,21 @@ const LOGOUT_RETRY_DELAYS_MS = [3_000, 7_000, 30_000];
 function errorMessage(result: Extract<LoginResult, { ok: false }>): string {
   switch (result.reason) {
     case 'invalid':
-      return 'Nieprawidłowe dane logowania.';
+      return 'Invalid login details.';
     case 'rate-limited':
       return result.retryAfterSeconds
-        ? `Zbyt wiele prób. Spróbuj ponownie za ${waitText(result.retryAfterSeconds)}`
-        : 'Zbyt wiele prób. Spróbuj ponownie później.';
+        ? `Too many attempts. Try again in ${waitText(result.retryAfterSeconds)}`
+        : 'Too many attempts. Try again later.';
     case 'network':
-      return 'Brak połączenia z serwerem.';
+      return 'No connection to the server.';
     case 'server':
-      return 'Błąd serwera. Spróbuj ponownie.';
+      return 'Server error. Try again.';
   }
 }
 
 /**
  * The wait from `Retry-After`, rounded up, with the sentence's full stop: "30 s." below a minute, "15 min." below an
- * hour, "24 godz." otherwise (the abbreviation's own dot ends the sentence). Abbreviations need no plural forms.
+ * hour, "24 h." otherwise. Abbreviations need no plural forms.
  */
 function waitText(seconds: number): string {
   if (seconds < 60) {
@@ -212,23 +212,23 @@ function waitText(seconds: number): string {
   if (seconds < 3600) {
     return `${Math.ceil(seconds / 60)} min.`;
   }
-  return `${Math.ceil(seconds / 3600)} godz.`;
+  return `${Math.ceil(seconds / 3600)} h.`;
 }
 
 function noticeFor(reason: string | null, logout: string | null): { text: string; warning: boolean } | null {
   if (logout === 'unconfirmed') {
     return {
       text:
-        'Dane w tej przeglądarce zostały wyczyszczone, ale serwer nie potwierdził zakończenia sesji. ' +
-        'Jeśli to obcy komputer, zaloguj się i wyloguj ponownie, gdy połączenie wróci.',
+        'The data in this browser was cleared, but the server did not confirm that the session ended. ' +
+        "If this is someone else's computer, log in and log out again when the connection is back.",
       warning: true
     };
   }
   if (logout === 'ok') {
-    return { text: 'Wylogowano.', warning: false };
+    return { text: 'Logged out.', warning: false };
   }
   if (reason === 'expired') {
-    return { text: 'Sesja wygasła. Zaloguj się ponownie.', warning: false };
+    return { text: 'Session expired. Log in again.', warning: false };
   }
   return null;
 }

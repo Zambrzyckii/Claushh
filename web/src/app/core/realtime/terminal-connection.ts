@@ -17,7 +17,7 @@ export class TerminalConnection extends HubClient {
   readonly exited: Observable<TerminalExit> = this.exited$.asObservable();
 
   protected readonly url = TERMINAL_HUB.url;
-  protected readonly label = 'terminalem';
+  protected readonly label = 'terminal';
 
   protected register(connection: HubConnection): void {
     connection.on(TERMINAL_HUB.output, (event: TerminalOutput) => this.output$.next(event));

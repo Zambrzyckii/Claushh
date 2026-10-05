@@ -68,13 +68,13 @@ describe('Unconfirmed logout (integration)', () => {
   const notice = (root: HTMLElement) => root.querySelector('[role="status"]')!.textContent!.trim();
 
   const me = (sessionId: string) => ({ userName: 'owner', sessionId, expiresIn: 1800, absoluteExpiresIn: 3600 });
-  const confirmed = 'Wylogowano. Serwer potwierdził zakończenie sesji.';
+  const confirmed = 'Logged out. The server confirmed the session ended.';
 
   it('stays on the login page even though the session is still alive, and ends exactly that session', async () => {
     localStorage.setItem(PENDING_LOGOUT_KEY, 's1');
     const { render, root } = await open('/login?logout=unconfirmed');
     expect(TestBed.inject(Router).url).toBe('/login?logout=unconfirmed');
-    expect(notice(root)).toContain('serwer nie potwierdził');
+    expect(notice(root)).toContain('the server did not confirm');
 
     // The screen retries the logout on its own: the same session is still alive (200), so POST /logout goes out with its identifier.
     http.expectOne(AUTH_API.me).flush(me('s1'));
@@ -86,7 +86,7 @@ describe('Unconfirmed logout (integration)', () => {
 
     expect(TestBed.inject(Router).url).toBe('/login?logout=unconfirmed');
     expect(notice(root)).toBe(confirmed);
-    expect(root.textContent).not.toContain('Ponów wylogowanie');
+    expect(root.textContent).not.toContain('Retry logout');
     expect(localStorage.getItem(PENDING_LOGOUT_KEY)).toBeNull();
     await render(20_000);
     http.expectNone(AUTH_API.me); // after confirmation the retry ends
@@ -104,7 +104,7 @@ describe('Unconfirmed logout (integration)', () => {
     await render();
     http.expectNone(AUTH_API.logout);
     expect(localStorage.getItem(PENDING_LOGOUT_KEY)).toBeNull();
-    // This is not "Wylogowano": the browser has a live session s2, so as with every login screen with a session — on to the app.
+    // This is not "Logged out": the browser has a live session s2, so as with every login screen with a session — on to the app.
     http.expectOne(AUTH_API.me).flush(me('s2')); // app guard
     await render();
     expect(TestBed.inject(Router).url).toBe('/');
@@ -120,7 +120,7 @@ describe('Unconfirmed logout (integration)', () => {
     // Between GET /me and POST /logout someone logged in again: the server ends nothing (409).
     http.expectOne(AUTH_API.logout).flush(null, { status: 409, statusText: 'Conflict' });
     await render();
-    expect(notice(root)).toContain('serwer nie potwierdził');
+    expect(notice(root)).toContain('the server did not confirm');
 
     await render(3_000);
     http.expectOne(AUTH_API.me).flush(me('s2'));
@@ -160,9 +160,9 @@ describe('Unconfirmed logout (integration)', () => {
     await render(7_000);
     http.expectOne(AUTH_API.me).error(new ProgressEvent('error'));
     await render();
-    expect(notice(root)).toContain('serwer nie potwierdził');
+    expect(notice(root)).toContain('the server did not confirm');
 
-    button(root, 'Ponów wylogowanie').click();
+    button(root, 'Retry logout').click();
     await render();
     http.expectOne(AUTH_API.me).flush(null, { status: 401, statusText: 'Unauthorized' });
     await render();
@@ -203,7 +203,7 @@ describe('Unconfirmed logout (integration)', () => {
     http.expectNone(AUTH_API.me);
     http.expectNone(AUTH_API.logout);
 
-    button(root, 'Ponów wylogowanie').click();
+    button(root, 'Retry logout').click();
     await render();
     http.expectOne(AUTH_API.me).flush(me('s1'));
     await render();
@@ -228,9 +228,9 @@ describe('Unconfirmed logout (integration)', () => {
     await render(20_000);
     http.expectNone(AUTH_API.me); // apart from that nothing happens on its own
     http.expectNone(AUTH_API.logout);
-    expect(notice(root)).toContain('serwer nie potwierdził');
+    expect(notice(root)).toContain('the server did not confirm');
 
-    button(root, 'Ponów wylogowanie').click();
+    button(root, 'Retry logout').click();
     await render();
     http.expectOne(AUTH_API.me).flush(me('s1'));
     await render();
@@ -271,7 +271,7 @@ describe('Unconfirmed logout (integration)', () => {
     await render();
     http.expectOne('/api/auth/sessions/s1').flush(null, { status: 404, statusText: 'Not Found' });
     await render();
-    expect(notice(root)).toContain('serwer nie potwierdził'); // s2 is still alive
+    expect(notice(root)).toContain('the server did not confirm'); // s2 is still alive
     expect(localStorage.getItem(PENDING_LOGOUT_KEY)).toBe('s2');
 
     await render(3_000);

@@ -15,23 +15,23 @@ import { FormsModule } from '@angular/forms';
 import { Dialogs } from '../../core/browser/dialogs';
 import { ProjectContext } from '../../core/project/project-context';
 import { ConsoleEffort, ConsoleMode, ConsoleModel, PermissionDecision, StepKind } from '../../core/realtime/console-protocol';
-import { countLabel } from '../../core/text/polish';
+import { countLabel, formatTime } from '../../core/text/format';
 import { revealHidden } from '../../core/text/visible-text';
 import { ConsoleStep, ConsoleStore } from './console-store';
 
 /**
- * The permission buttons ("tak", "tak, zawsze") stay inactive for this many ms after a request appears. The request arrives
+ * The permission buttons ("yes", "yes, always") stay inactive for this many ms after a request appears. The request arrives
  * asynchronously and scrolls the log to the bottom, so without this a click meant for something else could land on them.
  */
 export const PERMISSION_ARM_MS = 600;
 
 /**
- * The "Konsola" (console) panel (right column): the conversation with Claude Code as plain monospace text,
+ * The Console panel (right column): the conversation with Claude Code as plain monospace text,
  * without icons, colors or animations (a requirement from the mockup). Prompt field with model, effort and mode selection.
  * State and communication: ConsoleStore.
  *
  * Permission requests: the command with hidden characters made visible (`revealHidden`), permission buttons active only after
- * `PERMISSION_ARM_MS`, "tak, zawsze" only with a known rule and after confirmation (docs/ARCHITECTURE.md, "Console").
+ * `PERMISSION_ARM_MS`, "yes, always" only with a known rule and after confirmation (docs/ARCHITECTURE.md, "Console").
  */
 @Component({
   selector: 'app-console-panel',
@@ -45,7 +45,7 @@ export class ConsolePanel {
   private readonly dialogs = inject(Dialogs);
   readonly collapse = output<void>();
 
-  /** Permission requests that can already be answered "tak" (yes) (`PERMISSION_ARM_MS` has passed). */
+  /** Permission requests that can already be answered "yes" (`PERMISSION_ARM_MS` has passed). */
   protected readonly armed = signal<ReadonlySet<string>>(new Set());
   private readonly arming = new Set<string>();
   private readonly armTimers = new Set<ReturnType<typeof setTimeout>>();
@@ -64,14 +64,14 @@ export class ConsolePanel {
     { value: 'haiku', label: 'haiku-4.5' }
   ];
   protected readonly efforts: { value: ConsoleEffort; label: string }[] = [
-    { value: 'low', label: 'niski' },
-    { value: 'medium', label: 'średni' },
-    { value: 'high', label: 'wysoki' },
-    { value: 'max', label: 'maks' }
+    { value: 'low', label: 'low' },
+    { value: 'medium', label: 'medium' },
+    { value: 'high', label: 'high' },
+    { value: 'max', label: 'max' }
   ];
   protected readonly modes: { value: ConsoleMode; label: string }[] = [
-    { value: 'default', label: 'pytaj przed edycją' },
-    { value: 'acceptEdits', label: 'akceptuj edycje' },
+    { value: 'default', label: 'ask before edits' },
+    { value: 'acceptEdits', label: 'accept edits' },
     { value: 'plan', label: 'plan' }
   ];
 
@@ -161,15 +161,15 @@ export class ConsolePanel {
     void this.store.answer(requestId, decision);
   }
 
-  /** "tak, zawsze" (yes, always) saves a permanent rule, so it requires confirmation showing the rule. */
+  /** "yes, always" saves a permanent rule, so it requires confirmation showing the rule. */
   protected answerAlways(requestId: string, rule: string): void {
     if (!this.armed().has(requestId)) {
       return;
     }
     if (
       this.dialogs.confirm(
-        `Zapisać stałą zgodę: ${revealHidden(rule)}?\n\nKonsola przestanie pytać o polecenia pasujące do tej reguły. ` +
-          'Regułę zapisze serwer dla tego projektu, nie w pliku repozytorium.'
+        `Save a permanent permission: ${revealHidden(rule)}?\n\nThe console will stop asking about commands that match this rule. ` +
+          'The server saves the rule for this project, not in a repository file.'
       )
     ) {
       void this.store.answer(requestId, 'allow-always');
@@ -188,9 +188,9 @@ export class ConsolePanel {
     const shown = revealHidden(text);
     const lines = shown.split('\n').length;
     if (lines > 1) {
-      return `Komenda ma ${countLabel(lines, 'linię', 'linie', 'linii')}. Przeczytaj całą powyżej.`;
+      return `The command has ${countLabel(lines, 'line', 'lines')}. Read all of it above.`;
     }
-    return shown.length > 200 ? `Komenda ma ${countLabel(shown.length, 'znak', 'znaki', 'znaków')}. Przeczytaj całą powyżej.` : null;
+    return shown.length > 200 ? `The command has ${countLabel(shown.length, 'character', 'characters')}. Read all of it above.` : null;
   }
 
   private resetArming(): void {
@@ -228,8 +228,7 @@ export class ConsolePanel {
   }
 
   protected time(iso: string): string {
-    const date = new Date(iso);
-    return Number.isNaN(date.getTime()) ? '' : date.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
+    return formatTime(iso);
   }
 
   protected decisionLabel(decision: PermissionDecision): string {
@@ -240,16 +239,16 @@ export class ConsolePanel {
 /** Verbs are padded with spaces to equal width, so that paths line up in a column like in a terminal. */
 const VERB_WIDTH = 13;
 const VERBS: Record<StepKind, string> = {
-  read: 'przeczytano',
-  edit: 'edycja',
-  write: 'utworzono',
-  command: 'uruchomiono',
-  search: 'wyszukano',
-  other: 'krok'
+  read: 'read',
+  edit: 'edited',
+  write: 'created',
+  command: 'ran',
+  search: 'searched',
+  other: 'step'
 };
 
 const DECISIONS: Record<PermissionDecision, string> = {
-  allow: 'zezwolono',
-  'allow-always': 'zezwolono na stałe',
-  deny: 'odmówiono'
+  allow: 'allowed',
+  'allow-always': 'always allowed',
+  deny: 'denied'
 };

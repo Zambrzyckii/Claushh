@@ -1,4 +1,4 @@
-import { countLabel } from './polish';
+import { countLabel } from './format';
 
 /**
  * Shows characters that are normally invisible but can change the meaning of the text: control characters,
@@ -14,8 +14,8 @@ import { countLabel } from './polish';
 export function revealHidden(text: string): string {
   return text
     .replace(/\r\n/g, '\n')
-    .replace(/\n(?:[ \t]*\n){2,}/g, (run) => `\n⟨${countLabel(run.split('\n').length - 2, 'pusta linia', 'puste linie', 'pustych linii')}⟩\n`)
-    .replace(/[ \t]{4,}/g, (run) => `⟨${countLabel(run.length, 'odstęp', 'odstępy', 'odstępów')}⟩`)
+    .replace(/\n(?:[ \t]*\n){2,}/g, (run) => `\n⟨${run.split('\n').length - 2} blank lines⟩\n`)
+    .replace(/[ \t]{4,}/g, (run) => `⟨${run.length} whitespace⟩`)
     .replace(/\t/g, '⟨TAB⟩')
     .replace(HIDDEN_RUN, (run: string, char: string) => {
       const code = `U+${char.codePointAt(0)!.toString(16).toUpperCase().padStart(4, '0')}`;
@@ -51,7 +51,7 @@ export function previewText(text: string): string {
   const head = lines.slice(0, PREVIEW_LINES - 5);
   const tail = lines.slice(-4);
   const skipped = lines.length - head.length - tail.length;
-  return [...head, `⟨pominięto ${countLabel(skipped, 'linię', 'linie', 'linii')}⟩`, ...tail].join('\n');
+  return [...head, `⟨${countLabel(skipped, 'line', 'lines')} omitted⟩`, ...tail].join('\n');
 }
 
 function shortenLine(line: string): string {
@@ -59,5 +59,5 @@ function shortenLine(line: string): string {
     return line;
   }
   const skipped = line.length - 150 - 100;
-  return `${line.slice(0, 150)}⟨pominięto ${countLabel(skipped, 'znak', 'znaki', 'znaków')}⟩${line.slice(-100)}`;
+  return `${line.slice(0, 150)}⟨${countLabel(skipped, 'character', 'characters')} omitted⟩${line.slice(-100)}`;
 }

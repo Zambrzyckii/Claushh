@@ -25,7 +25,7 @@ export class TerminalPanel {
   }
 
   protected close(terminal: TerminalInfo): void {
-    if (!terminal.exited && !this.dialogs.confirm(`Zamknąć terminal „${terminal.title}” i zakończyć uruchomione w nim procesy?`)) {
+    if (!terminal.exited && !this.dialogs.confirm(`Close the terminal “${terminal.title}” and end the processes running in it?`)) {
       return;
     }
     void this.store.close(terminal.id);

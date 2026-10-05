@@ -89,8 +89,8 @@ describe('Workspaces (integration)', () => {
   it('shows workspaces and the repositories of the first one', async () => {
     const { root } = await loaded();
     expect(texts(root, '.workspace__name')).toEqual(['Studia', 'Prywatne']);
-    expect(texts(root, '.workspace__count')).toEqual(['1 repo', '0 repo']);
-    expect(texts(root, 'tr.repo td').slice(0, 5)).toEqual(['lab', 'main', '2 zmiany', 'init · 5 minut temu', 'origin ↑1']);
+    expect(texts(root, '.workspace__count')).toEqual(['1 repo', '0 repos']);
+    expect(texts(root, 'tr.repo td').slice(0, 5)).toEqual(['lab', 'main', '2 changes', 'init · 5 minutes ago', 'origin ↑1']);
   });
 
   it('opening a repository updates the address, the explorer root and the git decorations', async () => {
@@ -117,34 +117,34 @@ describe('Workspaces (integration)', () => {
     await settle();
 
     expect(texts(root, 'app-explorer .row')).toEqual(['▸src•', 'NOTES.mdU']);
-    expect(root.querySelector('tr.repo button')!.textContent!.trim()).toBe('Otwarte');
+    expect(root.querySelector('tr.repo button')!.textContent!.trim()).toBe('Opened');
     expect(host.status.changeCount()).toBe(2);
   });
 
   it('does not send invalid names or clone addresses to the server', async () => {
     const { root, settle } = await loaded();
     const buttons = () => Array.from(root.querySelectorAll<HTMLButtonElement>('button'));
-    buttons().find((b) => b.textContent!.includes('Nowy workspace'))!.click();
+    buttons().find((b) => b.textContent!.includes('New workspace'))!.click();
     await settle();
-    const name = root.querySelector<HTMLInputElement>('input[aria-label="Nazwa nowego workspace\'u"]')!;
+    const name = root.querySelector<HTMLInputElement>('input[aria-label="New workspace name"]')!;
     name.value = 'a/b';
     name.form!.dispatchEvent(new Event('submit'));
     await settle();
-    expect(root.textContent).toContain('Nazwa może mieć do 40 znaków');
+    expect(root.textContent).toContain('A name has up to 40 characters');
 
-    buttons().find((b) => b.textContent!.includes('Sklonuj'))!.click();
+    buttons().find((b) => b.textContent!.includes('Clone a repository'))!.click();
     await settle();
     const url = root.querySelector<HTMLInputElement>('input[type="url"]')!;
     url.value = 'file:///etc';
     url.form!.dispatchEvent(new Event('submit'));
     await settle();
-    expect(root.textContent).toContain('Dozwolone są tylko adresy https://.');
+    expect(root.textContent).toContain('Only https:// URLs are allowed.');
 
     // The browser sees the host github.com here, and git sees evil.com: a URL with `\` or `@` must not pass.
     for (const [address, message] of [
-      ['https://github.com\\@evil.com/org/repo', 'Adres nie może zawierać loginu ani hasła.'],
-      ['https://github.com/org/repo?x=1', 'Adres może zawierać tylko litery łacińskie'],
-      ['https://github.com/org/../repo', 'Nieprawidłowy adres. Skopiuj go bez zmian']
+      ['https://github.com\\@evil.com/org/repo', 'The URL must not contain a user name or password.'],
+      ['https://github.com/org/repo?x=1', 'The URL may contain only Latin letters'],
+      ['https://github.com/org/../repo', 'Invalid URL. Copy it unchanged']
     ]) {
       url.value = address;
       url.form!.dispatchEvent(new Event('submit'));
@@ -167,13 +167,13 @@ describe('Workspaces (integration)', () => {
     await settle();
     http
       .expectOne((r) => r.url === '/api/git/pull' && r.params.get('repo') === 'studia/lab')
-      .flush({ message: 'Pobrano 1 commit.', changedPaths: ['studia/lab/a.c'] });
+      .flush({ message: 'Pulled 1 commit.', changedPaths: ['studia/lab/a.c'] });
     await settle();
 
     http.expectOne((r) => r.url === '/api/files/content').flush({ path: 'studia/lab/a.c', content: 'new', version: 'v2' });
     await settle();
     expect(host.editor.active()).toMatchObject({ value: 'new', version: 'v2' });
-    expect(root.querySelector('.repo-message')!.textContent!.trim()).toBe('Pobrano 1 commit.');
+    expect(root.querySelector('.repo-message')!.textContent!.trim()).toBe('Pulled 1 commit.');
   });
 
   it('shows a rejected push with the details from git', async () => {
@@ -187,7 +187,7 @@ describe('Workspaces (integration)', () => {
       .flush({ message: '! [rejected] main -> main (fetch first)' }, { status: 409, statusText: 'Conflict' });
     await settle();
     const message = root.querySelector('.repo-message [role="alert"]')!.textContent!;
-    expect(message).toContain('Push odrzucony');
+    expect(message).toContain('Push refused');
     expect(message).toContain('[rejected]');
   });
 });

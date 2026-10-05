@@ -111,11 +111,11 @@ export function repoRow(page: Page, name: string): Locator {
   return page.locator('app-workspaces-panel tr.repo').filter({ has: page.locator('.repo__name', { hasText: new RegExp(`^${escape(name)}$`) }) });
 }
 
-/** Opens a repository with the "Otwórz" (Open) button in the Workspace panel. */
+/** Opens a repository with the "Open" button in the Workspace panel. */
 export async function openRepo(page: Page, name: string, workspace = 'Studia'): Promise<void> {
   await page.locator('app-workspaces-panel .workspace', { hasText: workspace }).click();
-  await repoRow(page, name).getByRole('button', { name: `Otwórz ${name}` }).click();
-  await expect(repoRow(page, name).getByRole('button', { name: `Otwarte: ${name}` })).toBeVisible();
+  await repoRow(page, name).getByRole('button', { name: `Open ${name}` }).click();
+  await expect(repoRow(page, name).getByRole('button', { name: `Opened: ${name}` })).toBeVisible();
 }
 
 /** Opens the Terminal tab in the bottom panel. */

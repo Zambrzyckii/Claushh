@@ -33,7 +33,7 @@ export type ConsoleEvent =
       description: string;
       /**
        * The rule that the `allow-always` answer will save, e.g. `Bash(git push:*)`. Without it, the console does not offer
-       * "tak, zawsze" (yes, always), because the user would not know what they are permanently agreeing to.
+       * "yes, always", because the user would not know what they are permanently agreeing to.
        */
       alwaysRule?: string | null;
     }

@@ -19,7 +19,7 @@ import { Subscription } from 'rxjs';
 import { Dialogs } from '../../core/browser/dialogs';
 import { isTypingElsewhere } from '../../core/browser/focus';
 import { TerminalInfo } from '../../core/realtime/terminal-protocol';
-import { countLabel } from '../../core/text/polish';
+import { countLabel } from '../../core/text/format';
 import { previewText } from '../../core/text/visible-text';
 import { MAX_PENDING_INPUT, lineBreaks, sanitizePaste } from './terminal-input';
 import { TerminalStore } from './terminal-store';
@@ -47,9 +47,9 @@ const PASTE_MARGIN = 16;
  * Typing safety (docs/ARCHITECTURE.md, section "Terminal"):
  * - typed characters go through the terminal queue from TerminalStore (TerminalInputQueue): nothing is lost on a dropped
  *   connection and nothing is duplicated. Characters waiting longer than `AUTO_RESEND_MS` are paused until a decision
- *   in the panel above the terminal ("Wyślij" (send) / "Porzuć" (discard)),
+ *   in the panel above the terminal ("Send" / "Discard"),
  * - pasted text is cleaned of control characters, and text with line endings waits for a decision in a panel
- *   with a full preview ("Wklej" (paste) / "Anuluj" (cancel)),
+ *   with a full preview ("Paste" / "Cancel"),
  * - questions are panels on the page, not `confirm` windows: those stop the page (including the session timer), and Chrome
  *   truncates long text in them without warning,
  * - OSC 8 links are disabled (the link text could pretend to be a different address),
@@ -61,29 +61,29 @@ const PASTE_MARGIN = 16;
   template: `
     <div #host class="host"></div>
     @if (loadFailed()) {
-      <p class="failed" role="alert">Nie udało się załadować terminala. Odśwież stronę.</p>
+      <p class="failed" role="alert">Could not load the terminal. Reload the page.</p>
     }
     @if (pasteRequest(); as request) {
       <div class="decision decision--top" role="alertdialog" [attr.aria-labelledby]="ids.pasteTitle"
            [attr.aria-describedby]="ids.pasteText" (keydown.escape)="cancelPaste()">
         <p [id]="ids.pasteTitle">
-          Wklejany tekst ma {{ request.breaksLabel }}, więc może od razu uruchomić komendy. Wkleić do terminala?
+          The pasted text has {{ request.breaksLabel }}, so it can run commands at once. Paste it into the terminal?
         </p>
         <pre [id]="ids.pasteText">{{ request.preview }}</pre>
         <div>
-          <button type="button" (click)="confirmPaste()">Wklej</button>
-          <button #cancelPasteButton type="button" (click)="cancelPaste()">Anuluj</button>
+          <button type="button" (click)="confirmPaste()">Paste</button>
+          <button #cancelPasteButton type="button" (click)="cancelPaste()">Cancel</button>
         </div>
       </div>
     }
     @if (inputState().held) {
       <div class="decision" role="alertdialog" [attr.aria-labelledby]="ids.staleTitle" [attr.aria-describedby]="ids.staleText">
-        <p [id]="ids.staleTitle">W czasie rozłączenia wpisano znaki, które nie dotarły do terminala. Wysłać je teraz?</p>
+        <p [id]="ids.staleTitle">Characters typed while disconnected did not reach the terminal. Send them now?</p>
         <pre [id]="ids.staleText">{{ stalePreview() }}</pre>
-        <p class="faint">Terminal pokazuje to, co już do niego dotarło. „Porzuć” usuwa tylko powyższe znaki.</p>
+        <p class="faint">The terminal shows what already reached it. “Discard” removes only the characters above.</p>
         <div>
-          <button type="button" (click)="sendStaleInput()">Wyślij</button>
-          <button type="button" (click)="discardStaleInput()">Porzuć</button>
+          <button type="button" (click)="sendStaleInput()">Send</button>
+          <button type="button" (click)="discardStaleInput()">Discard</button>
         </div>
       </div>
     } @else if (inputNotice(); as notice) {
@@ -185,14 +185,14 @@ export class TerminalView {
   protected readonly ids = panelIds(`term-${crypto.randomUUID()}`);
 
   protected readonly loadFailed = signal(false);
-  /** Pasted text with line endings waiting for a decision ("Wklej" / "Anuluj"). */
+  /** Pasted text with line endings waiting for a decision ("Paste" / "Cancel"). */
   protected readonly pasteRequest = signal<{ text: string; preview: string; breaksLabel: string } | null>(null);
   protected readonly stalePreview = computed(() => previewText(this.inputState().heldText.replace(/\r\n?/g, '\n')));
   /** Message when typed characters are waiting for the connection or were rejected. */
   protected readonly inputNotice = computed(() => {
     const { text, overflow } = this.inputState();
     if (overflow) {
-      return 'Za dużo znaków czeka na wysłanie. Dalsze są pomijane, aż te dotrą.';
+      return 'Too many characters are waiting to be sent. Further ones are dropped until these arrive.';
     }
     if (!text) {
       return null;
@@ -201,9 +201,9 @@ export class TerminalView {
       case 'connected':
         return null;
       case 'disconnected':
-        return 'Brak połączenia z terminalem. Wpisane znaki czekają, aż połączenie wróci („połącz ponownie” nad terminalem).';
+        return 'No connection to the terminal. Typed characters wait until the connection is back (“reconnect” above the terminal).';
       default:
-        return 'Brak połączenia. Wpisane znaki zostaną wysłane po ponownym połączeniu.';
+        return 'No connection. Typed characters will be sent after reconnecting.';
     }
   });
 
@@ -217,7 +217,7 @@ export class TerminalView {
     });
 
     // Without a connection the view stops being attached: characters wait in the queue, and output in the buffer, until the next `attach`
-    // confirms what arrived and pauses characters that are too old (also when the connection comes back via a manual "połącz ponownie").
+    // confirms what arrived and pauses characters that are too old (also when the connection comes back via a manual "reconnect").
     effect(() => {
       if (this.store.connectionState() !== 'connected') {
         this.attached = false;
@@ -291,7 +291,7 @@ export class TerminalView {
       const queue = this.inputQueue();
       if (!queue.push(data) && !queue.state().overflow) {
         // A single fragment larger than the whole queue (in practice only a very long paste).
-        this.dialogs.alert('Tekst jest za długi dla terminala i nie został wysłany. Zapisz go do pliku w edytorze.');
+        this.dialogs.alert('The text is too long for the terminal and was not sent. Save it to a file in the editor.');
       }
       void this.flushInput();
     });
@@ -340,7 +340,7 @@ export class TerminalView {
       this.inputQueue().holdIfStale(AUTO_RESEND_MS);
       void this.flushInput();
     } catch {
-      term.write('\r\n\x1b[2m[nie udało się podłączyć terminala]\x1b[0m\r\n');
+      term.write('\r\n\x1b[2m[could not attach the terminal]\x1b[0m\r\n');
     }
   }
 
@@ -388,8 +388,8 @@ export class TerminalView {
     }
     if (text.length > MAX_PENDING_INPUT - PASTE_MARGIN) {
       this.dialogs.alert(
-        `Wklejany tekst jest za długi dla terminala (${countLabel(text.length, 'znak', 'znaki', 'znaków')}, ` +
-          `najwyżej ${MAX_PENDING_INPUT - PASTE_MARGIN}). Zapisz go do pliku w edytorze albo wklej w częściach.`
+        `The pasted text is too long for the terminal (${countLabel(text.length, 'character', 'characters')}, ` +
+          `at most ${MAX_PENDING_INPUT - PASTE_MARGIN}). Save it to a file in the editor or paste it in parts.`
       );
       return;
     }
@@ -398,11 +398,11 @@ export class TerminalView {
       term.paste(text);
       return;
     }
-    // Text with line endings waits for a decision. Focus on "Anuluj": Enter or Esc will not paste anything and will not reach the shell.
+    // Text with line endings waits for a decision. Focus on "Cancel": Enter or Esc will not paste anything and will not reach the shell.
     this.pasteRequest.set({
       text,
       preview: previewText(text.replace(/\r\n?/g, '\n')),
-      breaksLabel: countLabel(breaks, 'koniec linii', 'końce linii', 'końców linii')
+      breaksLabel: countLabel(breaks, 'line break', 'line breaks')
     });
     afterNextRender(() => this.cancelPasteButton()?.nativeElement.focus(), { injector: this.injector });
   }
@@ -424,7 +424,7 @@ export class TerminalView {
       return;
     }
     this.exitShown = true;
-    this.term.write('\r\n\x1b[2m[proces zakończony]\x1b[0m\r\n');
+    this.term.write('\r\n\x1b[2m[process exited]\x1b[0m\r\n');
   }
 
   private fitToContainer(): void {

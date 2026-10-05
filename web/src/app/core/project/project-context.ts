@@ -29,7 +29,7 @@ export class ProjectContext {
     const repo = this.query().get('repo') ?? '';
     return isSafeRelativePath(repo) ? repo : '';
   });
-  readonly label = computed(() => (this.path() === '' ? 'katalog projektów' : baseName(this.path())));
+  readonly label = computed(() => (this.path() === '' ? 'projects directory' : baseName(this.path())));
 
   private readonly changes = new Subject<readonly string[]>();
   private readonly saves = new Subject<readonly string[]>();

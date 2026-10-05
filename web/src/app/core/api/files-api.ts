@@ -110,18 +110,18 @@ function toFileApiError(error: unknown): FileApiError {
 export function fileErrorMessage(kind: FileErrorKind): string {
   switch (kind) {
     case 'not-found':
-      return 'Plik nie istnieje.';
+      return 'The file does not exist.';
     case 'too-large':
-      return 'Plik jest za duży, żeby go otworzyć w edytorze.';
+      return 'The file is too large to open in the editor.';
     case 'binary':
-      return 'To plik binarny, nie da się go wyświetlić jako tekst.';
+      return 'This is a binary file and cannot be shown as text.';
     case 'conflict':
-      return 'Plik zmienił się na dysku.';
+      return 'The file changed on disk.';
     case 'invalid-path':
-      return 'Nieprawidłowa ścieżka.';
+      return 'Invalid path.';
     case 'network':
-      return 'Brak połączenia z serwerem.';
+      return 'No connection to the server.';
     case 'server':
-      return 'Błąd serwera.';
+      return 'Server error.';
   }
 }

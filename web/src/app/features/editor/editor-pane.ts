@@ -34,7 +34,7 @@ export class EditorPane {
     if (this.store.close(doc.path)) {
       return;
     }
-    if (this.dialogs.confirm(`Plik ${doc.name} ma niezapisane zmiany. Zamknąć bez zapisywania?`)) {
+    if (this.dialogs.confirm(`${doc.name} has unsaved changes. Close it without saving?`)) {
       this.store.close(doc.path, true);
     }
   }
@@ -52,7 +52,7 @@ export class EditorPane {
 
   protected reload(doc: OpenDocument): void {
     if (this.dirty(doc) && !doc.conflict) {
-      if (!this.dialogs.confirm(`Porzucić niezapisane zmiany w ${doc.name} i wczytać plik z dysku?`)) {
+      if (!this.dialogs.confirm(`Discard the unsaved changes in ${doc.name} and load the file from disk?`)) {
         return;
       }
     }

@@ -9,10 +9,10 @@ const WORKSPACE_NAME = /^[\p{L}\p{N} _-]{1,40}$/u;
 export function validateWorkspaceName(name: string): string | null {
   const trimmed = name.trim();
   if (!trimmed) {
-    return 'Podaj nazwę.';
+    return 'Enter a name.';
   }
   if (!WORKSPACE_NAME.test(trimmed)) {
-    return 'Nazwa może mieć do 40 znaków: litery, cyfry, spacje, - i _.';
+    return 'A name has up to 40 characters: letters, digits, spaces, - and _.';
   }
   return null;
 }
@@ -33,28 +33,28 @@ const CLONE_URL = /^https:\/\/[a-z0-9.-]+(?::\d{1,5})?(?:\/[A-Za-z0-9._~-]+)+\/?
 export function validateCloneUrl(url: string): string | null {
   const trimmed = url.trim();
   if (!trimmed) {
-    return 'Podaj adres repozytorium.';
+    return 'Enter the repository URL.';
   }
   if (!/^https:\/\//i.test(trimmed)) {
-    return 'Dozwolone są tylko adresy https://.';
+    return 'Only https:// URLs are allowed.';
   }
   if (trimmed.slice('https://'.length).split('/', 1)[0].includes('@')) {
-    return 'Adres nie może zawierać loginu ani hasła.';
+    return 'The URL must not contain a user name or password.';
   }
   if (!CLONE_URL.test(trimmed)) {
-    return 'Adres może zawierać tylko litery łacińskie, cyfry i znaki . _ ~ - /, np. https://github.com/uzytkownik/projekt.git.';
+    return 'The URL may contain only Latin letters, digits and . _ ~ - /, e.g. https://github.com/user/project.git.';
   }
   let parsed: URL;
   try {
     parsed = new URL(trimmed);
   } catch {
-    return 'Nieprawidłowy adres.';
+    return 'Invalid URL.';
   }
   if (parsed.href !== trimmed || parsed.username || parsed.password) {
-    return 'Nieprawidłowy adres. Skopiuj go bez zmian, np. z przycisku „Code” na GitHubie.';
+    return 'Invalid URL. Copy it unchanged, e.g. from the “Code” button on GitHub.';
   }
   if (!CLONE_DIRECTORY.test(cloneDirectoryName(trimmed))) {
-    return 'Z adresu wychodzi nieprawidłowa nazwa katalogu (musi zaczynać się literą, cyfrą albo _).';
+    return 'The URL gives an invalid directory name (it must start with a letter, a digit or _).';
   }
   return null;
 }
@@ -65,7 +65,7 @@ export function validateCloneUrl(url: string): string | null {
  */
 const CLONE_DIRECTORY = /^[A-Za-z0-9_][A-Za-z0-9._-]{0,99}$/;
 
-/** Last segment of the URL path without the trailing `/` and `.git`, e.g. `projekt` from `https://github.com/u/projekt.git`. */
+/** Last segment of the URL path without the trailing `/` and `.git`, e.g. `project` from `https://github.com/u/project.git`. */
 export function cloneDirectoryName(url: string): string {
   return url.replace(/\/+$/, '').split('/').pop()!.replace(/\.git$/, '');
 }

@@ -23,22 +23,29 @@ Layout modeled on VS Code:
 
 | Area | Contents |
 |---|---|
-| Top bar | workspace / repo / branch path, session countdown, panel toggles, "Wyloguj" (log out) |
+| Top bar | workspace / repo / branch path, session countdown, panel toggles, "Log out" |
 | Left | file tree, marking of changed files (`M`) |
 | Center | editor (Monaco) with tabs, syntax highlighting and manual editing |
-| Right | collapsible **"Konsola"** (console) panel: conversation with Claude as plain monospace text, without icons, colors or the name "Claude"; under the prompt field a choice of **model**, **effort** and **mode** (ask before edits / accept edits / plan); permission requests (tak / tak, zawsze / nie) |
-| Bottom | collapsible panel with the tabs **Workspace** (list of workspaces and their repositories: branch, status, last commit, Otwórz (open) / Pull / Push) and **Terminal** |
+| Right | collapsible **"Console"** panel: conversation with Claude as plain monospace text, without icons, colors or the name "Claude"; under the prompt field a choice of **model**, **effort** and **mode** (ask before edits / accept edits / plan); permission requests (yes / yes, always / no) |
+| Bottom | collapsible panel with the tabs **Workspace** (list of workspaces and their repositories: branch, status, last commit, Open / Pull / Push) and **Terminal** |
 | Status bar | branch, number of changes, console status, cursor position |
 
 The mockup also shows a tunnel status in the status bar. It was dropped as it would add nothing: through the tunnel
 the page does not load at all while the tunnel is down, and a tunnel that fails while the page is open already shows
-in the status bar as "Konsola: brak połączenia" (console status).
+in the status bar as "Console: disconnected" (console status).
 
 Colors: dark theme with a single amber accent, to be refined in later iterations.
 Fonts: IBM Plex Sans (interface), JetBrains Mono (code, console). In the terminal the Nerd Font version,
 so that the icons from the dotfiles prompt work.
 
 Devices: mainly laptop and PC. The phone is secondary.
+
+Frontend decisions (UI refresh):
+- Everything the owner reads is English, in one language without a switch: the interface, the backend's own texts,
+  hub errors and the phone notifications. Dates are day first with a 24-hour clock (`en-GB`, `05/10/2026, 14:03`);
+  file names still sort with Polish collation (ł after l), a choice apart from the interface's language. Stored
+  console events keep the texts they were sent with. Rejected: a language switch (translation infrastructure for one
+  reader) and ISO dates.
 
 ## Tech stack
 
@@ -88,7 +95,7 @@ console conversations with their events, and the console's "always" rules (model
 - Phone notification through ntfy of every successful login, every start of an account lock, and every passkey added or removed.
 - Cookies `HttpOnly`, `Secure`, `SameSite=Strict`, antiforgery.
 - Short sessions (e.g. 30 minutes of inactivity, hard limit of 12 h), extended only by user activity,
-  list of active sessions, login history, "wyloguj wszędzie" (log out everywhere).
+  list of active sessions, login history, "Log out everywhere".
 - `[Authorize]` on SignalR hubs and checking the `Origin` header on WebSockets. The session is checked on every
   hub call, and open connections are closed when the session ends (including expiry).
 - Expiry also works without a connection to the server: after the deadline the browser returns to the login screen on its own.
@@ -189,10 +196,10 @@ Backend decisions (stage 1, part C):
   Rejected: a bucket per IPv6 address (a connection usually has a whole /64, so changing the address costs nothing), the
   prefix in `Ip` (the address would be lost) and an `inet` column (more code for the same query).
 - A login waits at most 10 s for the one before it; then it gets `429` with `Retry-After: 10`, and nothing is recorded
-  (like every `429`). Rejected: `503` (the frontend shows it as "Błąd serwera", and the contract and the mock would
+  (like every `429`). Rejected: `503` (the frontend shows it as "Server error", and the contract and the mock would
   change).
-- The login screen shows the wait from `Retry-After` as "N s" below a minute, "N min" below an hour and "N godz."
-  otherwise, rounded up. Rejected: full words with Polish plural forms (more code for the same information).
+- The login screen shows the wait from `Retry-After` as "N s" below a minute, "N min" below an hour and "N h"
+  otherwise, rounded up. Rejected: full words with plural forms (more code for the same information).
 - Phone notifications through ntfy of every successful login, every start of an account lock, and every passkey
   added or removed: one `POST` of the text to the topic URL (a secret, in the server's environment file), with an
   optional access token. The login only queues the message; a background service sends it once, outside the login
@@ -307,10 +314,9 @@ Backend decisions (stage 2):
 - Saving a file that disappeared: a save with another `baseVersion` is `409 {"currentVersion":"absent"}`, and a save
   with `baseVersion` `absent` creates the file when the name does not exist at all (not even as a dangling symlink,
   which could lead anywhere) and its directory exists inside the projects directory (`404` when it is missing). When
-  the file exists after all, `absent` is a `409` with its real version. So "Nadpisz moją wersją" (Overwrite with my
-  version) re-creates a deleted file with the editor's content. Rejected: `404` for a deleted file (the editor could
-  not save its text again) and creating through a dangling symlink (the new file would appear wherever the link
-  points).
+  the file exists after all, `absent` is a `409` with its real version. So "Overwrite with my version" re-creates a
+  deleted file with the editor's content. Rejected: `404` for a deleted file (the editor could not save its text
+  again) and creating through a dangling symlink (the new file would appear wherever the link points).
 - `realpath`, `statx` and `access` are called through P/Invoke (`Files/Libc.cs`), so the backend runs only on Linux,
   like the deployment. The API and test assemblies are marked `[SupportedOSPlatform("linux")]` (`Program.cs`,
   `ApiFactory.cs`), so the platform analyzer accepts the Unix-only calls such as `File.SetUnixFileMode`. Rejected: the
@@ -377,7 +383,7 @@ Backend decisions (stage 3):
   shows as done. Rejected: steps at `tool_use` with counts guessed from the input.
 - `files-changed` comes from successful edits, and for commands from the repository's git status at the end of the turn
   compared with the prompt's, only when the project was a repository at the prompt; that status is read outside the
-  conversation's lock. Rejected: every status path at each turn (false "Plik zmienił się" notes) and classifying
+  conversation's lock. Rejected: every status path at each turn (false "The file changed" notes) and classifying
   commands by their first word.
 - A step's output keeps its last 32,000 characters. Conversations are deleted 90 days after their last event, like login
   attempts; the rules stay.
@@ -446,7 +452,7 @@ Backend decisions (stage 4):
   lock wait and every git step, which keeps the answer under Cloudflare's 125 s; local steps also at most 30 s each. On
   a timeout git's process tree gets SIGTERM, so git removes its lock files, and if git still runs 1 s later, the whole
   tree is killed; a partial clone is removed, and the answer is `502` with "Git did not finish within N s and was
-  stopped.". Rejected: `504` (the frontend shows "błąd serwera" without the reason), a limit per git step (a pull
+  stopped.". Rejected: `504` (the frontend shows "Server error" without the reason), a limit per git step (a pull
   waiting behind another operation could pass 125 s) and killing at once (git's `*.lock` files would stay and block
   the next git command in that repository).
 - The clone URL is checked with the frontend's rule in .NET terms (`[0-9]` and `\z` in the pattern, then the WHATWG
@@ -524,7 +530,7 @@ Backend decisions (stage 4):
 - `Input` goes to the pane as bytes (`send-keys -H`, 1024 per command). Rejected: `send-keys -l` (tmux quoting of `;`,
   quotes and control characters).
 - `Resize` of an unknown id and `CloseTerminal` of an unknown id are silent. Rejected: errors there (`Resize` is a
-  `send`, and a second tab would keep a dead tab with "Nie udało się zamknąć terminala.").
+  `send`, and a second tab would keep a dead tab with "Could not close the terminal.").
 - The terminal view does not answer terminal queries; tmux answers the cursor position report, the mode report and
   the colour queries in the pane and passes every query on to every view, so an answer from xterm would reach the
   program once per open tab. The device attributes queries (DA1, DA2) get no answer at all: neither the view nor
@@ -550,7 +556,7 @@ Backend decisions (stage 4):
 - In Production the API makes its process non-dumpable as soon as it has started: other processes of `workspace` can
   neither read its `/proc` files (its environment holds the secrets) nor attach to it.
 - By default the console asks for permission before edits and commands such as `git push`. The request shows the command with all
-  hidden characters, and a permanent permission ("tak, zawsze" – yes, always) requires a known rule and confirmation.
+  hidden characters, and a permanent permission ("yes, always") requires a known rule and confirmation.
 - Terminal: pasted text without control characters, multiple lines only after confirmation, typed characters are not lost
   or duplicated when the connection drops.
 
@@ -736,7 +742,7 @@ The order is chosen so that only already secured things reach the internet.
         permission requests through stdio control requests (`--permission-prompt-tool stdio`), storing
         conversations, resuming (`--resume`).
 - [x] **Stage 4: git, terminal, workspaces.**
-  - [x] Frontend: Workspace panel (workspaces, repository table, Otwórz (open) / Pull / Push, creating a
+  - [x] Frontend: Workspace panel (workspaces, repository table, Open / Pull / Push, creating a
         workspace, cloning), open repo in the URL, path and branch in the top bar, branch and number of changes
         in the status bar, git markers in the explorer, a separate console conversation for each repo.
   - [x] Frontend: Terminal tab (xterm.js): multiple terminals, reattaching after a reload without losing
@@ -745,12 +751,11 @@ The order is chosen so that only already secured things reach the internet.
         for the network, display names in the database, a background fetch at most every 5 minutes).
   - [x] Backend: hub `/hubs/terminal` from the contract in `ARCHITECTURE.md` (terminal: tmux in control mode).
 - [ ] **Stage 5: polish.**
-  - [x] Frontend: session countdown with extension on activity, "Bezpieczeństwo" (security) dialog (active sessions,
-        login history, "Wyloguj pozostałe sesje" (log out other sessions) and "Wyloguj wszędzie" (log out
-        everywhere)), diff view against HEAD in the editor.
+  - [x] Frontend: session countdown with extension on activity, "Security" dialog (active sessions,
+        login history, "Log out other sessions" and "Log out everywhere"), diff view against HEAD in the editor.
   - [x] Frontend: fixes from the security review (pasting and typing in the terminal, OSC 8 links, focus,
         permission requests in the console, strict clone URL, unconfirmed logout without returning to the app,
-        expiry without the server, "Wyloguj wszędzie", CSP with Trusted Types and headers, XSRF token bound to the identity,
+        expiry without the server, "Log out everywhere", CSP with Trusted Types and headers, XSRF token bound to the identity,
         mock only on `127.0.0.1`), verified in several rounds of independent review, with integration and e2e tests.
   - [x] Backend: passkeys.
   - [ ] Frontend: passkeys (Security dialog, login button).

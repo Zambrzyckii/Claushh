@@ -53,7 +53,7 @@ profile may still set its own, e.g. `DOTNET_ROOT`). Terminals end when the API s
 at `http://localhost:4200`: hubs accept only the origins in `Hubs:AllowedOrigins` (`appsettings.Development.json`), so
 `http://127.0.0.1:4200` gets no terminal or console.
 
-The Konsola panel runs the `claude` CLI (`Console:ClaudePath`, by default `claude` on PATH) with a config directory of
+The Console panel runs the `claude` CLI (`Console:ClaudePath`, by default `claude` on PATH) with a config directory of
 its own, `~/.local/state/claushh/claude` (`Console:ConfigDirectory`; `$XDG_STATE_HOME/claushh/claude` when
 `XDG_STATE_HOME` is set): your `~/.claude` settings, CLAUDE.md and plugins are not used there. Log in there once:
 
@@ -64,7 +64,7 @@ CLAUDE_CONFIG_DIR=~/.local/state/claushh/claude claude    # then /login, and /ex
 or put an Anthropic API key in a file with mode 0600 outside the projects directory and set `Console:ApiKeyFile` to
 its path; the API checks both (the path as written and with symlinks resolved, and no group or other permissions)
 and otherwise leaves the console unavailable, with the reason in its log (an `ANTHROPIC_API_KEY` in the API's
-environment never reaches the CLI). A "tak, zawsze" rule is saved per project in the database; to remove one:
+environment never reaches the CLI). A "yes, always" rule is saved per project in the database; to remove one:
 
 ```bash
 docker compose -p claushh-dev -f deploy/docker-compose.yml --env-file deploy/.env exec postgres \
@@ -73,7 +73,7 @@ docker compose -p claushh-dev -f deploy/docker-compose.yml --env-file deploy/.en
 
 The config directory also holds the login (`.credentials.json`), the CLI's transcripts (kept 90 days), plan files and
 backups of its own state. Everything but `.credentials.json` may be deleted while the API is stopped; older
-conversations then cannot be resumed, and "Nowa" starts a new one. Without `.credentials.json`, log in again as above.
+conversations then cannot be resumed, and "New" starts a new one. Without `.credentials.json`, log in again as above.
 
 Cloning, fetching and pulling a public repository needs no credential helper in development; pushing always needs
 credentials (also for a public repository); the server's GitHub token is set up in "Deployment", step 8.
@@ -232,7 +232,7 @@ on purpose, as `workspace`: `~/.local/bin/claude update`, or the installer again
 (`curl -fsSL https://claude.ai/install.sh | bash -s <version>` for a given version); then
 `sudo systemctl restart claushh`, which ends the open terminals and console processes.
 
-A "tak, zawsze" rule is removed on the server as in development, in the production database:
+A "yes, always" rule is removed on the server as in development, in the production database:
 ```bash
 sudo docker compose -p claushh-prod -f /opt/claushh/deploy/docker-compose.yml --env-file /etc/claushh/compose.env \
   exec postgres psql -U claushh -d claushh -c "DELETE FROM \"ConsoleRules\" WHERE \"ProjectPath\" = '<project>' AND \"Rule\" = '<rule>'"
@@ -273,8 +273,8 @@ sudo docker compose -p claushh-prod -f /opt/claushh/deploy/docker-compose.yml --
   If a short image name fails (`docker run alpine`), add `unqualified-search-registries = ["docker.io"]` to
   `~/.config/containers/registries.conf`. If Testcontainers cannot start its Ryuk container, run the tests with
   `TESTCONTAINERS_RYUK_DISABLED=true` (then `docker container prune` after a crashed run).
-- **Console** (once "The console" above is done). In the Konsola panel, a prompt that runs `pwd` and `env` (answer
-  "tak") shows the repository's directory and no `ConnectionStrings__*` or `Notifications__*` variable;
+- **Console** (once "The console" above is done). In the Console panel, a prompt that runs `pwd` and `env` (answer
+  "yes") shows the repository's directory and no `ConnectionStrings__*` or `Notifications__*` variable;
   `journalctl -u claushh` then shows `The console runs claude <version>`. This does not hold up step 17.
 - **Backup and restore:**
   ```bash
@@ -317,7 +317,7 @@ sudo docker compose -p claushh-prod -f /opt/claushh/deploy/docker-compose.yml --
 - **Forged headers.** Try a login with a wrong password in the browser, copy that request from the developer tools
   (Network, `login`, "Copy as cURL"), and send it again with
   `-H 'CF-Connecting-IP: 203.0.113.7' -H 'X-Forwarded-For: 203.0.113.8'` added. After a real login, the history in
-  "Bezpieczeństwo" shows that attempt with your public IP, not 203.0.113.x and not 127.0.0.1.
+  "Security" shows that attempt with your public IP, not 203.0.113.x and not 127.0.0.1.
   `curl -sI -H 'X-Forwarded-Proto: https' http://<domain>/` answers with a redirect to `https://`. Logins from two
   networks (phone data, home Wi-Fi) show two different IPs.
 - **Cookie.** The session cookie is `__Host-claushh-session` (developer tools, Application, Cookies), which also shows
@@ -327,7 +327,7 @@ sudo docker compose -p claushh-prod -f /opt/claushh/deploy/docker-compose.yml --
 - **WebSocket.** A terminal still answers after 10 idle minutes, and the output of `docker run` streams.
 - **Headers.** On `/` the developer tools show `Content-Security-Policy` with `frame-ancestors 'none'`,
   `X-Frame-Options: DENY` and `Strict-Transport-Security`; the ntfy notification of this login arrives.
-- **Passkey** (once the Security dialog has passkeys). Add one in "Bezpieczeństwo": the password and a code are asked
+- **Passkey** (once the Security dialog has passkeys). Add one in "Security": the password and a code are asked
   first, and the "passkey added" notification arrives. Log out and log in with it: the history shows `passkey`, and
   the notification names it. Remove it: the "passkey removed" notification arrives.
 

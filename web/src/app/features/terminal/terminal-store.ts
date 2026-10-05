@@ -36,7 +36,7 @@ export class TerminalStore {
   private readonly reconnectedManually$ = new Subject<void>();
   /**
    * The views should attach again: after an automatic SignalR reconnect or after a manual
-   * "połącz ponownie" (reconnect), when the automatic attempts have ended.
+   * "reconnect", when the automatic attempts have ended.
    */
   readonly reattach: Observable<void> = merge(this.connection.reconnected, this.reconnectedManually$);
 
@@ -48,12 +48,12 @@ export class TerminalStore {
     });
     this.connection.reconnected.pipe(takeUntilDestroyed(destroyRef)).subscribe(() => void this.refreshList());
 
-    // Automatic connection attempts have ended (e.g. a long network outage): show "połącz ponownie" (reconnect).
+    // Automatic connection attempts have ended (e.g. a long network outage): show "reconnect".
     effect(() => {
       if (this.connection.state() === 'disconnected' && this.loaded()) {
         untracked(() => {
           this.initialized = null;
-          this.error.set('Brak połączenia z terminalem.');
+          this.error.set('No connection to the terminal.');
         });
       }
     });
@@ -65,7 +65,7 @@ export class TerminalStore {
       const again = this.loaded();
       this.error.set(null);
       if (!(await this.connection.connect())) {
-        this.error.set('Brak połączenia z terminalem.');
+        this.error.set('No connection to the terminal.');
         this.initialized = null;
         return;
       }
@@ -88,7 +88,7 @@ export class TerminalStore {
       this.terminalsSignal.update((list) => [...list.filter((t) => t.id !== terminal.id), terminal]);
       this.activeSignal.set(terminal.id);
     } catch {
-      this.error.set('Nie udało się otworzyć terminala.');
+      this.error.set('Could not open a terminal.');
     }
   }
 
@@ -101,7 +101,7 @@ export class TerminalStore {
     try {
       await this.connection.close(id);
     } catch {
-      this.error.set('Nie udało się zamknąć terminala.');
+      this.error.set('Could not close the terminal.');
       return;
     }
     this.dropInput(id);
@@ -163,7 +163,7 @@ export class TerminalStore {
         this.activeSignal.set(terminals.at(-1)?.id ?? null);
       }
     } catch {
-      this.error.set('Nie udało się wczytać terminali.');
+      this.error.set('Could not load the terminals.');
     }
   }
 }

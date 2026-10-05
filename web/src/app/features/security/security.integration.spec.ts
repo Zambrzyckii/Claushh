@@ -12,7 +12,7 @@ import { HardNavigation } from '../../core/browser/hard-navigation';
 import { SecurityDialog } from './security-dialog';
 
 /**
- * Integration: real AuthService + interceptor + SessionTimer + the "Bezpieczeństwo" window.
+ * Integration: real AuthService + interceptor + SessionTimer + the Security window.
  * Only HTTP (HttpTestingController), the page reload (HardNavigation), the `confirm` windows (Dialogs)
  * and the clock (fake timers) are replaced.
  */
@@ -197,7 +197,7 @@ describe('Session and security (integration)', () => {
     expect(localStorage.getItem('claushh-pending-logout')).toBe('s2');
   });
 
-  it('"Wyloguj wszędzie" asks once, including unsaved files, before ending any session', async () => {
+  it('"Log out everywhere" asks once, including unsaved files, before ending any session', async () => {
     const { root, render, host, fixture } = await loggedIn(1800);
     host.unsaved = 2;
     fixture.changeDetectorRef.markForCheck();
@@ -205,13 +205,13 @@ describe('Session and security (integration)', () => {
     http.expectOne('/api/auth/sessions').flush([]);
     http.expectOne('/api/auth/logins').flush([]);
     await render();
-    const everywhere = Array.from(root.querySelectorAll('button')).find((b) => b.textContent!.includes('Wyloguj wszędzie'))!;
+    const everywhere = Array.from(root.querySelectorAll('button')).find((b) => b.textContent!.includes('Log out everywhere'))!;
 
     confirm.mockReturnValueOnce(false);
     everywhere.click();
     await render();
     expect(confirm).toHaveBeenCalledExactlyOnceWith(
-      'Wylogować wszystkie sesje, także tę? Niezapisane pliki (2) zostaną porzucone.'
+      'Log out every session, this one too? Unsaved files (2) will be discarded.'
     );
     http.expectNone('/api/auth/sessions/revoke-others');
 
@@ -238,7 +238,7 @@ describe('Session and security (integration)', () => {
     await render();
 
     expect(root.querySelectorAll('tr.session')).toHaveLength(2);
-    expect(text(root, 'tr.session--current')).toContain('ta sesja');
+    expect(text(root, 'tr.session--current')).toContain('this session');
     expect(root.querySelectorAll('tr.login--failed')).toHaveLength(1);
 
     root.querySelector<HTMLButtonElement>('tr.session:not(.session--current) button')!.click();

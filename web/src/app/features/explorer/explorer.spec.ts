@@ -71,12 +71,12 @@ describe('Explorer', () => {
     const pending = new Subject<DirectoryEntry[]>();
     list = vi.fn(() => pending);
     const fixture = await create();
-    expect(labels(fixture.nativeElement)).toEqual(['Wczytywanie…']);
+    expect(labels(fixture.nativeElement)).toEqual(['Loading…']);
 
     pending.error(new FileApiError('network'));
     await fixture.whenStable();
     fixture.detectChanges();
-    expect(labels(fixture.nativeElement)).toEqual(['Brak połączenia z serwerem.']);
+    expect(labels(fixture.nativeElement)).toEqual(['No connection to the server.']);
   });
 
   it('reloads the root and expanded directories on refresh', async () => {
@@ -91,6 +91,6 @@ describe('Explorer', () => {
     await fixture.whenStable();
     fixture.detectChanges();
     expect(list.mock.calls.map((c) => c[0])).toEqual(['', 'src']);
-    expect(labels(root)).toContain('Plik nie istnieje.');
+    expect(labels(root)).toContain('The file does not exist.');
   });
 });

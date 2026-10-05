@@ -4,10 +4,11 @@ import { firstValueFrom } from 'rxjs';
 import { ActiveSession, LoginAttempt, SessionsApi } from '../../core/api/sessions-api';
 import { SessionTimer } from '../../core/auth/session-timer';
 import { Dialogs } from '../../core/browser/dialogs';
+import { formatDateTime } from '../../core/text/format';
 
 /**
- * The "Bezpieczeństwo" (security) window (opened by the user name in the top bar): time until the session ends, active sessions
- * that can be ended, login history, "Wyloguj pozostałe sesje" (log out other sessions) and "Wyloguj wszędzie" (log out everywhere).
+ * The Security window (opened by the user name in the top bar): time until the session ends, active sessions that can be
+ * ended, login history, "Log out other sessions" and "Log out everywhere".
  * Native `<dialog>` with `showModal()`: focus stays in the window, Esc closes it.
  */
 @Component({
@@ -20,10 +21,10 @@ export class SecurityDialog {
   private readonly dialogs = inject(Dialogs);
   protected readonly timer = inject(SessionTimer);
 
-  /** Number of unsaved files. "Wyloguj wszędzie" asks about them right away, together with the confirmation. */
+  /** Number of unsaved files. "Log out everywhere" asks about them right away, together with the confirmation. */
   readonly unsavedCount = input(0);
   /**
-   * "Wyloguj wszędzie": the other sessions are already ended, and the user has also confirmed discarding unsaved
+   * "Log out everywhere": the other sessions are already ended, and the user has also confirmed discarding unsaved
    * files, so the parent logs out this session without further questions.
    */
   readonly logoutEverywhere = output<void>();
@@ -52,11 +53,11 @@ export class SecurityDialog {
   }
 
   protected async revoke(session: ActiveSession): Promise<void> {
-    await this.run(() => firstValueFrom(this.api.revoke(session.id)), 'Nie udało się zakończyć sesji.');
+    await this.run(() => firstValueFrom(this.api.revoke(session.id)), 'Could not end the session.');
   }
 
   protected async revokeOthers(): Promise<void> {
-    await this.run(() => firstValueFrom(this.api.revokeOthers()), 'Nie udało się zakończyć pozostałych sesji.');
+    await this.run(() => firstValueFrom(this.api.revokeOthers()), 'Could not end the other sessions.');
   }
 
   protected async everywhere(): Promise<void> {
@@ -64,12 +65,12 @@ export class SecurityDialog {
     const unsaved = this.unsavedCount();
     const question =
       unsaved > 0
-        ? `Wylogować wszystkie sesje, także tę? Niezapisane pliki (${unsaved}) zostaną porzucone.`
-        : 'Wylogować wszystkie sesje, także tę?';
+        ? `Log out every session, this one too? Unsaved files (${unsaved}) will be discarded.`
+        : 'Log out every session, this one too?';
     if (!this.dialogs.confirm(question)) {
       return;
     }
-    const ok = await this.run(() => firstValueFrom(this.api.revokeOthers()), 'Nie udało się zakończyć pozostałych sesji.', false);
+    const ok = await this.run(() => firstValueFrom(this.api.revokeOthers()), 'Could not end the other sessions.', false);
     if (ok) {
       this.close();
       this.logoutEverywhere.emit();
@@ -77,10 +78,7 @@ export class SecurityDialog {
   }
 
   protected date(iso: string): string {
-    const date = new Date(iso);
-    return Number.isNaN(date.getTime())
-      ? iso
-      : date.toLocaleString('pl-PL', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    return formatDateTime(iso);
   }
 
   private async load(): Promise<void> {
@@ -90,7 +88,7 @@ export class SecurityDialog {
       this.sessions.set(sessions);
       this.logins.set(logins);
     } catch {
-      this.error.set('Nie udało się wczytać sesji.');
+      this.error.set('Could not load the sessions.');
     }
   }
 

@@ -1,14 +1,14 @@
-<div class="tabs" role="tablist" aria-label="Otwarte pliki">
+<div class="tabs" role="tablist" aria-label="Open files">
   @for (doc of store.documents(); track doc.path) {
     <div class="tab" [class.tab--active]="doc.path === store.activePath()" (auxclick)="closeWithMiddleClick(doc, $event)">
       <button type="button" role="tab" class="tab__name" [attr.aria-selected]="doc.path === store.activePath()"
               [title]="doc.path" (click)="store.activate(doc.path)">
         {{ doc.name }}
         @if (dirty(doc)) {
-          <span class="tab__dirty" aria-label="niezapisane zmiany">●</span>
+          <span class="tab__dirty" aria-label="unsaved changes">●</span>
         }
       </button>
-      <button type="button" class="tab__close" [attr.aria-label]="'Zamknij ' + doc.name" (click)="close(doc, $event)">×</button>
+      <button type="button" class="tab__close" [attr.aria-label]="'Close ' + doc.name" (click)="close(doc, $event)">×</button>
     </div>
   }
 </div>
@@ -23,42 +23,42 @@
     }
     <span class="breadcrumb__state">
       @if (doc.saving) {
-        zapisywanie…
+        Saving…
       } @else if (doc.diff?.status === 'loading') {
-        wczytywanie zmian…
+        Loading changes…
       } @else if (isNewFile(doc)) {
-        nowy plik (brak w ostatnim commicie)
+        New file (not in the last commit)
       }
     </span>
     @if (doc.status === 'ready' && store.canDiff(doc.path)) {
       <button type="button" class="breadcrumb__toggle" [attr.aria-pressed]="doc.diff !== null"
-              (click)="store.toggleDiff(doc.path)">{{ doc.diff ? 'Ukryj zmiany' : 'Pokaż zmiany' }}</button>
+              (click)="store.toggleDiff(doc.path)">{{ doc.diff ? 'Hide changes' : 'Show changes' }}</button>
     }
   </div>
 
   @if (doc.diff?.status === 'error') {
     <div class="banner banner--warning" role="alert">
-      <span>Nie udało się wczytać wersji z ostatniego commita.</span>
-      <button type="button" (click)="store.toggleDiff(doc.path)">Zamknij widok zmian</button>
+      <span>Could not load the version from the last commit.</span>
+      <button type="button" (click)="store.toggleDiff(doc.path)">Close the changes view</button>
     </div>
   }
 
   @if (doc.conflict) {
     <div class="banner banner--warning" role="alert">
-      <span>Plik zmienił się na dysku, np. edytowała go konsola. Twoja wersja nie została zapisana.</span>
-      <button type="button" (click)="reload(doc)">Wczytaj z dysku</button>
-      <button type="button" (click)="overwrite(doc)">Nadpisz moją wersją</button>
+      <span>The file changed on disk, e.g. the console edited it. Your version was not saved.</span>
+      <button type="button" (click)="reload(doc)">Load from disk</button>
+      <button type="button" (click)="overwrite(doc)">Overwrite with my version</button>
     </div>
   } @else if (doc.changedOnDisk) {
     <div class="banner banner--warning" role="alert">
-      <span>Plik zmienił się na dysku (konsola lub pull), a masz w nim niezapisane zmiany.</span>
-      <button type="button" (click)="store.reload(doc.path)">Wczytaj z dysku</button>
-      <button type="button" (click)="store.keepLocalVersion(doc.path)">Zostaw moją wersję</button>
+      <span>The file changed on disk (console or pull), and you have unsaved changes in it.</span>
+      <button type="button" (click)="store.reload(doc.path)">Load from disk</button>
+      <button type="button" (click)="store.keepLocalVersion(doc.path)">Keep my version</button>
     </div>
   } @else if (doc.status === 'ready' && doc.error) {
     <div class="banner banner--warning" role="alert">
       <span>{{ doc.error }}</span>
-      <button type="button" (click)="store.save(doc.path)">Spróbuj ponownie</button>
+      <button type="button" (click)="store.save(doc.path)">Try again</button>
     </div>
   }
 }
@@ -68,14 +68,14 @@
 
   @if (store.active(); as doc) {
     @if (doc.status === 'loading') {
-      <p class="message">Wczytywanie…</p>
+      <p class="message">Loading…</p>
     } @else if (doc.status === 'error') {
       <div class="message" role="alert">
         <p>{{ doc.error }}</p>
-        <button type="button" (click)="retry(doc)">Spróbuj ponownie</button>
+        <button type="button" (click)="retry(doc)">Try again</button>
       </div>
     }
   } @else {
-    <p class="message">Wybierz plik w eksploratorze.</p>
+    <p class="message">Choose a file in the explorer.</p>
   }
 </div>

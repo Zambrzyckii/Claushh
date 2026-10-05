@@ -37,7 +37,7 @@ test('opens a file in Monaco with highlighting, breadcrumb and status bar', asyn
   await expectEditorToContain(page, 'int main(void)');
   await expect(page.locator('.tab__name')).toHaveText(['main.c']);
   await expect(page.locator('.breadcrumb')).toHaveText(/studia\s*›\s*lab-3-sieci\s*›\s*src\s*›\s*main\.c/);
-  await expect(page.locator('.statusbar')).toContainText('Ln 1, Kol 1');
+  await expect(page.locator('.statusbar')).toContainText('Ln 1, Col 1');
   await expect(page.locator('.statusbar__language')).toHaveText('c');
   expect(await page.locator('.monaco-editor .view-lines span[class*="mtk"]').count()).toBeGreaterThan(3);
   await expect(page.locator('.monaco-editor .line-numbers').first()).toBeVisible();
@@ -50,7 +50,7 @@ test('edits are saved with Ctrl+S', async ({ page, request }) => {
   await page.keyboard.press('Control+Home');
   await page.keyboard.type('// edited\n');
   await expect(page.locator('.tab__dirty')).toBeVisible();
-  await expect(page.locator('.statusbar__unsaved')).toHaveText('Niezapisane: 1');
+  await expect(page.locator('.statusbar__unsaved')).toHaveText('Unsaved: 1');
 
   await page.keyboard.press('Control+s');
   await expect(page.locator('.tab__dirty')).toHaveCount(0);
@@ -67,11 +67,11 @@ test('a save conflict can be resolved by reloading or overwriting', async ({ pag
   await page.locator('.monaco-editor .view-lines').click();
   await page.keyboard.type('x');
   await page.keyboard.press('Control+s');
-  const banner = page.locator('.banner', { hasText: 'zmienił się na dysku' });
+  const banner = page.locator('.banner', { hasText: 'changed on disk' });
   await expect(banner).toBeVisible();
   expect((await mockState(request)).files[MAIN]).toBe('// changed on disk\n');
 
-  await banner.getByRole('button', { name: 'Wczytaj z dysku' }).click();
+  await banner.getByRole('button', { name: 'Load from disk' }).click();
   await expect(banner).toHaveCount(0);
   await expect.poll(async () => (await editorText(page)).trim()).toBe('// changed on disk'); // Monaco renders in the next frame
 
@@ -80,7 +80,7 @@ test('a save conflict can be resolved by reloading or overwriting', async ({ pag
   await page.keyboard.press('Control+End');
   await page.keyboard.type('mine');
   await page.keyboard.press('Control+s');
-  await banner.getByRole('button', { name: 'Nadpisz moją wersją' }).click();
+  await banner.getByRole('button', { name: 'Overwrite with my version' }).click();
   await expect(banner).toHaveCount(0);
   expect((await mockState(request)).files[MAIN]).toBe('// changed on disk\nmine');
 });
@@ -99,7 +99,7 @@ test('tabs keep their own unsaved text; binary files show an error', async ({ pa
   await expectEditorToContain(page, 'Z');
 
   await treeRow(page, 'logo.png').click();
-  await expect(page.locator('.message')).toContainText('plik binarny');
+  await expect(page.locator('.message')).toContainText('binary file');
 });
 
 test('closing a dirty tab and logging out ask for confirmation', async ({ page, request }) => {
@@ -113,11 +113,11 @@ test('closing a dirty tab and logging out ask for confirmation', async ({ page, 
   await expect(page.locator('.tab')).toHaveCount(1);
 
   page.once('dialog', (d) => d.dismiss());
-  await page.getByRole('button', { name: 'Wyloguj' }).click();
+  await page.getByRole('button', { name: 'Log out' }).click();
   await expect(page).toHaveURL('/');
 
   page.once('dialog', (d) => d.accept());
-  await page.getByRole('button', { name: 'Wyloguj' }).click();
+  await page.getByRole('button', { name: 'Log out' }).click();
   await expect(page).toHaveURL('/login?logout=ok');
   await expect(page.locator('.monaco-editor')).toHaveCount(0);
   expect((await mockState(request)).files[MAIN]).not.toContain('unsaved');
@@ -132,7 +132,7 @@ test('a file that loads slowly does not take the focus from the console', async 
     }
   );
   await openFile(page, MAIN);
-  const prompt = page.getByRole('textbox', { name: 'Polecenie' });
+  const prompt = page.getByRole('textbox', { name: 'Prompt' });
   await prompt.click();
   await page.keyboard.type('piszę w konsoli');
   await expectEditorToContain(page, 'int main');

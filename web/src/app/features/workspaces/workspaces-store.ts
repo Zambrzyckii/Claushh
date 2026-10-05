@@ -79,7 +79,7 @@ export class WorkspacesStore {
       }
       await this.refreshRepos();
     } catch (error) {
-      this.listError.set(message(error, 'Nie udało się wczytać workspace\'ów.'));
+      this.listError.set(message(error, 'Could not load the workspaces.'));
     }
   }
 
@@ -109,7 +109,7 @@ export class WorkspacesStore {
       }
     } catch (error) {
       if (request === this.reposRequest) {
-        this.reposError.set(message(error, 'Nie udało się wczytać repozytoriów.'));
+        this.reposError.set(message(error, 'Could not load the repositories.'));
       }
     }
   }
@@ -132,7 +132,7 @@ export class WorkspacesStore {
       return null;
     } catch (error) {
       const e = toApiError(error);
-      return e.kind === 'conflict' ? 'Workspace o tej nazwie już istnieje.' : message(e, 'Nie udało się utworzyć workspace\'u.');
+      return e.kind === 'conflict' ? 'A workspace with this name already exists.' : message(e, 'Could not create the workspace.');
     }
   }
 
@@ -140,7 +140,7 @@ export class WorkspacesStore {
   async clone(url: string): Promise<string | null> {
     const workspace = this.selectedSignal();
     if (!workspace) {
-      return 'Najpierw wybierz workspace.';
+      return 'Choose a workspace first.';
     }
     const invalid = validateCloneUrl(url);
     if (invalid) {
@@ -158,11 +158,11 @@ export class WorkspacesStore {
       const e = toApiError(error);
       switch (e.kind) {
         case 'conflict':
-          return 'Repozytorium o tej nazwie już jest w tym workspace.';
+          return 'A repository with this name is already in this workspace.';
         case 'remote':
-          return withDetail('Nie udało się sklonować.', e.detail);
+          return withDetail('Could not clone.', e.detail);
         default:
-          return message(e, 'Nie udało się sklonować.');
+          return message(e, 'Could not clone.');
       }
     }
   }
@@ -171,12 +171,12 @@ export class WorkspacesStore {
     await this.run(repo, 'pull', async () => {
       const result = await firstValueFrom(this.git.pull(repo.path));
       this.project.announceFilesChanged(result.changedPaths);
-      return result.message || 'Pobrano zmiany.';
+      return result.message || 'Pulled.';
     });
   }
 
   async push(repo: RepoSummary): Promise<void> {
-    await this.run(repo, 'push', async () => (await firstValueFrom(this.git.push(repo.path))).message || 'Wypchnięto.');
+    await this.run(repo, 'push', async () => (await firstValueFrom(this.git.push(repo.path))).message || 'Pushed.');
   }
 
   private async run(repo: RepoSummary, operation: RepoOperation, action: () => Promise<string>): Promise<void> {
@@ -225,26 +225,26 @@ function gitErrorMessage(operation: RepoOperation, error: ApiError): string {
     case 'conflict':
       return withDetail(
         operation === 'pull'
-          ? 'Pull odrzucony: gałęzie się rozeszły albo masz zmiany, które by się nadpisały. Rozwiąż to w terminalu lub konsoli.'
-          : 'Push odrzucony: na zdalnym repozytorium są nowsze zmiany. Najpierw zrób Pull.',
+          ? 'Pull refused: the branches diverged or you have changes that would be overwritten. Resolve it in the terminal or the console.'
+          : 'Push refused: the remote has newer changes. Pull first.',
         error.detail
       );
     case 'remote':
-      return withDetail(`${name}: błąd zdalnego repozytorium.`, error.detail);
+      return withDetail(`${name}: remote error.`, error.detail);
     case 'not-found':
-      return `${name}: nie znaleziono repozytorium.`;
+      return `${name}: repository not found.`;
     case 'invalid':
-      return withDetail(`${name}: nieprawidłowe żądanie.`, error.detail);
+      return withDetail(`${name}: invalid request.`, error.detail);
     case 'network':
-      return `${name}: brak połączenia z serwerem.`;
+      return `${name}: no connection to the server.`;
     case 'server':
-      return withDetail(`${name}: błąd serwera.`, error.detail);
+      return withDetail(`${name}: server error.`, error.detail);
   }
 }
 
 function message(error: unknown, fallback: string): string {
   const e = toApiError(error);
-  return e.kind === 'network' ? 'Brak połączenia z serwerem.' : withDetail(fallback, e.detail);
+  return e.kind === 'network' ? 'No connection to the server.' : withDetail(fallback, e.detail);
 }
 
 function withDetail(text: string, detail: string | null): string {

@@ -81,7 +81,7 @@ describe('Login', () => {
     expect(root.querySelector<HTMLInputElement>('#password')!.value).toBe('');
     expect(root.querySelector<HTMLInputElement>('#totpCode')!.value).toBe('');
     expect(root.querySelector<HTMLInputElement>('#userName')!.value).toBe('owner');
-    expect(root.querySelector('[role="alert"]')!.textContent).toContain('Nieprawidłowe dane logowania.');
+    expect(root.querySelector('[role="alert"]')!.textContent).toContain('Invalid login details.');
     expect(navigateByUrl).not.toHaveBeenCalled();
   });
 
@@ -96,7 +96,7 @@ describe('Login', () => {
   it('warns when the server did not confirm the logout', () => {
     const fixture = create({ logout: 'unconfirmed' });
     const notice = (fixture.nativeElement as HTMLElement).querySelector('[role="status"]')!;
-    expect(notice.textContent).toContain('serwer nie potwierdził');
+    expect(notice.textContent).toContain('the server did not confirm');
     expect(notice.classList).toContain('notice--warning');
   });
 });

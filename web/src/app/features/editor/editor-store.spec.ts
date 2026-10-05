@@ -70,7 +70,7 @@ describe('EditorStore', () => {
     const done = store.open('bin');
     fail(reads.get('bin')!, new FileApiError('binary'));
     await done;
-    expect(store.active()).toMatchObject({ status: 'error', error: 'To plik binarny, nie da się go wyświetlić jako tekst.' });
+    expect(store.active()).toMatchObject({ status: 'error', error: 'This is a binary file and cannot be shown as text.' });
 
     const retry = store.open('bin');
     respond('bin', 'ok', 'v1');
@@ -176,7 +176,7 @@ describe('EditorStore', () => {
     const saving = store.save();
     fail(writes[0], new FileApiError('network'));
     await saving;
-    expect(store.active()).toMatchObject({ value: 'mine', saving: false, error: 'Nie zapisano. Brak połączenia z serwerem.' });
+    expect(store.active()).toMatchObject({ value: 'mine', saving: false, error: 'Not saved. No connection to the server.' });
     expect(store.isDirty('a')).toBe(true);
   });
 

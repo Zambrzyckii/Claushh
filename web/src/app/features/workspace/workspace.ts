@@ -7,7 +7,7 @@ import { ProjectContext } from '../../core/project/project-context';
 import { RepoStatusStore } from '../../core/project/repo-status';
 import { ConsoleConnection } from '../../core/realtime/console-connection';
 import { TerminalConnection } from '../../core/realtime/terminal-connection';
-import { countLabel } from '../../core/text/polish';
+import { countLabel } from '../../core/text/format';
 import { ConsolePanel } from '../console/console-panel';
 import { ConsoleStore } from '../console/console-store';
 import { EditorPane } from '../editor/editor-pane';
@@ -60,24 +60,24 @@ export class Workspace {
 
   protected readonly changesLabel = computed(() => {
     const count = this.repoStatus.changeCount();
-    return count === 0 ? 'bez zmian' : countLabel(count, 'zmiana', 'zmiany', 'zmian');
+    return count === 0 ? 'no changes' : countLabel(count, 'change', 'changes');
   });
 
   protected readonly user = this.auth.user;
   protected readonly loggingOut = signal(false);
   protected readonly consoleStatus = computed(() => {
     if (this.console.connectionState() !== 'connected') {
-      return 'Konsola: brak połączenia';
+      return 'Console: disconnected';
     }
     switch (this.console.state()) {
       case 'working':
-        return 'Konsola: pracuje';
+        return 'Console: working';
       case 'waiting':
-        return 'Konsola: czeka na zgodę';
+        return 'Console: waiting for permission';
       case 'error':
-        return 'Konsola: błąd';
+        return 'Console: error';
       default:
-        return 'Konsola: bezczynna';
+        return 'Console: idle';
     }
   });
   protected readonly consoleOpen = signal(true);
@@ -101,13 +101,13 @@ export class Workspace {
     void this.workspaces.refreshRepos();
   }
 
-  /** `unsavedConfirmed`: the user has already agreed to discard unsaved files ("Wyloguj wszędzie"). */
+  /** `unsavedConfirmed`: the user has already agreed to discard unsaved files ("Log out everywhere"). */
   protected async logout(unsavedConfirmed = false): Promise<void> {
     if (this.loggingOut()) {
       return;
     }
     const unsaved = this.editor.unsavedCount();
-    if (!unsavedConfirmed && unsaved > 0 && !this.dialogs.confirm(`Niezapisane pliki: ${unsaved}. Wylogować i porzucić zmiany?`)) {
+    if (!unsavedConfirmed && unsaved > 0 && !this.dialogs.confirm(`Unsaved files: ${unsaved}. Log out and discard the changes?`)) {
       return;
     }
     this.loggingOut.set(true);

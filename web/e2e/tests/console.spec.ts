@@ -7,35 +7,35 @@ test.beforeEach(async ({ page, request }) => {
 });
 
 const consolePanel = (page: import('@playwright/test').Page) => page.locator('app-console-panel');
-const prompt = (page: import('@playwright/test').Page) => page.getByRole('textbox', { name: 'Polecenie' });
+const prompt = (page: import('@playwright/test').Page) => page.getByRole('textbox', { name: 'Prompt' });
 
 test('the panel is plain text without the product name', async ({ page }) => {
   const panel = consolePanel(page);
-  await expect(panel).toContainText('KONSOLA · katalog projektów');
-  await expect(panel).toContainText('Pusta rozmowa');
+  await expect(panel).toContainText('CONSOLE · projects directory');
+  await expect(panel).toContainText('Empty conversation');
   await expect(panel).not.toContainText(/claude/i);
   await expect(page.locator('.topbar')).not.toContainText(/claude/i);
-  await expect(page.locator('.statusbar')).toContainText('Konsola: bezczynna');
+  await expect(page.locator('.statusbar')).toContainText('Console: idle');
   await expect(panel.locator('svg, img')).toHaveCount(0);
 });
 
 test('a prompt runs with the chosen model, effort and mode and shows the steps', async ({ page, request }) => {
   const panel = consolePanel(page);
   await panel.getByLabel('model').selectOption({ label: 'sonnet-5' });
-  await panel.getByLabel('effort').selectOption({ label: 'wysoki' });
-  await panel.getByLabel('tryb').selectOption({ label: 'akceptuj edycje' });
+  await panel.getByLabel('effort').selectOption({ label: 'high' });
+  await panel.getByLabel(/^mode\b/).selectOption({ label: 'accept edits' });
 
   await prompt(page).fill('dodaj komentarz');
   await prompt(page).press('Enter');
   await expect(prompt(page)).toHaveValue('');
 
   await expect(panel).toContainText('> dodaj komentarz');
-  await expect(panel).toContainText(`przeczytano${' '}`);
-  await expect(panel).toContainText(/edycja\s+studia\/lab-3-sieci\/src\/main\.c\s+\+1/);
-  await expect(panel).toContainText(/uruchomiono\s+make test/);
+  await expect(panel).toContainText(/read\s+studia\/lab-3-sieci\/src\/main\.c/);
+  await expect(panel).toContainText(/edited\s+studia\/lab-3-sieci\/src\/main\.c\s+\+1/);
+  await expect(panel).toContainText(/ran\s+make test/);
   await expect(panel).toContainText('6 passed, 0 failed');
   await expect(panel).toContainText('Gotowe. Dodałem komentarz do main.c.');
-  await expect(page.locator('.statusbar')).toContainText('Konsola: bezczynna');
+  await expect(page.locator('.statusbar')).toContainText('Console: idle');
 
   const sent = (await mockState(request)).prompts[0];
   expect(sent).toMatchObject({ text: 'dodaj komentarz', model: 'sonnet', effort: 'high', mode: 'acceptEdits' });
@@ -63,11 +63,11 @@ test('a tab with unsaved changes is not overwritten by console changes', async (
 
   await prompt(page).fill('dodaj komentarz');
   await prompt(page).press('Enter');
-  const banner = page.locator('.banner', { hasText: 'zmienił się na dysku (konsola lub pull)' });
+  const banner = page.locator('.banner', { hasText: 'changed on disk (console or pull)' });
   await expect(banner).toBeVisible();
   await expectEditorToContain(page, '// mine');
 
-  await banner.getByRole('button', { name: 'Wczytaj z dysku' }).click();
+  await banner.getByRole('button', { name: 'Load from disk' }).click();
   await expectEditorToContain(page, '// claude');
   expect((await mockState(request)).files[MAIN]).not.toContain('// mine');
 });
@@ -77,36 +77,36 @@ test('permission requests can be allowed or denied', async ({ page }) => {
   await prompt(page).fill('zrób commit i push');
   await prompt(page).press('Enter');
 
-  const question = panel.getByRole('group', { name: 'Zezwolić na: git push origin main' });
+  const question = panel.getByRole('group', { name: 'Allow: git push origin main' });
   await expect(question).toBeVisible();
-  await expect(page.locator('.statusbar')).toContainText('Konsola: czeka na zgodę');
-  await question.getByRole('button', { name: 'tak', exact: true }).click();
+  await expect(page.locator('.statusbar')).toContainText('Console: waiting for permission');
+  await question.getByRole('button', { name: 'yes', exact: true }).click();
   await expect(question).toHaveCount(0);
-  await expect(panel).toContainText('zezwolono: git push origin main');
+  await expect(panel).toContainText('allowed: git push origin main');
   await expect(panel).toContainText('Wypchnięto.');
 
   await prompt(page).fill('jeszcze raz push');
   await prompt(page).press('Enter');
-  await panel.getByRole('group', { name: 'Zezwolić na: git push origin main' }).getByRole('button', { name: 'nie' }).click();
-  await expect(panel).toContainText('odmówiono: git push origin main');
+  await panel.getByRole('group', { name: 'Allow: git push origin main' }).getByRole('button', { name: 'no', exact: true }).click();
+  await expect(panel).toContainText('denied: git push origin main');
   await expect(panel).toContainText('Nie wypycham zmian.');
 });
 
-test('"tak, zawsze" names the rule it saves and asks before saving it', async ({ page }) => {
+test('"yes, always" names the rule it saves and asks before saving it', async ({ page }) => {
   const panel = consolePanel(page);
   await prompt(page).fill('zrób commit i push');
   await prompt(page).press('Enter');
-  const question = panel.getByRole('group', { name: 'Zezwolić na: git push origin main' });
-  await expect(question).toContainText('„tak, zawsze” zapisze regułę: Bash(git push:*)');
+  const question = panel.getByRole('group', { name: 'Allow: git push origin main' });
+  await expect(question).toContainText('“yes, always” saves the rule: Bash(git push:*)');
 
   const asked: string[] = [];
   page.once('dialog', (dialog) => {
     asked.push(dialog.message());
     void dialog.accept();
   });
-  await question.getByRole('button', { name: 'tak, zawsze' }).click();
-  await expect(panel).toContainText('zezwolono na stałe: git push origin main');
-  expect(asked[0]).toContain('Zapisać stałą zgodę: Bash(git push:*)?');
+  await question.getByRole('button', { name: 'yes, always' }).click();
+  await expect(panel).toContainText('always allowed: git push origin main');
+  expect(asked[0]).toContain('Save a permanent permission: Bash(git push:*)?');
 });
 
 test('a permission request taller than the panel is shown from its beginning', async ({ page }) => {
@@ -114,7 +114,7 @@ test('a permission request taller than the panel is shown from its beginning', a
   await prompt(page).fill('wysokie pytanie');
   await prompt(page).press('Enter');
   const question = panel.locator('.permission');
-  await expect(question).toContainText('Komenda ma 82 linie. Przeczytaj całą powyżej.');
+  await expect(question).toContainText('The command has 82 lines. Read all of it above.');
   // The beginning of the command (dangerous) is visible, not only its harmless end next to the buttons.
   const log = panel.locator('.log');
   const [logBox, questionBox] = [(await log.boundingBox())!, (await question.boundingBox())!];
@@ -128,12 +128,12 @@ test('Esc interrupts a running prompt', async ({ page }) => {
   const panel = consolePanel(page);
   await prompt(page).fill('pracuj długo');
   await prompt(page).press('Enter');
-  await expect(panel).toContainText('pracuje… (Esc przerywa)');
-  await expect(panel.getByRole('button', { name: 'Nowa' })).toBeDisabled();
+  await expect(panel).toContainText('working… (Esc interrupts)');
+  await expect(panel.getByRole('button', { name: 'New', exact: true })).toBeDisabled();
 
   await prompt(page).press('Escape');
   await expect(panel).toContainText('interrupted');
-  await expect(panel).not.toContainText('pracuje…');
+  await expect(panel).not.toContainText('working…');
 });
 
 test('the conversation survives a reload and is shared between tabs', async ({ page, context }) => {
@@ -152,31 +152,31 @@ test('the conversation survives a reload and is shared between tabs', async ({ p
   await prompt(page).fill('zrób push');
   await prompt(page).press('Enter');
   await expect(consolePanel(second)).toContainText('> zrób push');
-  await expect(consolePanel(second).getByRole('group', { name: /Zezwolić na/ })).toBeVisible();
+  await expect(consolePanel(second).getByRole('group', { name: /Allow:/ })).toBeVisible();
 });
 
-test('"Nowa" starts an empty conversation', async ({ page }) => {
+test('"New" starts an empty conversation', async ({ page }) => {
   const panel = consolePanel(page);
   await prompt(page).fill('dodaj komentarz');
   await prompt(page).press('Enter');
   await expect(panel).toContainText('Gotowe.');
 
-  await panel.getByRole('button', { name: 'Nowa' }).click();
+  await panel.getByRole('button', { name: 'New', exact: true }).click();
   await expect(panel).not.toContainText('dodaj komentarz');
-  await expect(panel).toContainText('sesja · rozpoczęta');
+  await expect(panel).toContainText('session · started');
 });
 
 test('the conversation keeps running while the panel is collapsed', async ({ page }) => {
   await prompt(page).fill('zrób push');
   await prompt(page).press('Enter');
-  await consolePanel(page).getByRole('button', { name: 'Zwiń' }).click();
-  await expect(page.locator('.statusbar')).toContainText('Konsola: czeka na zgodę');
-  await page.getByRole('button', { name: 'Rozwiń konsolę' }).click();
-  await expect(consolePanel(page).getByRole('group', { name: /Zezwolić na/ })).toBeVisible();
+  await consolePanel(page).getByRole('button', { name: 'Hide' }).click();
+  await expect(page.locator('.statusbar')).toContainText('Console: waiting for permission');
+  await page.getByRole('button', { name: 'Show console' }).click();
+  await expect(consolePanel(page).getByRole('group', { name: /Allow:/ })).toBeVisible();
 });
 
 test('a session killed on the server closes the console and returns to login', async ({ page, request }) => {
-  await expect(consolePanel(page)).toContainText('Pusta rozmowa');
+  await expect(consolePanel(page)).toContainText('Empty conversation');
   await killSessions(request);
   await expect(page).toHaveURL(/\/login\?reason=expired/);
 });

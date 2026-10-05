@@ -4,7 +4,7 @@ This file describes the **current state of the code**: what lives where and how 
 Goals and decisions are in [`PLAN.md`](PLAN.md). After every change to the structure, a new module, endpoint
 or dependency, update the relevant section.
 
-Status: frontend done (login, session countdown and the "Bezpieczeństwo" (Security) window, explorer, editor with diff
+Status: frontend done (login, session countdown and the Security window, explorer, editor with diff
 view, console, workspaces and git, terminal). The backend has login, sessions, login protection and notifications,
 passkeys (logging in, adding, renaming and removing), the client IP behind Cloudflare, the built frontend with the
 security headers, the files API (listing, reading and saving), the workspaces and git API, the terminal hub and the
@@ -89,7 +89,7 @@ On the server (decisions: `PLAN.md`, "Deployment decisions"):
 | `web/src/app/core/api/git-api.ts` | git API client: status, pull, push |
 | `web/src/app/core/project/project-context.ts` | the open repository (from the `?repo=` URL), "files changed" and "files saved" events |
 | `web/src/app/core/project/repo-status.ts` | git status of the open repo: branch, changes, badges for the explorer |
-| `web/src/app/core/text/polish.ts` | number declension (1 zmiana, 2 zmiany, 5 zmian) and relative time ("12 minut temu" (12 minutes ago)) |
+| `web/src/app/core/text/format.ts` | shared text helpers: English plurals (`countLabel`: "1 change", "2 changes"), relative time ("12 minutes ago") and the dates (`formatTime` "14:03", `formatDateTime` "05/10/2026, 14:03", `en-GB`) |
 | `web/src/app/core/text/visible-text.ts` | `revealHidden`: shows invisible and control characters, tabs, runs of whitespace and blank lines (commands to approve). `previewText`: a preview for the question window, with explicit information about omitted fragments |
 | `web/src/app/core/realtime/hub-client.ts` | shared base for SignalR connections: WebSocket, auto-reconnect, session check on disconnect |
 | `web/src/app/core/realtime/console-protocol.ts` | console hub contract: events, methods, option types |
@@ -97,7 +97,7 @@ On the server (decisions: `PLAN.md`, "Deployment decisions"):
 | `web/src/app/core/realtime/terminal-protocol.ts` | terminal hub contract: methods, events, types |
 | `web/src/app/core/realtime/terminal-connection.ts` | connection to `/hubs/terminal` (built on `HubClient`) |
 | `web/src/app/core/api/project-path.ts` | relative path validation (no `..`, leading `/`, `\`) |
-| `web/src/app/features/explorer/` | file tree, directories loaded lazily on expand, git badges, "Odśwież" (Refresh) |
+| `web/src/app/features/explorer/` | file tree, directories loaded lazily on expand, git badges, "Refresh" |
 | `web/src/app/features/editor/editor-store.ts` | state of open files: tabs, unsaved changes, save, conflicts, diff view (no dependency on Monaco) |
 | `web/src/app/features/editor/code-editor.ts` | Monaco: a regular editor or a diff view (diff against HEAD), one model per open file |
 | `web/src/app/features/editor/editor-pane.*` | tabs, path, error and conflict messages, the slot for the editor |
@@ -105,9 +105,9 @@ On the server (decisions: `PLAN.md`, "Deployment decisions"):
 | `web/src/app/features/editor/workers/` | entry points of the Monaco web workers (editor, TS, JSON, CSS, HTML) |
 | `web/tsconfig.worker.json` | tsconfig for the workers (referenced in `angular.json` as `webWorkerTsConfig`) |
 | `web/src/app/features/login/` | login screen: username, password, TOTP code, retrying an unconfirmed logout |
-| `web/src/app/features/security/` | the "Bezpieczeństwo" (Security) window: active sessions, login history, "Wyloguj pozostałe sesje" (log out other sessions) / "Wyloguj wszędzie" (log out everywhere) |
+| `web/src/app/features/security/` | the Security window: active sessions, login history, "Log out other sessions" / "Log out everywhere" |
 | `web/src/app/features/console/console-store.ts` | conversation state built from hub events, sending, permissions, interrupt, new conversation |
-| `web/src/app/features/console/console-panel.*` | the Konsola (Console) panel: the conversation as plain text, prompt field, model / effort / mode |
+| `web/src/app/features/console/console-panel.*` | the Console panel: the conversation as plain text, prompt field, model / effort / mode |
 | `web/src/app/features/workspaces/workspaces-store.ts` | state of the Workspace panel: workspaces, repositories, pull / push, create, clone |
 | `web/src/app/features/workspaces/workspaces-panel.*` | the "Workspace" tab in the bottom panel (workspace list, repository table) |
 | `web/src/app/features/workspaces/validation.ts` | validation of the workspace name and the clone URL |
@@ -116,7 +116,7 @@ On the server (decisions: `PLAN.md`, "Deployment decisions"):
 | `web/src/app/features/terminal/terminal-view.ts` | a single xterm.js: attaching with a snapshot and `seq` numbers, typing, safe pasting, size fitting |
 | `web/src/app/features/terminal/terminal-input.ts` | queue of typed characters (acknowledged batches with `client` + `seq`) and cleaning of pasted text |
 | `web/src/app/features/terminal/xterm-loader.ts` | lazy loading of xterm.js and the terminal look (theme, font) |
-| `web/src/app/features/workspace/` | main layout: path and branch, the session countdown and the "Bezpieczeństwo" button in the top bar, explorer, editor, console, bottom panel (Workspace, Terminal), status bar, Ctrl+S |
+| `web/src/app/features/workspace/` | main layout: path and branch, the session countdown and the Security button in the top bar, explorer, editor, console, bottom panel (Workspace, Terminal), status bar, Ctrl+S |
 | `web/playwright.config.ts` | e2e configuration (build from `dist/`, mock on port 4400, Chromium) |
 | `web/e2e/mock-api/server.mjs` | mock backend: auth (passkeys without signature checks), files, workspaces and simulated git, console and terminal hubs (SignalR JSON over WebSocket, simulated shell), security headers, `/__test/*`. Listens only on `127.0.0.1`; the origins it accepts are `http://127.0.0.1:4400` and `http://localhost:4400` |
 | `web/e2e/tests/` | e2e tests: `auth`, `editor`, `diff`, `console`, `workspaces`, `terminal`, `security`, `mock-api` + `helpers.ts` and `fixtures.ts` (CSP check in every test, `newDevice` for a second browser) |
@@ -154,7 +154,7 @@ On the server (decisions: `PLAN.md`, "Deployment decisions"):
   set device clock does not break the countdown. The countdown shows the earlier of the two deadlines.
 - During logout, "session expired" signals (closed WebSockets, 401) are ignored, and the
   logout signal from another tab is handled only by a logged-in tab. Otherwise races changed the message
-  "Wylogowano" (Logged out) to "Sesja wygasła" (Session expired) or reloaded a fresh login screen.
+  "Logged out" to "Session expired" or reloaded a fresh login screen.
 - **Expiry works even without the server (fail-closed).** When the countdown reaches zero, `SessionTimer` asks
   the server (`verifySession`, a 10 s limit for the response). If the server does not respond (no network, tunnel failure,
   Cloudflare Access redirect), and 30 s have passed since the deadline (`EXPIRY_GRACE_MS`), the session ends locally
@@ -174,13 +174,13 @@ On the server (decisions: `PLAN.md`, "Deployment decisions"):
   right away, after 3 s, after 10 s, and then every 30 s, until the server confirms: `GET /me` (401: the session is gone), when the cookie
   still belongs to it: `POST /logout {sessionId}` (the server responds 409 if the cookie already belongs to another session),
   and when it belongs to a new session (login in another tab): `DELETE /api/auth/sessions/{id}` and the new session stays. Then
-  the screen does not say "Wylogowano", it goes to the app (`replaceUrl`): the browser has a live session, and a message
+  the screen does not say "Logged out", it goes to the app (`replaceUrl`): the browser has a live session, and a message
   about logout would be false.
   The marker is read on every attempt (another tab could have written a newer one) and removed only when it still
-  points to the confirmed session. "Wylogowano…" appears only once the marker is gone. Without the marker (another
+  points to the confirmed session. "Logged out…" appears only once the marker is gone. Without the marker (another
   tab already finished the logout) nothing is ended automatically: `GET /me` only checks whether the session is gone.
   If there is a session after all (a new login in another tab), the screen goes to the app, like any login screen
-  with a session. With a marker without an ID (`''`), the session is ended only by the "Ponów wylogowanie" (Retry logout) button. Retrying
+  with a session. With a marker without an ID (`''`), the session is ended only by the "Retry logout" button. Retrying
   in this tab stops before a login, and login and logout retry in different tabs exclude each other
   with a Web Locks lock (`claushh-auth`): `POST /logout` from one tab will not end a session being created in another, nor
   invalidate its XSRF token during login.
@@ -193,7 +193,7 @@ On the server (decisions: `PLAN.md`, "Deployment decisions"):
 - Other login screens (including `?logout=ok`) go through `guestGuard` normally. The XSRF token is bound
   to the identity it was issued for (a session or no session), and logout removes it, so `AuthService.login` always
   first calls `GET /api/auth/me` (it issues a fresh token even on 401). Otherwise the old token after an unconfirmed
-  logout would give 400 ("Nieprawidłowe dane logowania" (Invalid login details)) on every attempt.
+  logout would give 400 ("Invalid login details") on every attempt.
 - Messages between tabs (`BroadcastChannel` `claushh-auth`): `{ type: 'logout', result: 'ok' | 'unconfirmed'
   | 'expired' }` (the other tabs end with the same message), `{ type: 'expiry', at }` (new deadline)
   and `{ type: 'session', sessionId }` (another tab logged in, the cookie now belongs to that session).
@@ -207,15 +207,15 @@ On the server (decisions: `PLAN.md`, "Deployment decisions"):
 | Visiting `/` or `/login` with an unconfirmed logout marker | guard → `/login?logout=unconfirmed` (without asking the server) |
 | Visiting `/login` with a session (without a marker) | `guestGuard` → `/`, also for `/login?logout=unconfirmed` (an external link, an old history entry). With a marker: the row above |
 | Login | `POST /api/auth/login`, then `GET /api/auth/me` (confirms the cookie, new XSRF token). Navigation to `returnUrl` after validation (`safeReturnUrl`) |
-| Failed login | a generic message, the password and code fields are cleared. 429 shows the time from `Retry-After`, rounded up: "za 30 s." below a minute, "za 15 min." below an hour, "za 24 godz." above |
-| Logout | `POST /api/auth/logout` (10 s limit) → storage cleanup → message to other tabs (`BroadcastChannel`) → reload to `/login?logout=ok`. When the server does not confirm: a marker with the session ID in `localStorage` and `/login?logout=unconfirmed` with a warning, and the screen retries the logout (0 s, 3 s, 10 s, then every 30 s) until the server confirms ("Wylogowano. Serwer potwierdził zakończenie sesji." (Logged out. The server confirmed the session ended.)) |
+| Failed login | a generic message, the password and code fields are cleared. 429 shows the time from `Retry-After`, rounded up: "in 30 s." below a minute, "in 15 min." below an hour, "in 24 h." above |
+| Logout | `POST /api/auth/logout` (10 s limit) → storage cleanup → message to other tabs (`BroadcastChannel`) → reload to `/login?logout=ok`. When the server does not confirm: a marker with the session ID in `localStorage` and `/login?logout=unconfirmed` with a warning, and the screen retries the logout (0 s, 3 s, 10 s, then every 30 s) until the server confirms ("Logged out. The server confirmed the session ended.") |
 | 401 from another API endpoint | interceptor → the same as logout, target `/login?reason=expired&returnUrl=…`. Several simultaneous 401s give one reload |
 | Logout in another tab | this tab also clears its state and reloads to the login screen with the same message (`logout=ok`, `logout=unconfirmed` or `reason=expired`) |
 | "Back" after logout | the page from bfcache is reloaded, the guard sends you to `/login` |
-| Countdown in the top bar | "Sesja wygasa za m:ss" (Session expires in m:ss). The last 2 minutes in yellow with a "Przedłuż" (Extend) button |
+| Countdown in the top bar | "Session expires in m:ss". The last 2 minutes in yellow with an "Extend" button |
 | Countdown reached zero | `GET /api/auth/me` every 10 s: 401 → as an expired session, 200 (e.g. extended in another tab) → new countdown. No response for longer than 30 s after the deadline → local expiry |
 | Extension in one tab | other tabs get the new deadline via `BroadcastChannel` |
-| "Wyloguj wszędzie" | one question (with the number of unsaved files) before anything else, then `POST /api/auth/sessions/revoke-others` and logout of this session without further questions |
+| "Log out everywhere" | one question (with the number of unsaved files) before anything else, then `POST /api/auth/sessions/revoke-others` and logout of this session without further questions |
 
 ### API contract
 
@@ -322,7 +322,7 @@ every test that the page reports no CSP violations.
 - The explorer shows the open repository (`ProjectContext.path`), and without one the whole projects directory.
 - **Saving never silently overwrites changes on disk.** Every file has a version (e.g. a content hash). A save sends
   the version the edit was based on. If the file changed on disk in the meantime (e.g. the console edited it),
-  the server rejects the save (409) and the user chooses: "Wczytaj z dysku" (Load from disk) or "Nadpisz moją wersją" (Overwrite with my version).
+  the server rejects the save (409) and the user chooses: "Load from disk" or "Overwrite with my version".
 - The editor state (`EditorStore`) is provided in the Workspace component, and logout reloads the page,
   so open files disappear from memory together with the session.
 - **There is deliberately no `beforeunload` warning** for unsaved changes: it would block the reload on
@@ -342,7 +342,7 @@ every test that the page reports no CSP violations.
   The middle mouse button closes a tab.
 - After a file loads, the editor takes focus only when the user is not typing at that moment in another field, the console
   or the terminal (`isTypingElsewhere`). Otherwise the rest of the text typed e.g. in the console would end up in the file.
-- **Diff view:** the "Pokaż zmiany" (Show changes) button next to the file path (for files in a repository) switches to the Monaco diff:
+- **Diff view:** the "Show changes" button next to the file path (for files in a repository) switches to the Monaco diff:
   on the left the version from HEAD (`GET /api/git/show`, read-only), on the right the same model as in the editor, so
   editing and saving work normally. A file that is not in HEAD is shown as new. On a narrow screen the diff
   switches to a single-column view. After changes from the console the HEAD version is loaded again (there may have been a commit).
@@ -370,14 +370,14 @@ symlink) that cannot be searched is `404`.
 Reading and saving:
 - The version is opaque to the client, except `absent`: the version of a file that does not exist. A save with
   `baseVersion` `absent` creates the file when the name is free and its directory exists (`404` when the directory is
-  missing). This is what "Nadpisz moją wersją" (Overwrite with my version) sends after the file was deleted: the `409`
+  missing). This is what "Overwrite with my version" sends after the file was deleted: the `409`
   for the old version carries `{"currentVersion":"absent"}`. When the file exists after all, `absent` is a `409` with
   its real version. (The mock's other versions are a shortened SHA-1, the backend's are described in section "Backend".)
 - At most 5 MB (5 × 1024 × 1024 bytes): a bigger file is `413` on read, and so is content that is bigger as UTF-8 (plus
   the BOM that is kept) on save.
 - Only UTF-8 text: a NUL byte or invalid UTF-8 (so any other encoding, e.g. Windows-1250) is `415` on read. A save of
   content with a NUL character is `415` too and leaves the file unchanged, so the editor never writes a file it cannot
-  read back (the frontend shows "Nie zapisano. To plik binarny, nie da się go wyświetlić jako tekst."). A UTF-8 BOM is
+  read back (the frontend shows "Not saved. This is a binary file and cannot be shown as text."). A UTF-8 BOM is
   not part of `content`; it is written back when the file on disk had one. Line endings are never changed.
 - Two saves of one file with the same `baseVersion` give one `200` and one `409`. A save through a symlink changes the
   target and leaves the link. A change made from outside (the console, the terminal) is caught by the version check
@@ -407,7 +407,7 @@ hash, so after a Monaco update the browser must download the new version).
 - A prompt appears in the conversation only as a `prompt` event from the server (a single source of truth for all tabs).
 - When the console changes files (`files-changed`), the explorer, the git status and the repository list refresh,
   clean open files are reloaded, and files with unsaved changes get the message
-  "Plik zmienił się na dysku (konsola lub pull)" (The file changed on disk (console or pull)).
+  "The file changed on disk (console or pull), and you have unsaved changes in it."
 - A dropped connection checks the session immediately (`AuthService.verifySession`). An expired session ends as on a 401.
 - From sending a prompt (or a "new conversation") until the server responds, another send is blocked
   (`ConsoleStore.sending`): a second Enter during `StartConversation` will not create a second conversation or send the
@@ -419,15 +419,15 @@ hash, so after a Monaco update the browser must download the new version).
   - the command and the rule are shown via `revealHidden`: control characters (including a lone `\r`), text direction characters
     (e.g. U+202E), zero-width characters, unusual spaces (e.g. NBSP) and blank characters (e.g. U+2800, Hangul fillers,
     variation selectors) as `⟨U+XXXX⟩`, and a run of the same character as `⟨U+XXXX ×N⟩`, a tab as `⟨TAB⟩`,
-    runs of 4+ spaces and tabs as `⟨N odstępów⟩`, runs of 2+ blank lines as `⟨N pustych linii⟩`,
+    runs of 4+ spaces and tabs as `⟨N whitespace⟩`, runs of 2+ blank lines as `⟨N blank lines⟩`,
     with wrapping (`pre-wrap`, `overflow-wrap: anywhere`), so neither the middle nor the tail of the command can hide outside the panel.
-    Under a command with multiple lines or longer than 200 characters there is "Komenda ma N linii/znaków. Przeczytaj całą
-    powyżej." (The command has N lines/characters. Read all of it above.), and a question taller than the log is shown from the top (not from the buttons at the bottom).
+    Under a command with multiple lines or longer than 200 characters there is "The command has N lines. Read all of it
+    above." (or N characters), and a question taller than the log is shown from the top (not from the buttons at the bottom).
     Step targets (`step.target`) are shown the same way,
-  - the permission buttons ("tak" (yes), "tak, zawsze" (yes, always)) are disabled for 600 ms after the question appears
+  - the permission buttons ("yes", "yes, always") are disabled for 600 ms after the question appears
     (`PERMISSION_ARM_MS`, counted anew in each conversation). The question arrives asynchronously and scrolls the log, so a click meant for
-    something else could hit "tak". "nie" (no) works immediately,
-  - "tak, zawsze" is present only when the server provided a rule (`alwaysRule`), it shows the rule and requires confirmation.
+    something else could hit "yes". "no" works immediately,
+  - "yes, always" is present only when the server provided a rule (`alwaysRule`), it shows the rule and requires confirmation.
 
 ### `/hubs/console` hub contract
 
@@ -436,7 +436,7 @@ Connection: SignalR, WebSocket only, no negotiation (`skipNegotiation`), JSON pr
 
 Session on an open connection (SignalR itself does not check the cookie again, so the backend does it):
 - **every hub method call checks the session** (hub filter). Expired or revoked: an error and the connection is closed,
-- **a session's connections are closed the moment it ends**: logout, revocation (also from the "Bezpieczeństwo" window),
+- **a session's connections are closed the moment it ends**: logout, revocation (also from the Security window),
   idle expiry and the hard limit. The server detects expiry by itself (e.g. a timer per connection or
   a check every few seconds), it does not wait for an HTTP request,
 - hub calls **do not extend the session** (only `POST /api/auth/keepalive` extends it).
@@ -464,7 +464,7 @@ Events sent by the server with the `ConsoleEvent` method to all of the user's co
 | `step` | `stepId`, `kind` (`read`/`edit`/`write`/`command`/`search`/`other`), `target`, `added?`, `removed?` | a work step. `target` is the text to display: a path relative to the conversation's repository or a command |
 | `step-output` | `stepId`, `text`, `isError` | step output, e.g. a command result |
 | `text` | `messageId`, `delta` | a fragment of the response (subsequent fragments with the same `messageId` are appended) |
-| `permission` | `requestId`, `description`, `alwaysRule?` | a permission request. `requestId` is unique for the whole server lifetime (e.g. a GUID), not a number counted anew in each `claude` process. `description` is **exactly what the permission is for**: for a command the whole command (not a description written by the model), for an edit the file path, e.g. `git push origin main`. `alwaysRule`: the rule that an `allow-always` answer will save (e.g. `Bash(git push:*)`, saved on the server for the conversation's project). Without it the frontend does not offer "tak, zawsze" |
+| `permission` | `requestId`, `description`, `alwaysRule?` | a permission request. `requestId` is unique for the whole server lifetime (e.g. a GUID), not a number counted anew in each `claude` process. `description` is **exactly what the permission is for**: for a command the whole command (not a description written by the model), for an edit the file path, e.g. `git push origin main`. `alwaysRule`: the rule that an `allow-always` answer will save (e.g. `Bash(git push:*)`, saved on the server for the conversation's project). Without it the frontend does not offer "yes, always" |
 | `permission-resolved` | `requestId`, `decision` | the answer to the question (also from another tab) |
 | `status` | `state` (`idle`/`working`/`waiting`/`error`), `message?` | work state. `message` is shown as a note |
 | `files-changed` | `paths` (relative to the projects directory) | files changed by the console |
@@ -509,10 +509,10 @@ Backend rules the tables do not show:
 - Explorer badges as in VS Code: `M` modified, `A` added, `D` deleted, `R` renamed,
   `U` untracked, `!` conflict, `•` a directory containing changes.
 - The git status and the repository list refresh: after opening a repo, after a save in the editor, after changes from the console,
-  after pull / push / clone, after "Odśwież" and after returning to the browser tab.
+  after pull / push / clone, after "Refresh" and after returning to the browser tab.
 - Pull changes files on disk: the response contains `changedPaths`, so the editor reloads clean files,
   and for unsaved changes shows a message, as with changes from the console.
-- Commits are made via the console or the terminal. The panel has only Otwórz / Pull / Push (Open / Pull / Push) (as in the mockup).
+- Commits are made via the console or the terminal. The panel has only Open / Pull / Push (as in the mockup).
 - Cloning only from `https://` URLs in strict form: `https://host[:port]/path`, where host is
   `[a-z0-9.-]`, and path segments are `[A-Za-z0-9._~-]` (the `CLONE_URL` expression in `validation.ts`), and in
   canonical form (`new URL(adres).href` equal to the URL, so no `..`, no port 443, no uppercase letters in the host).
@@ -550,7 +550,7 @@ empty body. `lastCommit` is the subject line of HEAD's commit and its committer 
 `behind` are counted against the local remote-tracking branch, so they are as fresh as its last fetch. The backend
 fetches in the background when the repository list is read: every repository with an upstream at most once per 5
 minutes, and the answer never waits. New ↑/↓ appear at the panel's next refresh (returning to the tab, a save,
-"Odśwież").
+"Refresh").
 
 The backend's own messages are English (as the mock's); git's messages pass through in English (`LC_ALL=C.UTF-8`).
 
@@ -589,21 +589,21 @@ Security requirements for the backend:
   of a command, and an Enter typed after returning ran its beginning (e.g. `rm -rf ./` instead of `rm -rf ./build/cache`).
   - Characters waiting less than 5 s go right after attaching. Those waiting longer (and only those that certainly did not
     arrive: excluding the batch that is currently in flight) are held in the queue itself (`holdIfStale`, no send loop
-    can bypass it) and wait for a decision in the panel above the terminal ("Wyślij" (Send) / "Porzuć" (Discard), preview via
+    can bypass it) and wait for a decision in the panel above the terminal ("Send" / "Discard", preview via
     `previewText`). This is not a `confirm` window: it would freeze the page, including the session countdown, and it appears without
     user involvement. Characters typed in the meantime are appended to the question.
   - The queue has a 64 KB limit. Once it is exceeded, further characters (including Enter) are rejected until the queue empties
     (the block applies only when something is waiting). A paste longer than the limit minus a margin for the paste
     mode markers (16 characters) is rejected with a message.
-  - While disconnected, the view shows "Brak połączenia. Wpisane znaki zostaną wysłane po ponownym połączeniu." (No connection. Typed characters will be sent after reconnecting.)
-    When the automatic connection attempts run out, the panel shows "połącz ponownie" (reconnect) (the console does the same), and the views
+  - While disconnected, the view shows "No connection. Typed characters will be sent after reconnecting."
+    When the automatic connection attempts run out, the panel shows "reconnect" (the console does the same), and the views
     reattach (`TerminalStore.reattach`) right after connecting. Without a connection the view is not attached
     (characters wait, output waits in the buffer), so nothing goes out before `Attach` and the holding back of stale characters.
 - **Pasting** has its own handling (before xterm's handling): it removes control characters except tab and line endings
   (ESC could end the paste mode `\x1b[201~` and run the rest of the text, `^C`, `DEL` etc. would act as keys)
   and C1 characters. Text with line endings (each one can run a command right away) waits for a decision in the panel above
-  the terminal ("Wklej" (Paste) / "Anuluj" (Cancel), focus on "Anuluj", so neither Enter nor Esc will paste anything) with a full preview
-  (`previewText`: hidden characters made visible, long text shortened only with an explicit "⟨pominięto N linii/znaków⟩" (⟨omitted N lines/characters⟩), always
+  the terminal ("Paste" / "Cancel", focus on "Cancel", so neither Enter nor Esc will paste anything) with a full preview
+  (`previewText`: hidden characters made visible, long text shortened only with an explicit "⟨N lines omitted⟩" or "⟨N characters omitted⟩", always
   with the beginning and the end). Not a `confirm` window: Chrome truncates long text in it without warning.
 - **OSC 8 links are disabled** (a custom handler for OSC 8 sequences takes them over): the visible link text could impersonate
   a different URL. The text itself is displayed. Plain URLs in the text are not clickable either (no web-links addon).
@@ -635,7 +635,7 @@ Implemented in the backend (section "Backend" → "Terminal").
 | `ListTerminals` | none | `TerminalInfo[]` (`{ id, title, cwd, exited }`) |
 | `OpenTerminal` | `{ projectPath, cols, rows }` | `TerminalInfo`. `projectPath` is checked like file paths. `title` is unique, e.g. `lab-3-sieci (2)` |
 | `Attach` | `{ id, cols, rows, client }` | `{ snapshot, seq, inputSeq }`. Also sets the size. `inputSeq`: the number of the last `Input` batch accepted from `client` (0 when none). The connection that performed `Attach` becomes the only one from which the server accepts `Input` of that `client` for that terminal. The server handles `Input` and `Attach` of one terminal in order |
-| `Input` | `{ id, client, seq, data }` | none (called via `invoke`, the result acknowledges receipt). Raw data from xterm, e.g. `\r`, `\x03`. `client`: a random view ID, `seq`: the batch number of this `client` (grows by 1, gaps allowed). A batch with `seq` not greater than the last one accepted from this `client` is skipped without an error. A batch from a connection that is not the last one on which this `client` performed `Attach` is rejected with an error (a late batch from an old connection will not run after "Porzuć", and a new connection must attach first). Unknown or exited terminal: the data is skipped without an error. A batch holds up to 4096 characters |
+| `Input` | `{ id, client, seq, data }` | none (called via `invoke`, the result acknowledges receipt). Raw data from xterm, e.g. `\r`, `\x03`. `client`: a random view ID, `seq`: the batch number of this `client` (grows by 1, gaps allowed). A batch with `seq` not greater than the last one accepted from this `client` is skipped without an error. A batch from a connection that is not the last one on which this `client` performed `Attach` is rejected with an error (a late batch from an old connection will not run after "Discard", and a new connection must attach first). Unknown or exited terminal: the data is skipped without an error. A batch holds up to 4096 characters |
 | `Resize` | `{ id, cols, rows }` | none (`send`) |
 | `CloseTerminal` | `{ id }` | none. Kills the tmux session |
 
@@ -1158,10 +1158,13 @@ logins), `Claude/` (the console: the claude CLI and its conversations; not `Cons
 Conventions:
 - Standalone components, local state in `signal()`.
 - Things shared by the whole app (auth, browser access, API clients, SignalR, the open project,
-  Polish texts) go in `web/src/app/core/`.
+  shared text helpers) go in `web/src/app/core/`.
 - Each app feature in a separate folder `web/src/app/features/<nazwa>/`, lazy-loaded from the routes.
 - Colors and fonts only through the variables from `styles.scss`, no hard-coded colors in components
   (exceptions to be removed when the palette is refined).
+- The interface is English, one language without a switch: sentence case, UPPERCASE only for section titles, table
+  heads and the bottom panel's tab labels; failures read "Could not …"; progress reads "…ing…". Dates go through
+  `format.ts` (`en-GB`); file names sort with `Intl.Collator('pl')`, a choice apart from the interface's language.
 
 Dependencies besides Angular: `monaco-editor` (editor), `@microsoft/signalr` (console, terminal),
 `@xterm/xterm` and `@xterm/addon-fit` (terminal; the xterm styles are in the global styles in `angular.json`).
@@ -1173,8 +1176,8 @@ Rules: `CLAUDE.md`, section "Tests" (new code: only integration and e2e tests).
 
 | Kind | Command | What it covers |
 |---|---|---|
-| Integration + older unit | `cd web && npm test` | Vitest (jsdom). Integration: `console.integration.spec.ts` (panel + store + editor, SignalR and HTTP stubbed; also permission requests: hidden characters, button delay, "tak, zawsze", and a double Enter), `workspaces.integration.spec.ts` (Workspace panel + router + git status + explorer + editor, HTTP stubbed; also the strict clone URL validation), `security.integration.spec.ts` (AuthService + interceptor + SessionTimer + the "Bezpieczeństwo" window, HTTP, reload and clock stubbed; also expiry without a server response), `logout-confirmation.integration.spec.ts` (routes with guards + AuthService + login screen after an unconfirmed logout, also with a newer session from another tab), `login-wait.integration.spec.ts` (routes with guards + AuthService + login screen after a `429`: the wait in seconds, minutes or hours). Older unit tests: auth, files API, paths, explorer, `EditorStore` |
-| E2E | `cd web && npm run e2e` | build + Playwright in Chromium on `e2e/mock-api/server.mjs`: login and sessions (including unconfirmed logout with "Back", a new tab and logging in again, embedding in a frame, Trusted Types), explorer and Monaco, console (steps, options, permissions, "tak, zawsze", interrupt, replay, multiple tabs, file changes), workspaces (opening a repo, git status, pull, push, create, clone, a conversation per repo), terminal (commands, keys, reload without duplicates, multiple terminals, `exit`, Ctrl+S, resizing, pasting with the decision panel, characters on a dropped connection without loss or duplication, also after closing the tab, queue limit, focus, OSC 8 links, no answers to terminal queries, closing a terminal that another tab already closed), session (countdown, "Przedłuż", activity once a minute on a fake clock, expiry, also without a server response and hubs closed by the server), the "Bezpieczeństwo" window with a second device (a separate browser context), diff view, Monaco worker startup, mock robustness and the contract rules that the frontend does not let through (clone URL, XSRF token bound to the identity, saving like the files API: `absent`, a missing directory, 5 MB, a NUL character, workspace, repo and path parameters, the console's paths, prompt length and options, the passkeys' re-authentication and login challenge). **Every test** (`fixtures.ts`) fails when the page reports a CSP or Trusted Types violation, an unhandled exception (including one caught by Angular's ErrorHandler, `console.error('ERROR', …)`) or Monaco does not create a worker |
+| Integration + older unit | `cd web && npm test` | Vitest (jsdom). Integration: `console.integration.spec.ts` (panel + store + editor, SignalR and HTTP stubbed; also permission requests: hidden characters, button delay, "yes, always", and a double Enter), `workspaces.integration.spec.ts` (Workspace panel + router + git status + explorer + editor, HTTP stubbed; also the strict clone URL validation), `security.integration.spec.ts` (AuthService + interceptor + SessionTimer + the Security window, HTTP, reload and clock stubbed; also expiry without a server response), `logout-confirmation.integration.spec.ts` (routes with guards + AuthService + login screen after an unconfirmed logout, also with a newer session from another tab), `login-wait.integration.spec.ts` (routes with guards + AuthService + login screen after a `429`: the wait in seconds, minutes or hours). Older unit tests: auth, files API, paths, explorer, `EditorStore` |
+| E2E | `cd web && npm run e2e` | build + Playwright in Chromium on `e2e/mock-api/server.mjs`: login and sessions (including unconfirmed logout with "Back", a new tab and logging in again, embedding in a frame, Trusted Types), explorer and Monaco, console (steps, options, permissions, "yes, always", interrupt, replay, multiple tabs, file changes), workspaces (opening a repo, git status, pull, push, create, clone, a conversation per repo), terminal (commands, keys, reload without duplicates, multiple terminals, `exit`, Ctrl+S, resizing, pasting with the decision panel, characters on a dropped connection without loss or duplication, also after closing the tab, queue limit, focus, OSC 8 links, no answers to terminal queries, closing a terminal that another tab already closed), session (countdown, "Extend", activity once a minute on a fake clock, expiry, also without a server response and hubs closed by the server), the Security window with a second device (a separate browser context), diff view, Monaco worker startup, mock robustness and the contract rules that the frontend does not let through (clone URL, XSRF token bound to the identity, saving like the files API: `absent`, a missing directory, 5 MB, a NUL character, workspace, repo and path parameters, the console's paths, prompt length and options, the passkeys' re-authentication and login challenge). **Every test** (`fixtures.ts`) fails when the page reports a CSP or Trusted Types violation, an unhandled exception (including one caught by Angular's ErrorHandler, `console.error('ERROR', …)`) or Monaco does not create a worker |
 | Backend | `dotnet test` (needs Docker) | xUnit integration tests over HTTP (`WebApplicationFactory`, PostgreSQL 17 from Testcontainers, a test clock): login and its failures, `me`, `keepalive` and both deadlines, logout and 409, ending another session, XSRF token bound to the session, `no-store`, closed `/api/*`, the built frontend (the page for app paths with its CSP and `no-store`, file types and `no-cache`, `/api` and `/hubs` paths and missing files never the page, paths that start with `//` `404` with or without a session, the security headers on every response, the start check of `Frontend:Root`), `create-user`, TOTP codes used once, the limit per IP, the client address behind Cloudflare (`CF-Connecting-IP` and `X-Forwarded-Proto` only from a loopback peer, `X-Forwarded-For` ignored, IPv6 limited per /64, IPv4-mapped peers as IPv4), the account lockout and its growth, a login that cannot start within 10 s, session list, `revoke-others`, login history, cleanup, the password reset, login notifications (content, one for the start of a lock and none for failed attempts, a failing or unreachable ntfy, the start check), passkeys (re-authentication with its limits and the lockout, fresh for 5 minutes, the creation options, adding through Identity's checks of origin, cross-origin, RP ID, user verification and a stored credential, states used once, expiring and bound to their session, names, the limit of 10 also for two adds at once, renaming, removing, the notifications, the resets of `create-user`, the start check of `Passkeys:ServerDomain`), passkey login (the options and the challenge cookie, a login with its history row, notification and saved counter, every failed assertion recorded as a passkey attempt, challenges used once and expiring, at most 3 pending per address, the per-IP limit shared with password logins, the lock refusing password logins and re-authentication but not a passkey login, a passkey login that cannot start within 10 s), the files API (listing, symlinks, `.git`, reading, saving, conflicts, re-creating a deleted file, limits, text rules, file modes, long names, two saves at once, empty error bodies, a link into a directory the API cannot search, a lone surrogate in the body), workspaces and git (the repository list and its order, what is and is not a repository (also a `.git` symlink), every git status (also a nested repository, and one that cannot be read), ahead and behind, HEAD content with a checkout's line endings and the files API's limits, also after the checkout's filters), workspaces (the list and its order, names and directories, creating, a stale row), cloning (every refused URL, git's own errors, the time limit against a server that never answers, only https whatever git's configuration files allow), pull and push (every answer, both paths of a rename, a branch without commits, two pulls at once, a hook that refuses, only https, no lock file left at the time limit, git's messages with the API path), the background fetch (every 5 minutes by the test clock, a list that never waits for it, a pull or push taking the repository from a fetch that hangs and ending its process tree), the hubs (session and Origin on the WebSocket, WebSockets only, connections closed at once on logout, ending a session and revoke-others, by the 5 s timer on its own, expiry and a revocation by another process, hub calls never extending the session), the terminal (opening in a directory by its real path, titles, refused paths, the limit, output seq without gaps, the allowlisted environment, exit, close, the start routine), attach and input (snapshot with CRLF, every line exactly once when attaching during output, bracketed paste restored, a batch sent twice typed once, Input only after Attach on the same connection, inputSeq after a reconnect, batch limits, UTF-8 across send-keys commands, resize limits, an exited terminal, an unknown id, calls without their argument, the history and normal screen before the switch to the alternate screen and the program's own text after it, also after a resize, a snapshot taken inside an escape sequence), the console hub (refused paths, the conversation event in every tab, the latest conversation, the stored events as sent, the config directory's mode, the API key file's place and mode, calls without their argument, session and Origin), the claude process (the command line, its directory and environment, events in contract order, replay with merged text and the open text, options before every prompt, busy and unknown conversations, prompt and option limits, prompts starting with "/", tools the CLI refuses, unknown control requests, interrupts, also ignored ones, an exit during and after them, a process that ends, a failed resume, recovery at start, the process limit, idle processes, forgotten conversations read again, a conversation retention deleted, an old CLI, logout during a turn), the console's questions (the command and its rule, deny, allow, allow-always and the next launch's rules, a write question, unknown decisions and requests, two tabs, several suggested rules, plan approval, interrupt and exit with a question open, a withdrawn question), edit counts, files-changed for edits and for commands in a repository (none for a repository the turn made), the output cap (also for one character), 90-day retention; needs the git CLI ≥ 2.45 (`--ref-format=reftable`) |
 
 Backend tests make repositories with the git CLI (`tests/Claushh.Api.Tests/TestGit.cs`): a fixed identity and date,

@@ -23,7 +23,7 @@ export class ConsoleConnection extends HubClient {
   readonly events: Observable<ConsoleEvent> = this.events$.asObservable();
 
   protected readonly url = CONSOLE_HUB.url;
-  protected readonly label = 'konsolą';
+  protected readonly label = 'console';
 
   protected register(connection: HubConnection): void {
     connection.on(CONSOLE_HUB.event, (event: ConsoleEvent) => this.events$.next(event));

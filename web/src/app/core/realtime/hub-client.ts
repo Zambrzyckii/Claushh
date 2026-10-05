@@ -36,7 +36,7 @@ export abstract class HubClient implements OnDestroy {
 
   /** Hub address, e.g. `/hubs/console`. */
   protected abstract readonly url: string;
-  /** Name for messages, e.g. "konsolą": "Brak połączenia z konsolą." (no connection to the console). */
+  /** Name for messages, e.g. "console": "No connection to the console." */
   protected abstract readonly label: string;
 
   /** Registers handlers for events sent by the server. */
@@ -90,7 +90,7 @@ export abstract class HubClient implements OnDestroy {
 
   protected invoke<T>(method: string, ...args: unknown[]): Promise<T> {
     if (!this.connection || this.connection.state !== HubConnectionState.Connected) {
-      return Promise.reject(new Error(`Brak połączenia z ${this.label}.`));
+      return Promise.reject(new Error(`No connection to the ${this.label}.`));
     }
     return this.connection.invoke<T>(method, ...args);
   }

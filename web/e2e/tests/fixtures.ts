@@ -23,7 +23,7 @@ export const test = base.extend<{
     async ({ context, problems, allowCspViolations }, use) => {
       watch(context, problems, allowCspViolations);
       await use();
-      expect(problems, 'naruszenia CSP i nieobsłużone wyjątki na stronie').toEqual([]);
+      expect(problems, 'CSP violations and unhandled exceptions on the page').toEqual([]);
     },
     { auto: true }
   ],
@@ -53,10 +53,10 @@ function watch(context: BrowserContext, problems: string[], allowCspViolations: 
     // Angular catches unhandled exceptions and rejected promises (provideBrowserGlobalErrorListeners), so
     // the browser does not report them. The default ErrorHandler prints them as `console.error('ERROR', …)`.
     if (message.type() === 'error' && message.text().startsWith('ERROR')) {
-      problems.push(`Błąd aplikacji: ${message.text()}`);
+      problems.push(`App error: ${message.text()}`);
     }
   });
-  context.on('weberror', (error) => problems.push(`Nieobsłużony wyjątek: ${error.error().message}`));
+  context.on('weberror', (error) => problems.push(`Unhandled exception: ${error.error().message}`));
 }
 
 export { expect };

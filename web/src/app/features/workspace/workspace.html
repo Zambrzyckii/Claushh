@@ -7,33 +7,33 @@
       <span class="topbar__sep">/</span>
       <span class="topbar__repo">{{ project.label() }}</span>
       @if (repoStatus.status(); as status) {
-        <span class="topbar__branch">{{ status.branch ?? '(odłączony HEAD)' }}</span>
+        <span class="topbar__branch">{{ status.branch ?? '(detached HEAD)' }}</span>
       }
     }
   </div>
   <div class="topbar__actions">
     @if (sessionTimer.label(); as remaining) {
       <span class="topbar__session" [class.topbar__session--warning]="sessionTimer.warning()" role="timer" aria-live="off">
-        Sesja wygasa za {{ remaining }}
+        Session expires in {{ remaining }}
       </span>
       @if (sessionTimer.warning()) {
-        <button type="button" (click)="sessionTimer.extend()">Przedłuż</button>
+        <button type="button" (click)="sessionTimer.extend()">Extend</button>
       }
     }
     @if (user(); as u) {
-      <button type="button" class="topbar__user" aria-haspopup="dialog" [attr.aria-label]="'Bezpieczeństwo i sesje (' + u.userName + ')'"
+      <button type="button" class="topbar__user" aria-haspopup="dialog" [attr.aria-label]="'Security and sessions (' + u.userName + ')'"
               (click)="openSecurity()">{{ u.userName }}</button>
     }
-    <button type="button" [class.is-on]="bottomOpen()" (click)="toggleBottom()">Panel dolny</button>
-    <button type="button" [class.is-on]="consoleOpen()" (click)="toggleConsole()">Konsola</button>
+    <button type="button" [class.is-on]="bottomOpen()" (click)="toggleBottom()">Panel</button>
+    <button type="button" [class.is-on]="consoleOpen()" (click)="toggleConsole()">Console</button>
     <button type="button" [disabled]="loggingOut()" (click)="logout()">
-      {{ loggingOut() ? 'Wylogowywanie…' : 'Wyloguj' }}
+      {{ loggingOut() ? 'Logging out…' : 'Log out' }}
     </button>
   </div>
 </header>
 
 <div class="main">
-  <nav class="explorer" aria-label="Eksplorator plików">
+  <nav class="explorer" aria-label="File explorer">
     <app-explorer [root]="project.path()" [activePath]="editor.activePath()" [decorations]="repoStatus.decorations()"
                   (openFile)="editor.open($event)" (refreshed)="explorerRefreshed()" />
   </nav>
@@ -43,18 +43,18 @@
   </main>
 
   @if (consoleOpen()) {
-    <aside class="console" aria-label="Konsola">
+    <aside class="console" aria-label="Console">
       <app-console-panel (collapse)="toggleConsole()" />
     </aside>
   } @else {
-    <button type="button" class="console-collapsed" aria-label="Rozwiń konsolę" (click)="toggleConsole()">
-      KONSOLA
+    <button type="button" class="console-collapsed" aria-label="Show console" (click)="toggleConsole()">
+      CONSOLE
     </button>
   }
 </div>
 
 @if (bottomOpen()) {
-  <section class="bottom" aria-label="Panel dolny">
+  <section class="bottom" aria-label="Panel">
     <div class="bottom__bar">
       <div class="bottom__tabs" role="tablist">
         <button type="button" role="tab" [attr.aria-selected]="bottomTab() === 'workspace'"
@@ -62,7 +62,7 @@
         <button type="button" role="tab" [attr.aria-selected]="bottomTab() === 'terminal'"
                 [class.is-on]="bottomTab() === 'terminal'" (click)="bottomTab.set('terminal')">TERMINAL</button>
       </div>
-      <button type="button" class="bottom__collapse" (click)="toggleBottom()">Zwiń</button>
+      <button type="button" class="bottom__collapse" (click)="toggleBottom()">Hide</button>
     </div>
     <div class="bottom__content" role="tabpanel">
       @if (bottomTab() === 'workspace') {
@@ -77,17 +77,17 @@
 <footer class="statusbar">
   <div class="statusbar__group">
     @if (repoStatus.status(); as status) {
-      <span class="statusbar__branch">{{ status.branch ?? '(odłączony HEAD)' }}</span>
+      <span class="statusbar__branch">{{ status.branch ?? '(detached HEAD)' }}</span>
       <span class="statusbar__changes" [class.statusbar__changes--dirty]="repoStatus.changeCount() > 0">{{ changesLabel() }}</span>
     }
     <span>{{ consoleStatus() }}</span>
     @if (editor.unsavedCount() > 0) {
-      <span class="statusbar__unsaved">Niezapisane: {{ editor.unsavedCount() }}</span>
+      <span class="statusbar__unsaved">Unsaved: {{ editor.unsavedCount() }}</span>
     }
   </div>
   <div class="statusbar__group">
     @if (editor.cursor(); as c) {
-      <span>Ln {{ c.line }}, Kol {{ c.column }}</span>
+      <span>Ln {{ c.line }}, Col {{ c.column }}</span>
     }
     @if (editor.language(); as lang) {
       <span class="statusbar__language">{{ lang }}</span>

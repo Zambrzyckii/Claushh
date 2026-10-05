@@ -69,7 +69,7 @@ function loadStylesheet(href: string): Promise<void> {
     link.onload = () => resolve();
     link.onerror = () => {
       link.remove();
-      reject(new Error(`Nie udało się wczytać ${href}`));
+      reject(new Error(`Could not load ${href}`));
     };
     document.head.appendChild(link);
   });

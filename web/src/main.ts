@@ -6,7 +6,7 @@ import { installTrustedTypesPolicy } from './app/core/browser/trusted-types';
 // The portal must not run in a frame of a foreign page (clickjacking). The real protection is the CSP header
 // `frame-ancestors 'none'` from the backend, this is only a fallback in case it is missing.
 if (window.top !== window.self) {
-  document.body.textContent = 'Ta strona nie może być wyświetlana w ramce.';
+  document.body.textContent = 'This page cannot be shown in a frame.';
 } else {
   installTrustedTypesPolicy();
   bootstrapApplication(App, appConfig).catch((err) => console.error(err));

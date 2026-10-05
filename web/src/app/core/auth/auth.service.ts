@@ -315,7 +315,7 @@ export class AuthService implements OnDestroy {
   /**
    * After a successful login: the old session from the unconfirmed logout is ended by identifier
    * (already from the new session), and the marker is removed. An error does not block the login: the session expires by itself,
-   * and it is visible in the "Bezpieczeństwo" (Security) window.
+   * and it is visible in the Security window.
    */
   private async finishPendingLogout(): Promise<void> {
     const sessionId = this.pendingLogout();
