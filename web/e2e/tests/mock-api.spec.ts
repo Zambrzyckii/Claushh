@@ -1,4 +1,6 @@
 import os from 'node:os';
+import crypto from 'node:crypto';
+import type { APIRequestContext } from '@playwright/test';
 
 import { expect, test } from './fixtures';
 import { USER, login, mockState, resetMock, setRepoState } from './helpers';
@@ -178,3 +180,77 @@ test('the mock refuses console paths, prompts and options that the contract forb
   ]);
   expect((await mockState(request)).prompts).toHaveLength(0);
 });
+
+test('the mock follows the passkey management contract like the backend', async ({ request }) => {
+  const xsrf = await apiLogin(request);
+  const post = (path: string, data?: object) => request.post(path, { headers: { 'X-XSRF-TOKEN': xsrf }, data });
+  const reauthenticate = (password: string) => post('/api/auth/reauthenticate', { password, totpCode: USER.totpCode });
+  const create = (options: { challenge: string }, origin?: string, flags?: number) =>
+    fakeCredential('k1', options, 'webauthn.create', { origin, flags });
+
+  // Adding needs a fresh re-authentication; a wrong one is 403.
+  expect((await post('/api/auth/passkeys/creation-options')).status()).toBe(403);
+  expect((await reauthenticate('wrong')).status()).toBe(403);
+  expect((await reauthenticate(USER.password)).status()).toBe(204);
+  const options = await (await post('/api/auth/passkeys/creation-options')).json();
+  expect(options.rp.id).toBe('localhost');
+  expect(options.authenticatorSelection).toEqual({ residentKey: 'required', userVerification: 'required' });
+
+  // The name is checked first and keeps the state; a foreign origin uses it up.
+  const badName = await post('/api/auth/passkeys', { credential: create(options), name: 'a\u0007b' });
+  expect(badName.status()).toBe(400);
+  expect(await badName.json()).toEqual({ message: 'A passkey name has 1 to 64 characters and no control characters.' });
+  const foreign = await post('/api/auth/passkeys', { credential: create(options, 'https://evil.test') });
+  expect(foreign.status()).toBe(400);
+  expect(await foreign.json()).toEqual({ message: 'The passkey could not be added. Try again.' });
+  expect((await post('/api/auth/passkeys', { credential: create(options) })).status()).toBe(400);
+
+  const fresh = await (await post('/api/auth/passkeys/creation-options')).json();
+  const added = await post('/api/auth/passkeys', { credential: create(fresh, undefined, 0x0d), name: ' Laptop ' });
+  expect(added.status()).toBe(201);
+  expect(await added.json()).toMatchObject({ id: 'k1', name: 'Laptop', synced: true });
+
+  // Rename checks the name, then the id; removing needs the fresh session.
+  const patch = (id: string, name: string) => request.patch(`/api/auth/passkeys/${id}`, { headers: { 'X-XSRF-TOKEN': xsrf }, data: { name } });
+  expect((await patch('k1', '')).status()).toBe(400);
+  expect((await patch('nope', 'Phone')).status()).toBe(404);
+  expect((await patch('k1', 'Phone')).status()).toBe(204);
+  expect(await (await request.get('/api/auth/passkeys')).json()).toEqual([expect.objectContaining({ id: 'k1', name: 'Phone', synced: true })]);
+  expect((await request.delete('/api/auth/passkeys/k1', { headers: { 'X-XSRF-TOKEN': xsrf } })).status()).toBe(204);
+  expect((await mockState(request)).passkeyCount).toBe(0);
+
+  // Like login: the third failure turns re-authentication into 429.
+  await reauthenticate('wrong');
+  await reauthenticate('wrong');
+  const limited = await reauthenticate(USER.password);
+  expect(limited.status()).toBe(429);
+  expect(limited.headers()['retry-after']).toBe('30');
+});
+
+/** Logs in through the API alone and returns the XSRF token issued for the new session. */
+async function apiLogin(request: APIRequestContext): Promise<string> {
+  await request.get('/api/auth/me');
+  await request.post('/api/auth/login', { headers: { 'X-XSRF-TOKEN': await xsrfToken(request) }, data: USER });
+  await request.get('/api/auth/me');
+  return xsrfToken(request);
+}
+
+async function xsrfToken(request: APIRequestContext): Promise<string> {
+  return (await request.storageState()).cookies.find((c) => c.name === 'XSRF-TOKEN')!.value;
+}
+
+/**
+ * A credential as the browser's JSON has it, enough for the mock, which checks client data, flags and the user handle
+ * but never signatures. `flags` is the authenticator data's flags byte (0x05: user present and verified).
+ */
+function fakeCredential(
+  id: string,
+  options: { challenge: string },
+  type: 'webauthn.create' | 'webauthn.get',
+  { origin = 'http://localhost:4400', flags = 0x05, userHandle }: { origin?: string; flags?: number; userHandle?: string } = {}
+) {
+  const clientDataJSON = Buffer.from(JSON.stringify({ type, challenge: options.challenge, origin, crossOrigin: false })).toString('base64url');
+  const rpIdHash = crypto.createHash('sha256').update('localhost').digest();
+  const authenticatorData = Buffer.concat([rpIdHash, Buffer.from([flags, 0, 0, 0, 1])]).toString('base64url');
+  return { id, rawId: id, type: 'public-key', clientExtensionResults: {}, response: { clientDataJSON, authenticatorData, userHandle } };
+}

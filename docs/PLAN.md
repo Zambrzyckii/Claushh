@@ -67,7 +67,7 @@ Devices: mainly laptop and PC. The phone is secondary.
 
 ### Data in the database
 
-Account and 2FA secret, active sessions and login history (date, IP, device), the display names of workspaces,
+Account, 2FA secret and passkeys, active sessions and login history (date, IP, device), the display names of workspaces,
 console conversations with their events, and the console's "always" rules (model, effort and mode live in the browser).
 
 ## Security
@@ -84,7 +84,7 @@ console conversations with their events, and the console's "always" rules (model
 - Password (hash from ASP.NET Core Identity) + **mandatory TOTP**, optionally a passkey.
 - No registration endpoint. The account is created by an installation command (e.g. `dotnet run -- create-user`).
 - Login attempt limit per IP and an account lockout after several wrong codes (own code, see "Backend decisions (stage 1)").
-- Phone notification through ntfy of every successful login and every start of an account lock.
+- Phone notification through ntfy of every successful login, every start of an account lock, and every passkey added or removed.
 - Cookies `HttpOnly`, `Secure`, `SameSite=Strict`, antiforgery.
 - Short sessions (e.g. 30 minutes of inactivity, hard limit of 12 h), extended only by user activity,
   list of active sessions, login history, "wyloguj wszędzie" (log out everywhere).
@@ -105,7 +105,8 @@ Backend decisions (stage 1):
   from `dotnet user-secrets` in development and from an environment variable on the server, never from the repository.
 - Backend tests are integration tests over HTTP with a real PostgreSQL 17 (Testcontainers), not a database mock.
 - Sessions live on the server in the `Sessions` table: the cookie holds a random secret, the database only its SHA-256.
-  Identity is used only for the user, the password hash and the TOTP key (the codes are checked by own code, below).
+  Identity is used only for the user, the password hash, the TOTP key and the passkeys (the codes are checked by own
+  code, below; passkeys: "Backend decisions (passkeys)").
   Rejected: the Identity cookie with `ITicketStore` (one expiry per ticket, so two deadlines, a session list and
   revoking need workarounds around a serialized blob) and the plain Identity cookie with the security stamp (it cannot
   end a single session).
@@ -129,11 +130,13 @@ Backend decisions (stage 1):
 - Login protection has two layers in own code (`LoginGuard`, time from `TimeProvider`): a limit of failed attempts per
   IP protects the password, the account lockout protects the code. Rejected: the `RateLimiter` middleware and Identity's
   lockout (both use the real clock, so their windows cannot be tested without waiting; the middleware also counts
-  successful requests and forgets everything on restart). Logins run one at a time in the API process, so parallel
-  attempts cannot slip between a check and its write.
+  successful requests and forgets everything on restart). Logins, re-authentications and adding a passkey run one at a
+  time in the API process, so parallel attempts cannot slip between a check and its write.
 - The login history records every attempt that reaches the check, also for unknown names (guessing stays visible), but
   never the typed name (it sometimes holds a mistyped password) and not attempts refused with 429 (a flood would drown
   the list).
+- A failed re-authentication is recorded like a failed login and counts towards the per-IP limit; a successful one is
+  not recorded (it creates no session).
 - The limits are constants in code (10 failures per IP in 15 minutes, 5 wrong codes, lockouts from 15 minutes to
   24 hours, 90 days). Rejected: configuration (nothing to tune for one user, and a setting could weaken the protection
   by accident).
@@ -186,13 +189,42 @@ Backend decisions (stage 1, part C):
   change).
 - The login screen shows the wait from `Retry-After` as "N s" below a minute, "N min" below an hour and "N godz."
   otherwise, rounded up. Rejected: full words with Polish plural forms (more code for the same information).
-- Phone notifications through ntfy of every successful login and every start of an account lock: one `POST` of the
-  text to the topic URL (a secret, in the server's environment file), with an optional access token. The login only
-  queues the message; a background service sends it once, outside the login gate, and a failure is only logged (as
-  `AuthCleanup` does). Required in Production (the API does not start without `Notifications:NtfyUrl`), optional
-  elsewhere, so the local test in Development needs none. Rejected: Telegram (the bot token is part of the URL path),
-  sending inside the login (ntfy's response time would hold the login gate), retries (more code for a rare event) and
-  a notification for every failed attempt (failed attempts are already in the login history).
+- Phone notifications through ntfy of every successful login, every start of an account lock, and every passkey
+  added or removed: one `POST` of the text to the topic URL (a secret, in the server's environment file), with an
+  optional access token. The login only queues the message; a background service sends it once, outside the login
+  gate, and a failure is only logged (as `AuthCleanup` does). Required in Production (the API does not start without
+  `Notifications:NtfyUrl`), optional elsewhere, so the local test in Development needs none. Rejected: Telegram (the
+  bot token is part of the URL path), sending inside the login (ntfy's response time would hold the login gate),
+  retries (more code for a rare event) and a notification for every failed attempt (failed attempts are already in the
+  login history).
+
+Backend decisions (passkeys):
+- A passkey is a second way in next to password + TOTP. Identity stores the passkeys (schema version 3, table
+  `AspNetUserPasskeys`), and its `PasskeyHandler` makes the WebAuthn options and checks the credentials; the API
+  registers the handler itself and calls it directly. Rejected: `SignInManager` (it keeps the ceremonies in Identity's
+  cookie schemes, which the portal does not use) and schema version 1 with the passkey entity mapped by hand
+  (unsupported).
+- The RP ID is `Passkeys:ServerDomain`, a lower-case host name checked at start in every environment, so it never
+  comes from a request's `Host`. A credential's origin must be one of `Hubs:AllowedOrigins`, which now means the exact
+  origins the portal is served from; a cross-origin or embedded ceremony is refused. User verification and
+  discoverable credentials are required, and no attestation is asked for. Rejected: renaming `Hubs:AllowedOrigins`
+  (configuration, deployment, tests and docs would change) and a second list `Passkeys:Origins` (two lists that must
+  stay equal).
+- The ceremonies' states stay on the server, in the API process (`PasskeyCeremonies`): a registration's state per
+  session and the sessions that re-authenticated, each for 5 minutes by `TimeProvider`, a state used once. A restart
+  loses only ceremonies in progress. Rejected: a data-protected cookie with the state (it cannot be made single-use).
+- Adding or removing a passkey needs the password and a code again (`POST /api/auth/reauthenticate`), checked inside
+  the login gate with the login's limits; a wrong or reused code counts towards the lockout as at login, and a
+  failure is recorded as a failed login. The session then stays fresh for 5 minutes, whatever it does meanwhile, and
+  is not extended. A failure is `403`, not `401`, because the frontend ends the session on a `401`. Rejected: a fresh
+  mark used up by one action (a TOTP code works once, so a second action within the same 30 s would fail).
+- Adding a passkey runs inside the login gate, so the limit's count and the insert cannot interleave, and the state's
+  user must be the session's user. `createdAt` is the `TimeProvider` time (Identity's handler takes the real clock).
+- The limits are constants: 10 passkeys, names of 1-64 characters without control or format characters (names go
+  into the phone notifications); a missing name becomes the device, e.g. "Chrome · Linux".
+- `create-user --reset-totp` and `--reset-password` remove every passkey in their transaction: no way in that was
+  added before a reset survives it.
+- Adding and removing a passkey send a `high` notification that names it. Passkey texts are English.
 
 Backend decisions (stage 2):
 - The projects directory is the configuration key `Projects:Root` (`/srv/projects` in `appsettings.json`, a user-secret
@@ -433,7 +465,8 @@ Backend decisions (stage 4):
   stderr text (the porcelain output is meant for programs).
 - The backend's own texts are Polish and equal to the mock's where the mock has one; git's messages pass through in
   English; `404` and parameter `400`s have an empty body. Rejected: English backend texts (the panel would mix languages
-  in its own messages).
+  in its own messages). Exception: passkey texts (API messages and notifications) are English; the whole UI goes
+  English in the UI refresh.
 - Hubs (SignalR, the console hub later too): WebSocket only, the JSON protocol, Polish `HubException` texts and no
   detailed errors. Rejected: long polling and SSE (more ways in, and the frontend never uses them).
 - The `Origin` of every request under `/hubs` must equal one of `Hubs:AllowedOrigins` (ordinal), checked before
@@ -511,7 +544,8 @@ Backend decisions (stage 4):
 ### Using untrusted computers
 
 Whenever you log in on someone else's computer (e.g. in a computer lab), always log out
-and do not save the password in the browser. The password alone without the TOTP code gives nothing.
+and do not save the password in the browser. The password alone without the TOTP code gives nothing. Never add a
+passkey on someone else's computer.
 
 ## Deployment on EndeavourOS
 

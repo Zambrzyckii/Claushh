@@ -18,6 +18,8 @@ const PORT = Number(process.env.MOCK_PORT ?? 4400);
 const DIST = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../dist/web/browser');
 const HOST = '127.0.0.1';
 const ORIGIN = `http://${HOST}:${PORT}`;
+/** The origins the portal is served from in the e2e tests (hubs and passkeys): passkeys need a domain, not an IP. */
+const ORIGINS = [ORIGIN, `http://localhost:${PORT}`];
 const RS = '\x1e'; // message separator in the SignalR protocol
 const MAX_FILE_BYTES = 5 * 1024 * 1024; // the largest file the files API saves (docs/ARCHITECTURE.md, "Files API contract")
 const ABSENT_VERSION = 'absent'; // the version of a file that does not exist: a save with it creates the file
@@ -66,6 +68,9 @@ function reset() {
     absoluteSeconds: 12 * 3600,
     logins: [],
     loginFailures: 0,
+    passkeys: [], // { id, name, createdAt, synced }, in the order added
+    registrations: new Map(), // sid -> challenge of the session's creation options
+    freshUntil: new Map(), // sid -> time (ms) until which the session may add and remove passkeys
     xsrfTokens: new Map(), // token -> public id of the session it was issued for (null: no session)
     files: new Map(Object.entries(INITIAL_FILES)),
     workspaces: new Map(INITIAL_WORKSPACES),
@@ -255,6 +260,31 @@ function byName(a, b) {
   return x < y ? -1 : x > y ? 1 : 0;
 }
 
+/** Passkeys (docs/ARCHITECTURE.md, "Authentication" → "Passkeys"): the backend's limits and texts; no signature is checked. */
+const PASSKEY_LIMIT = 10;
+const PASSKEY_FRESH_MS = 5 * 60_000;
+const PASSKEY_NAME_RULE = 'A passkey name has 1 to 64 characters and no control characters.';
+const PASSKEY_NOT_ADDED = 'The passkey could not be added. Try again.';
+const PASSKEY_LIMIT_TEXT = 'There are 10 passkeys already. Remove one first.';
+/** The owner's id in the mock: the passkeys' user handle. */
+const USER_ID = 'mock-owner';
+const base64url = (data) => Buffer.from(data).toString('base64url');
+
+/** A passkey name as the backend takes it: trimmed, 1-64 UTF-16 units, no control or format characters; null otherwise. */
+function passkeyName(name) {
+  const trimmed = typeof name === 'string' ? name.trim() : '';
+  return trimmed.length >= 1 && trimmed.length <= 64 && !/[\p{Cc}\p{Cf}]/u.test(trimmed) ? trimmed : null;
+}
+
+/** The decoded clientDataJSON of a credential, or null. */
+function clientDataOf(credential) {
+  try {
+    return JSON.parse(Buffer.from(credential?.response?.clientDataJSON ?? '', 'base64url').toString('utf8'));
+  } catch {
+    return null;
+  }
+}
+
 // ---------- HTTP ----------
 
 // Security headers required from the backend (docs/ARCHITECTURE.md, "Security headers"). CSP is the policy
@@ -314,7 +344,7 @@ async function handle(req, res) {
   }
   if (url.pathname === '/__test/state') {
     const terminals = [...state.terminals.values()].map(({ id, title, cwd, exited, inputs, sizes }) => ({ id, title, cwd, exited, inputs, sizes }));
-    json(res, 200, { files: Object.fromEntries(state.files), log: state.log, prompts: state.prompts, terminals });
+    json(res, 200, { files: Object.fromEntries(state.files), log: state.log, prompts: state.prompts, terminals, passkeyCount: state.passkeys.length, registrationCount: state.registrations.size, freshCount: state.freshUntil.size });
     return;
   }
   if (url.pathname === '/__test/file' && req.method === 'PUT') {
@@ -406,6 +436,82 @@ async function handle(req, res) {
       // (especially with a second open tab). The frontend clears storage, the API has no-store.
       'Set-Cookie': ['sid=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict', 'XSRF-TOKEN=; Path=/; Max-Age=0; SameSite=Strict']
     });
+  }
+
+  // re-authentication and the account's passkeys
+  if (url.pathname === '/api/auth/reauthenticate' && req.method === 'POST') {
+    if (!session) return json(res, 401);
+    if (!xsrfOk(req)) return json(res, 400);
+    const body = await readBody(req).catch(() => null);
+    if (state.loginFailures >= 3) return json(res, 429, undefined, { 'Retry-After': '30' });
+    if (body?.password !== USER.password || body?.totpCode !== USER.totpCode) {
+      state.loginFailures++;
+      state.logins.unshift({ at: new Date().toISOString(), ip: ipOf(req), device: deviceOf(req), success: false });
+      return json(res, 403);
+    }
+    state.freshUntil.set(cookies(req).sid, Date.now() + PASSKEY_FRESH_MS);
+    return json(res, 204);
+  }
+  if (url.pathname === '/api/auth/passkeys' || url.pathname.startsWith('/api/auth/passkeys/')) {
+    if (!session) return json(res, 401);
+    if (req.method !== 'GET' && !xsrfOk(req)) return json(res, 400);
+    const sid = cookies(req).sid;
+    const fresh = (state.freshUntil.get(sid) ?? 0) > Date.now();
+    if (url.pathname === '/api/auth/passkeys' && req.method === 'GET') return json(res, 200, state.passkeys);
+    if (url.pathname === '/api/auth/passkeys/creation-options' && req.method === 'POST') {
+      if (!fresh) return json(res, 403);
+      if (state.passkeys.length >= PASSKEY_LIMIT) return json(res, 409, { message: PASSKEY_LIMIT_TEXT });
+      const challenge = base64url(crypto.randomBytes(32));
+      state.registrations.set(sid, challenge);
+      return json(res, 200, {
+        rp: { name: 'localhost', id: 'localhost' },
+        user: { id: base64url(USER_ID), name: USER.userName, displayName: USER.userName },
+        challenge,
+        pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
+        timeout: 300000,
+        excludeCredentials: state.passkeys.map((p) => ({ type: 'public-key', id: p.id, transports: [] })),
+        authenticatorSelection: { residentKey: 'required', userVerification: 'required' }
+      });
+    }
+    if (url.pathname === '/api/auth/passkeys' && req.method === 'POST') {
+      const body = await readBody(req).catch(() => null);
+      const credential = body?.credential;
+      if (typeof credential !== 'object' || credential === null) return json(res, 400, { message: PASSKEY_NOT_ADDED });
+      const given = body.name;
+      const blank = given === undefined || given === null || (typeof given === 'string' && given.trim() === '');
+      const name = blank ? deviceOf(req) : passkeyName(given);
+      if (!name) return json(res, 400, { message: PASSKEY_NAME_RULE });
+      const challenge = state.registrations.get(sid);
+      state.registrations.delete(sid);
+      if (!challenge) return json(res, 400, { message: PASSKEY_NOT_ADDED });
+      if (state.passkeys.length >= PASSKEY_LIMIT) return json(res, 409, { message: PASSKEY_LIMIT_TEXT });
+      const clientData = clientDataOf(credential);
+      const authenticatorData = Buffer.from(credential.response?.authenticatorData ?? '', 'base64url');
+      if (clientData?.type !== 'webauthn.create' || clientData.challenge !== challenge || !ORIGINS.includes(clientData.origin)
+        || typeof credential.id !== 'string' || !credential.id || state.passkeys.some((p) => p.id === credential.id)
+        || authenticatorData.length < 37) {
+        return json(res, 400, { message: PASSKEY_NOT_ADDED });
+      }
+      const passkey = { id: credential.id, name, createdAt: new Date().toISOString(), synced: (authenticatorData[32] & 0x08) !== 0 };
+      state.passkeys.push(passkey);
+      return json(res, 201, passkey);
+    }
+    const match = url.pathname.match(/^\/api\/auth\/passkeys\/([^/]+)$/);
+    const passkey = match ? state.passkeys.find((p) => p.id === decodeURIComponent(match[1])) : undefined;
+    if (match && req.method === 'PATCH') {
+      const name = passkeyName((await readBody(req).catch(() => null))?.name);
+      if (!name) return json(res, 400, { message: PASSKEY_NAME_RULE });
+      if (!passkey) return json(res, 404);
+      passkey.name = name;
+      return json(res, 204);
+    }
+    if (match && req.method === 'DELETE') {
+      if (!fresh) return json(res, 403);
+      if (!passkey) return json(res, 404);
+      state.passkeys = state.passkeys.filter((p) => p !== passkey);
+      return json(res, 204);
+    }
+    return json(res, 404);
   }
 
   // extending the session, session list, login history
@@ -618,7 +724,7 @@ server.on('upgrade', (req, socket, head) => {
     socket.destroy();
     return;
   }
-  if (!hub || !sessionOf(req) || req.headers.origin !== ORIGIN) {
+  if (!hub || !sessionOf(req) || !ORIGINS.includes(req.headers.origin)) {
     socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
     socket.destroy();
     return;

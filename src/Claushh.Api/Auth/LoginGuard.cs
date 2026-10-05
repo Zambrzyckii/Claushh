@@ -1,7 +1,7 @@
 // Login protection (docs/ARCHITECTURE.md, "Backend", "Login protection"; decisions: docs/PLAN.md, "Login and sessions"):
 // the client address, the limit of failed attempts per address, the account lockout after wrong codes and the login
-// history. The only place with these rules; the login endpoint calls it. Time comes from TimeProvider, so tests move
-// the clock instead of waiting.
+// history. The only place with these rules; the login, passkey and re-authentication endpoints call it. Time comes from
+// TimeProvider, so tests move the clock instead of waiting.
 using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
@@ -35,7 +35,8 @@ public sealed class LoginGuard(ClaushhDbContext db, UserManager<IdentityUser> us
             return null;
         }
         // What the request loaded before the gate (the user of its session cookie) may be stale by now: forget it, so the
-        // checks read the rows as the previous login left them. Only Login calls this, and it has no unsaved changes here.
+        // checks read the rows as the previous login left them. Callers (login, re-authentication, adding a passkey) have
+        // no unsaved changes here and load what they need after entering.
         db.ChangeTracker.Clear();
         return new GateLease();
     }

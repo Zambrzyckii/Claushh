@@ -2,6 +2,8 @@
 // comes from the IP in Ip (TestRemoteIp).
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Mvc.Testing.Handlers;
 
 namespace Claushh.Api.Tests;
@@ -51,6 +53,32 @@ public sealed class ApiClient
 
     public static string SetCookie(HttpResponseMessage response, string name) =>
         response.Headers.GetValues("Set-Cookie").Single(c => c.StartsWith(name + "=", StringComparison.Ordinal)).ToLowerInvariant();
+
+    // POST /api/auth/reauthenticate, as the Security dialog asks before adding or removing a passkey.
+    public Task<HttpResponseMessage> ReauthenticateAsync(string password, string totpCode) =>
+        Http.PostAsJsonAsync("/api/auth/reauthenticate", new { password, totpCode });
+
+    // Creation options for a new passkey; the session must have re-authenticated.
+    public async Task<JsonElement> CreationOptionsAsync()
+    {
+        var response = await Http.PostAsync("/api/auth/passkeys/creation-options", null);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        return await response.Content.ReadFromJsonAsync<JsonElement>();
+    }
+
+    // Re-authentication (with the next code), creation options and the authenticator's credential.
+    public async Task<JsonObject> PreparePasskeyAsync(TestAuthenticator authenticator)
+    {
+        Assert.Equal(HttpStatusCode.NoContent, (await ReauthenticateAsync(ApiFactory.Password, _api.NextTotp())).StatusCode);
+        return authenticator.Register(await CreationOptionsAsync());
+    }
+
+    // Adds a passkey the way the Security dialog does.
+    public async Task<HttpResponseMessage> AddPasskeyAsync(TestAuthenticator authenticator, string? name = "Laptop") =>
+        await PostPasskeyAsync(await PreparePasskeyAsync(authenticator), name);
+
+    public Task<HttpResponseMessage> PostPasskeyAsync(JsonObject credential, string? name = "Laptop") =>
+        Http.PostAsJsonAsync("/api/auth/passkeys", new { credential, name });
 
     public sealed record MeBody(string UserName, Guid SessionId, int ExpiresIn, int AbsoluteExpiresIn);
 

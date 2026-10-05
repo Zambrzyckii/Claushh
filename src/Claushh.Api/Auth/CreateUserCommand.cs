@@ -1,6 +1,6 @@
 // `create-user`, `create-user --reset-totp` and `create-user --reset-password`: the only way to create the single
-// account or replace its TOTP key or its password.
-// There is no registration endpoint (docs/ARCHITECTURE.md, "Backend", commands).
+// account or replace its TOTP key or its password; both resets also end every session, clear the lockout and remove
+// every passkey. There is no registration endpoint (docs/ARCHITECTURE.md, "Backend", commands).
 using System.Text;
 using Claushh.Api.Data;
 using Microsoft.AspNetCore.Identity;
@@ -49,13 +49,17 @@ public sealed class CreateUserCommand(ClaushhDbContext db, UserManager<IdentityU
         {
             return Fail(terminal, refusal);
         }
+        var passkeysRemoved = 0;
         if (resetTotp)
         {
             await guard.UnlockAsync(user);
             await sessions.RevokeAllAsync(user.Id, ct);
+            passkeysRemoved = await RemovePasskeysAsync(user);
         }
         await transaction.CommitAsync(ct);
-        terminal.WriteLine(resetTotp ? "New TOTP key saved, all sessions ended, the lockout cleared." : $"Account '{user.UserName}' created.");
+        terminal.WriteLine(resetTotp
+            ? $"New TOTP key saved, all sessions ended, the lockout cleared, {passkeysRemoved} passkeys removed."
+            : $"Account '{user.UserName}' created.");
         return 0;
     }
 
@@ -92,9 +96,25 @@ public sealed class CreateUserCommand(ClaushhDbContext db, UserManager<IdentityU
         }
         await guard.UnlockAsync(user);
         await sessions.RevokeAllAsync(user.Id, ct);
+        var passkeysRemoved = await RemovePasskeysAsync(user);
         await transaction.CommitAsync(ct);
-        terminal.WriteLine("New password saved, all sessions ended, the lockout cleared.");
+        terminal.WriteLine($"New password saved, all sessions ended, the lockout cleared, {passkeysRemoved} passkeys removed.");
         return 0;
+    }
+
+    // Every passkey of the account, inside the caller's transaction, so a reset leaves no way in that was added before it.
+    private async Task<int> RemovePasskeysAsync(IdentityUser user)
+    {
+        var passkeys = await users.GetPasskeysAsync(user);
+        foreach (var passkey in passkeys)
+        {
+            var result = await users.RemovePasskeyAsync(user, passkey.CredentialId);
+            if (!result.Succeeded)
+            {
+                throw new InvalidOperationException(string.Join(" ", result.Errors.Select(e => e.Description)));
+            }
+        }
+        return passkeys.Count;
     }
 
     private async Task<IdentityUser?> CreateAccountAsync(ITerminal terminal)

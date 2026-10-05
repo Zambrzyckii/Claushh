@@ -3,6 +3,7 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
+using Claushh.Api.Auth;
 using Claushh.Api.Claude;
 using Claushh.Api.Data;
 using Claushh.Api.Git;
@@ -198,6 +199,7 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         builder.UseSetting("Projects:Root", ProjectsRoot);
         builder.UseSetting("Frontend:Root", FrontendRoot);
         builder.UseSetting("Hubs:AllowedOrigins:0", TestHub.Origin);
+        builder.UseSetting("Passkeys:ServerDomain", "localhost");
         builder.UseSetting("Terminal:SocketDirectory", TmuxDirectory);
         builder.UseSetting("Terminal:Environment:SHELL", "/bin/sh");
         builder.UseSetting("Terminal:Environment:HOME", TerminalHome);
@@ -261,6 +263,7 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         _fileTransport = true;
         SetNetworkTimeout(null);
         Clock.Reset();
+        Services.GetRequiredService<PasskeyCeremonies>().Clear();
         await using var scope = Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<ClaushhDbContext>();
         await db.Database.ExecuteSqlRawAsync("""TRUNCATE "Sessions", "LoginAttempts", "AspNetUsers", "Workspaces", "ConversationEvents", "Conversations", "ConsoleRules" CASCADE""");
@@ -274,6 +277,23 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         Check(await users.ResetAuthenticatorKeyAsync(user));
         TotpKey = await users.GetAuthenticatorKeyAsync(user) ?? throw new InvalidOperationException("No TOTP key.");
         Check(await users.SetTwoFactorEnabledAsync(user, true));
+    }
+
+    // The owner's passkeys as Identity stores them.
+    public async Task<IList<UserPasskeyInfo>> PasskeysAsync()
+    {
+        await using var scope = Services.CreateAsyncScope();
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<IdentityUser>>();
+        return await users.GetPasskeysAsync(await users.FindByNameAsync(UserName) ?? throw new InvalidOperationException("No owner."));
+    }
+
+    // The owner's lockout fields as LoginGuard writes them: wrong codes, the lock's end, the locks in a row.
+    public async Task<(int AccessFailedCount, DateTimeOffset? LockoutEnd, string? LockoutsInARow)> LockoutAsync()
+    {
+        await using var scope = Services.CreateAsyncScope();
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<IdentityUser>>();
+        var owner = await users.FindByNameAsync(UserName) ?? throw new InvalidOperationException("No owner.");
+        return (owner.AccessFailedCount, owner.LockoutEnd, await users.GetAuthenticationTokenAsync(owner, "Claushh", "LockoutsInARow"));
     }
 
     public async Task<int> LoginAttemptCountAsync()

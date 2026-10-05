@@ -4,10 +4,11 @@ A private web portal for working on projects from any device: code editor, conso
 terminal and git in the browser. Runs on a home computer (EndeavourOS), access through Cloudflare Tunnel,
 login with a password and a TOTP code. One user.
 
-Status: **frontend ready (login and sessions, editor with a diff view, console, workspaces and git, terminal);
-backend: login, sessions, login protection, the security headers, serving the built frontend, the client IP behind
-Cloudflare and login notifications (stage 1, parts A-C), the files API (stage 2), the console hub (stage 3), the
-workspaces and git API and the terminal hub (stage 4).** Not deployed yet: the steps are in "Deployment" below.
+Status: **frontend ready (login and sessions, editor with a diff view, console, workspaces and git, terminal); backend:
+login, sessions, login protection, passkeys (adding, renaming and removing; no login with them yet), the security
+headers, serving the built frontend, the client IP behind Cloudflare and login notifications (stage 1, parts A-C), the
+files API (stage 2), the console hub (stage 3), the workspaces and git API and the terminal hub (stage 4).** Not
+deployed yet: the steps are in "Deployment" below.
 Progress: [`docs/PLAN.md`](docs/PLAN.md), section "Stages".
 
 ## Documentation
@@ -81,8 +82,13 @@ Login notifications (ntfy) are off in development unless `Notifications:NtfyUrl`
 (`dotnet user-secrets set --project src/Claushh.Api Notifications:NtfyUrl https://ntfy.sh/<your topic>`, and optionally
 `Notifications:NtfyToken`); on the server the API does not start without it.
 
+Passkeys work at `http://localhost:4200` and `http://localhost:5080`, not at `127.0.0.1`: their RP ID is
+`Passkeys:ServerDomain`, `localhost` in `appsettings.Development.json` (one passkey serves both ports), and an IP
+address cannot have passkeys. The API does not start without that key.
+
 Lost phone or leaked password: `create-user --reset-totp` gives the account a new TOTP key,
-`create-user --reset-password` a new password; both end all sessions (commands in `docs/ARCHITECTURE.md`).
+`create-user --reset-password` a new password; both end all sessions and remove every passkey (commands in
+`docs/ARCHITECTURE.md`).
 
 ## Running the built frontend
 
@@ -129,8 +135,8 @@ home network's address (e.g. `192.168.1.0`).
    sudo install -m 0600 deploy/claushh.env.example /etc/claushh/claushh.env
    sudoedit /etc/claushh/compose.env /etc/claushh/claushh.env
    ```
-   `compose.env`: the password and `POSTGRES_PORT=5435`. `claushh.env`: the same password, `<domain>` (twice) and the
-   ntfy topic URL (`docs/PLAN.md`, "Deployment on EndeavourOS").
+   `compose.env`: the password and `POSTGRES_PORT=5435`. `claushh.env`: the same password, `<domain>` (three times)
+   and the ntfy topic URL (`docs/PLAN.md`, "Deployment on EndeavourOS").
 6. Build as you, install as root. `install` checks steps 2, 4 and 5 and copies the files and the units; the first time
    it starts nothing:
    ```bash

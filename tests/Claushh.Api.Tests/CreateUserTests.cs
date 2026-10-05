@@ -173,7 +173,7 @@ public sealed class CreateUserTests(ApiFactory api) : ApiTest(api)
 
         Assert.Equal(0, await ResetPasswordAsync(terminal));
 
-        Assert.Contains("New password saved, all sessions ended, the lockout cleared.", terminal.Output);
+        Assert.Contains("New password saved, all sessions ended, the lockout cleared, 0 passkeys removed.", terminal.Output);
         Assert.DoesNotContain(terminal.Output, line => line.Contains(NewPassword, StringComparison.Ordinal));
         Assert.Equal(HttpStatusCode.Unauthorized, (await Client.Http.GetAsync("/api/auth/me")).StatusCode);
         var fresh = new ApiClient(Api);
@@ -274,6 +274,35 @@ public sealed class CreateUserTests(ApiFactory api) : ApiTest(api)
 
         Assert.Equal(1, await ResetPasswordAsync(terminal));
         Assert.Contains(terminal.Output, line => line.Contains("no account", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Both_resets_remove_every_passkey(bool resetTotp)
+    {
+        await Client.LoginAsOwnerAsync();
+        Assert.Equal(HttpStatusCode.Created, (await Client.AddPasskeyAsync(new TestAuthenticator(), "One")).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await Client.AddPasskeyAsync(new TestAuthenticator(), "Two")).StatusCode);
+        var terminal = resetTotp
+            ? new ScriptedTerminal(Api, t => t.NextCode())
+            : new ScriptedTerminal(Api, _ => NewPassword, _ => NewPassword);
+
+        Assert.Equal(0, resetTotp ? await RunAsync(resetTotp: true, terminal) : await ResetPasswordAsync(terminal));
+
+        Assert.Contains(terminal.Output, line => line.EndsWith("the lockout cleared, 2 passkeys removed.", StringComparison.Ordinal));
+        Assert.Empty(await Api.PasskeysAsync());
+    }
+
+    [Fact]
+    public async Task A_refused_reset_keeps_the_passkeys()
+    {
+        await Client.LoginAsOwnerAsync();
+        Assert.Equal(HttpStatusCode.Created, (await Client.AddPasskeyAsync(new TestAuthenticator())).StatusCode);
+
+        Assert.Equal(1, await ResetPasswordAsync(new ScriptedTerminal(Api, _ => NewPassword, _ => "another long password")));
+
+        Assert.Single(await Api.PasskeysAsync());
     }
 
     private async Task<int> RunAsync(bool resetTotp, ITerminal terminal)

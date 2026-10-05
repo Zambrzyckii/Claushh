@@ -1,7 +1,8 @@
 // Phone notifications through ntfy (docs/ARCHITECTURE.md, "Backend" → "Notifications"; decisions: docs/PLAN.md, "Backend
-// decisions (stage 1, part C)"): every successful login and every start of an account lock. A login only queues a
-// message; this background service sends them one at a time, once each, outside the login gate, and only logs a
-// failure, so ntfy never holds up or fails a login. The topic URL is a secret and is never logged.
+// decisions (stage 1, part C)"): every successful login, every start of an account lock, and every passkey added or
+// removed. A request only queues a message; this background service sends them one at a time, once each, outside the
+// login gate, and only logs a failure, so ntfy never holds up or fails a request. The topic URL is a secret and is never
+// logged.
 using System.Globalization;
 using System.Net.Http.Headers;
 using System.Text;
@@ -28,6 +29,14 @@ public sealed class LoginNotifications(IHttpClientFactory clients, IOptions<Noti
     public void AccountLocked(TimeSpan lockout, string ip, string userAgent) =>
         Enqueue("Claushh: konto zablokowane", "high", string.Create(CultureInfo.InvariantCulture,
             $"Konto zablokowane na {(int)lockout.TotalMinutes} min po 5 błędnych kodach przy poprawnym haśle; ostatnia próba z {ip} ({Device(userAgent)}), {Now()} UTC. Jeśli to nie Ty: create-user --reset-password."));
+
+    public void PasskeyAdded(string name, string ip, string userAgent) =>
+        Enqueue("Claushh: passkey added", "high",
+            $"Passkey \"{name}\" added from {ip} ({Device(userAgent)}), {Now()} UTC. If this was not you: create-user --reset-password.");
+
+    public void PasskeyRemoved(string name, string ip, string userAgent) =>
+        Enqueue("Claushh: passkey removed", "high",
+            $"Passkey \"{name}\" removed from {ip} ({Device(userAgent)}), {Now()} UTC. If this was not you: create-user --reset-password.");
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -58,7 +67,7 @@ public sealed class LoginNotifications(IHttpClientFactory clients, IOptions<Noti
             {
                 Content = new StringContent(message.Body, Encoding.UTF8, "text/plain"),
             };
-            // ASCII titles: header values are not UTF-8 on the wire. The body carries the Polish text.
+            // ASCII titles: header values are not UTF-8 on the wire. The body carries the text (Polish; English for passkeys).
             request.Headers.TryAddWithoutValidation("Title", message.Title);
             request.Headers.TryAddWithoutValidation("Priority", message.Priority);
             if (options.Value.NtfyToken.Length > 0)

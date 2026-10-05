@@ -21,6 +21,9 @@ export interface MockState {
   }[];
   prompts: { conversationId: string; text: string; model: string; effort: string; mode: string }[];
   terminals: { id: string; title: string; cwd: string; exited: boolean; inputs: string[]; sizes: [number, number][] }[];
+  passkeyCount: number;
+  registrationCount: number;
+  freshCount: number;
 }
 
 export async function resetMock(request: APIRequestContext): Promise<void> {

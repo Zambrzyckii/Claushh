@@ -57,6 +57,8 @@ builder.Services
         options.Password.RequireLowercase = false;
         options.Password.RequireUppercase = false;
         options.Password.RequireNonAlphanumeric = false;
+        // Version 3 adds Identity's passkey table (docs/PLAN.md, "Backend decisions (passkeys)").
+        options.Stores.SchemaVersion = IdentitySchemaVersions.Version3;
     })
     .AddEntityFrameworkStores<ClaushhDbContext>();
 
@@ -64,6 +66,28 @@ builder.Services.AddSingleton<AuthCookies>();
 builder.Services.AddScoped<SessionService>();
 builder.Services.AddScoped<TotpVerifier>();
 builder.Services.AddScoped<LoginGuard>();
+builder.Services.AddSingleton<PasskeyCeremonies>();
+builder.Services.AddOptions<PasskeysOptions>()
+    .Bind(builder.Configuration.GetSection("Passkeys"))
+    .Validate(options => Uri.CheckHostName(options.ServerDomain) == UriHostNameType.Dns
+            && options.ServerDomain == options.ServerDomain.ToLowerInvariant(),
+        "Passkeys:ServerDomain must be the portal's lower-case host name, e.g. localhost in development (docs/ARCHITECTURE.md, \"Backend\", configuration).")
+    .ValidateOnStart();
+// Identity's passkey handler, called directly: AddIdentityCore registers none, and SignInManager would keep the
+// ceremonies in Identity's cookies, which the portal does not use (docs/PLAN.md, "Backend decisions (passkeys)").
+builder.Services.AddScoped<IPasskeyHandler<IdentityUser>, PasskeyHandler<IdentityUser>>();
+builder.Services.AddOptions<IdentityPasskeyOptions>().Configure<IOptions<PasskeysOptions>>((options, passkeys) =>
+{
+    options.ServerDomain = passkeys.Value.ServerDomain;
+    options.UserVerificationRequirement = "required";
+    // Login has no user name, so a passkey must be discoverable; the server itself does not check this.
+    options.ResidentKeyRequirement = "required";
+    // The exact origins the portal is served from, as for the hubs. This replaces Identity's own check, so it refuses a
+    // cross-origin or embedded ceremony itself.
+    options.ValidateOrigin = context => ValueTask.FromResult(!context.CrossOrigin && context.TopOrigin is null
+        && context.HttpContext.RequestServices.GetRequiredService<IOptions<HubsOptions>>().Value.AllowedOrigins
+            .Contains(context.Origin, StringComparer.Ordinal));
+});
 builder.Services.AddSingleton<AuthCleanup>();
 builder.Services.AddHostedService(services => services.GetRequiredService<AuthCleanup>());
 builder.Services.AddOptions<NotificationsOptions>()
@@ -182,7 +206,7 @@ app.UseAuthorization();
 
 app.MapGet("/api/health", () => Results.Ok(new { status = "ok" })).AllowAnonymous();
 var api = app.MapGroup("/api").RequireXsrfToken();
-api.MapAuthEndpoints().MapSessionEndpoints().MapFileEndpoints().MapWorkspaceEndpoints().MapGitEndpoints();
+api.MapAuthEndpoints().MapSessionEndpoints().MapPasskeyEndpoints().MapFileEndpoints().MapWorkspaceEndpoints().MapGitEndpoints();
 // Unknown /api paths: 401 without a session (fallback policy), 404 with one, never another handler's response.
 api.Map("{**path}", () => Results.NotFound());
 // WebSocket only: the frontend skips negotiation, and other transports would only add ways in.
