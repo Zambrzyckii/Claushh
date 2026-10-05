@@ -65,6 +65,18 @@ public static partial class FrontendFiles
     public static IApplicationBuilder UseFrontendFiles(this IApplicationBuilder app, StaticFileOptions? files) =>
         files is null ? app : app.UseStaticFiles(files);
 
+    // A path that starts with "//" is no path of the app, the API or the hubs: 404 with an empty body, before routing, the
+    // files of the build and authentication.
+    public static IApplicationBuilder UseDoubleSlashNotFound(this IApplicationBuilder app) => app.Use((context, next) =>
+    {
+        if (context.Request.Path.Value is { } path && path.StartsWith("//", StringComparison.Ordinal))
+        {
+            context.Response.StatusCode = StatusCodes.Status404NotFound;
+            return Task.CompletedTask;
+        }
+        return next(context);
+    });
+
     // index.html for every path that does not look like a file ({*path:nonfile}), so Angular's routes load. A missing file
     // such as /chunk-x.js matches nothing and gets 401 or 404 from the fallback policy.
     public static void MapFrontendFallback(this IEndpointRouteBuilder endpoints, StaticFileOptions? files)

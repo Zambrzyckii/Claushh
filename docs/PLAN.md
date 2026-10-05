@@ -169,6 +169,8 @@ Backend decisions (stage 1, part C):
   (Cloudflare covers both at the edge, before a request reaches the tunnel).
 - No path under `/hubs` falls back to the page: unknown ones are `401` without a session and `404` with one. The
   catch-all stays when more hubs arrive, since `MapHub` routes are more specific.
+- A path that starts with `//` is `404` with an empty body, before routing, the files of the build and
+  authentication. Rejected: collapsing the slashes (the app, the API and the hubs never use such paths).
 - The server's Kestrel URL and `AllowedHosts` are in "Deployment decisions".
 - `ForwardedHeaders` runs first in every environment and reads `CF-Connecting-IP` (as the client address) and
   `X-Forwarded-Proto` only from a loopback peer, one entry each; a loopback request without `CF-Connecting-IP` keeps the
@@ -466,8 +468,9 @@ Backend decisions (stage 4):
   with a subscription for the code (it relies on notifications a tmux bug sent inside command replies).
 - The snapshot is tmux's screen (`capture-pane` with colours, history and screen) plus cursor and modes from
   `display-message`, taken on one line of tmux commands, so screen and `seq` agree (tmux sends a reply only after the
-  output read before it). Rejected: the mock's raw output tail (it can start inside an escape sequence and loses the
-  modes a program set).
+  output read before it). When the output at the snapshot's `seq` ends inside an escape sequence, its beginning goes
+  at the end of the snapshot, so the live output completes it. Rejected: the mock's raw output tail (it can start
+  inside an escape sequence and loses the modes a program set).
 - `Input` goes to the pane as bytes (`send-keys -H`, 1024 per command). Rejected: `send-keys -l` (tmux quoting of `;`,
   quotes and control characters).
 - `Resize` of an unknown id and `CloseTerminal` of an unknown id are silent. Rejected: errors there (`Resize` is a

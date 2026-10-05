@@ -1,5 +1,6 @@
 using System.Net;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 
 namespace Claushh.Api.Tests;
 
@@ -85,6 +86,24 @@ public sealed class FrontendTests(ApiFactory api) : ApiTest(api)
         Assert.Equal(HttpStatusCode.NotFound, withSession.StatusCode);
     }
 
+    [Theory]
+    [InlineData("//")]
+    [InlineData("//login")]
+    [InlineData("//index.html")]
+    [InlineData("//main-TEST.js")]
+    [InlineData("//api/health")]
+    public async Task Paths_that_start_with_two_slashes_are_404_with_or_without_a_session(string path)
+    {
+        var anonymous = await SendRawAsync(path);
+        await Client.LoginAsOwnerAsync();
+        var withSession = await SendRawAsync(path);
+
+        Assert.Equal(StatusCodes.Status404NotFound, anonymous.Response.StatusCode);
+        Assert.Equal(StatusCodes.Status404NotFound, withSession.Response.StatusCode);
+        Assert.Equal("", await new StreamReader(withSession.Response.Body).ReadToEndAsync());
+        Assert.Equal("DENY", withSession.Response.Headers.XFrameOptions.ToString());
+    }
+
     [Fact]
     public async Task Every_response_has_the_security_headers()
     {
@@ -159,6 +178,24 @@ public sealed class FrontendTests(ApiFactory api) : ApiTest(api)
             request.Headers.TryAddWithoutValidation("Origin", origin);
         }
         return Client.Http.SendAsync(request);
+    }
+
+    // The path exactly as given (TestServer takes it as it is, without a Uri in between), with the browser's cookies.
+    private Task<HttpContext> SendRawAsync(string path)
+    {
+        var cookies = Client.Cookies.GetCookieHeader(ApiClient.BaseAddress);
+        return Api.Server.SendAsync(context =>
+        {
+            context.Request.Method = HttpMethods.Get;
+            context.Request.Scheme = "https";
+            context.Request.Host = new HostString("localhost");
+            context.Request.Path = path;
+            context.Request.Headers[TestRemoteIp.Header] = Client.Ip;
+            if (cookies.Length > 0)
+            {
+                context.Request.Headers.Cookie = cookies;
+            }
+        });
     }
 
     // The one value of a response header, or null without it (a second X-Frame-Options fails here).

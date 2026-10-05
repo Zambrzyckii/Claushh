@@ -169,6 +169,8 @@ app.UseForwardedHeaders(new ForwardedHeadersOptions
 // Before the error handler and authorization, so their 500 and 401 and the Origin check's 403 get the headers too.
 app.UseSecurityHeaders();
 app.UseExceptionHandler();
+// Before routing and the files of the build (docs/ARCHITECTURE.md, "Backend" → "Frontend").
+app.UseDoubleSlashNotFound();
 // Explicit, so that endpoint matching runs before the static files: a request that matched /api, /hubs or the fallback
 // is never answered with a file.
 app.UseRouting();

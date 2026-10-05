@@ -47,39 +47,51 @@ public static class TerminalSnapshot
         $"display-message -p -t {pane} '{Format}' ; capture-pane -p -e -N -t {pane} -S - -E - ; "
         + $"capture-pane -a -q -p -e -N -t {pane}";
 
-    public static string Normal(Display display, IReadOnlyList<byte[]> lines) => Build(Decode(lines), null, display);
+    public static string Normal(Display display, IReadOnlyList<byte[]> lines, string open) => Build(Decode(lines), null, display, open);
 
-    public static string Alternate(Display display, IReadOnlyList<byte[]> lines, IReadOnlyList<byte[]> normalScreen, ILogger log)
+    // After a resize tmux keeps the normal screen at the height it had when the program switched: a shorter one is padded
+    // with empty lines, a taller one is written whole (its top lines scroll into the view's history).
+    public static string Alternate(Display display, IReadOnlyList<byte[]> lines, IReadOnlyList<byte[]> normalScreen, string open, ILogger log)
     {
         var all = Decode(lines);
-        if (all.Count != display.HistorySize + display.Height || normalScreen.Count != display.Height)
+        if (all.Count != display.HistorySize + display.Height)
         {
-            log.LogWarning("capture-pane gave {Lines} and {Normal} lines for a history of {History} and a screen of {Height}",
-                all.Count, normalScreen.Count, display.HistorySize, display.Height);
-            return Build(all, null, display);
+            log.LogWarning("capture-pane gave {Lines} lines for a history of {History} and a screen of {Height}",
+                all.Count, display.HistorySize, display.Height);
+            return Build(all, null, display, open);
         }
-        return Build([.. all.Take(display.HistorySize), .. Decode(normalScreen)], [.. all.Skip(display.HistorySize)], display);
+        var normal = Decode(normalScreen);
+        while (normal.Count < display.Height)
+        {
+            normal.Add("");
+        }
+        return Build([.. all.Take(display.HistorySize), .. normal], [.. all.Skip(display.HistorySize)], display, open);
     }
 
-    private static string Build(List<string> main, List<string>? alternate, Display display)
+    // `open`: the escape sequence the output was inside at the capture (EscapeTail), last, after the cursor and modes. Too
+    // long for one message: the oldest lines go first, those of the history and normal screen before those of the
+    // alternate screen, so the text is never longer than MaxLength.
+    private static string Build(List<string> main, List<string>? alternate, Display display, string open)
     {
-        var tail = Tail(display);
-        var fixedLength = tail.Length + (alternate is null ? 0 : AlternateStart(display).Length + Joined(alternate));
-        var length = Joined(main);
-        var first = 0;
-        // Too long for one message: the oldest lines go first.
-        while (first < main.Count && fixedLength + length > MaxLength)
+        var start = alternate is null ? "" : AlternateStart(display);
+        var end = Tail(display) + open;
+        alternate ??= [];
+        var length = start.Length + end.Length + Joined(main) + Joined(alternate);
+        var fromMain = 0;
+        while (length > MaxLength && fromMain < main.Count)
         {
-            length -= main[first].Length + (first < main.Count - 1 ? 2 : 0);
-            first++;
+            length -= main[fromMain].Length + (fromMain < main.Count - 1 ? 2 : 0);
+            fromMain++;
         }
-        var text = new StringBuilder(fixedLength + Math.Max(0, length));
-        text.AppendJoin("\r\n", main.Skip(first));
-        if (alternate is not null)
+        var fromAlternate = 0;
+        while (length > MaxLength && fromAlternate < alternate.Count)
         {
-            text.Append(AlternateStart(display)).AppendJoin("\r\n", alternate);
+            length -= alternate[fromAlternate].Length + (fromAlternate < alternate.Count - 1 ? 2 : 0);
+            fromAlternate++;
         }
-        return text.Append(tail).ToString();
+        var text = new StringBuilder(length);
+        text.AppendJoin("\r\n", main.Skip(fromMain)).Append(start).AppendJoin("\r\n", alternate.Skip(fromAlternate));
+        return text.Append(end).ToString();
     }
 
     // Where the normal screen's cursor was when the program switched, so leaving the alternate screen puts it back.

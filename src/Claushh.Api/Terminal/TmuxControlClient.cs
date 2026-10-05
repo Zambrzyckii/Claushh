@@ -9,8 +9,9 @@ using Microsoft.AspNetCore.SignalR;
 
 namespace Claushh.Api.Terminal;
 
-// A command's reply: its lines as tmux printed them, and the terminal's seq when its %begin was read.
-public sealed record TmuxReply(bool Succeeded, IReadOnlyList<byte[]> Lines, long SeqAtBegin)
+// A command's reply: its lines as tmux printed them, the terminal's seq when its %begin was read, and the escape
+// sequence the output had left open then ("" when none).
+public sealed record TmuxReply(bool Succeeded, IReadOnlyList<byte[]> Lines, long SeqAtBegin, string OpenAtBegin)
 {
     public string Text(int line) => Encoding.UTF8.GetString(Lines[line]);
 }
@@ -20,6 +21,7 @@ public sealed class TmuxControlClient : IAsyncDisposable
     private readonly Process _process;
     private readonly Func<string, ReadOnlyMemory<byte>, ValueTask> _output;
     private readonly Func<long> _seq;
+    private readonly Func<string> _open;
     private readonly ILogger _log;
     // Commands waiting for their block, oldest first. One that ran out of time stays until its block arrives, so its
     // late reply is never taken for the next command's.
@@ -27,12 +29,14 @@ public sealed class TmuxControlClient : IAsyncDisposable
     private readonly SemaphoreSlim _write = new(1, 1);
     private bool _ended;
 
-    // output: the pane and the bytes of every %output line, awaited before the next line is read. seq: the terminal's
-    // seq, read when a block begins.
-    public TmuxControlClient(ProcessStartInfo start, Func<string, ReadOnlyMemory<byte>, ValueTask> output, Func<long> seq, ILogger log)
+    // output: the pane and the bytes of every %output line, awaited before the next line is read. seq and open: the
+    // terminal's seq and the escape sequence its output left open, read when a block begins.
+    public TmuxControlClient(ProcessStartInfo start, Func<string, ReadOnlyMemory<byte>, ValueTask> output, Func<long> seq,
+        Func<string> open, ILogger log)
     {
         _output = output;
         _seq = seq;
+        _open = open;
         _log = log;
         start.RedirectStandardInput = true;
         start.RedirectStandardOutput = true;
@@ -206,7 +210,7 @@ public sealed class TmuxControlClient : IAsyncDisposable
         {
             if (block.EndsWith(line) is { } succeeded)
             {
-                Complete(new TmuxReply(succeeded, block.Lines, block.SeqAtBegin));
+                Complete(new TmuxReply(succeeded, block.Lines, block.SeqAtBegin, block.OpenAtBegin));
                 return null;
             }
             block.Lines.Add(line);
@@ -214,7 +218,7 @@ public sealed class TmuxControlClient : IAsyncDisposable
         }
         if (line.AsSpan().StartsWith("%begin "u8))
         {
-            return new Block(Guard(line), _seq());
+            return new Block(Guard(line), _seq(), _open());
         }
         if (line.AsSpan().StartsWith("%output "u8) && Output(line) is { } output)
         {
@@ -288,10 +292,11 @@ public sealed class TmuxControlClient : IAsyncDisposable
 
     private static bool IsOctal(byte value) => value is >= (byte)'0' and <= (byte)'7';
 
-    private sealed class Block(string guard, long seqAtBegin)
+    private sealed class Block(string guard, long seqAtBegin, string openAtBegin)
     {
         public List<byte[]> Lines { get; } = [];
         public long SeqAtBegin => seqAtBegin;
+        public string OpenAtBegin => openAtBegin;
 
         // null while the block goes on; true for its %end, false for its %error.
         public bool? EndsWith(byte[] line)

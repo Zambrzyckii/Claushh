@@ -21,6 +21,8 @@ public sealed class TerminalSession(string id, string title, string cwd, TmuxSer
     private readonly SemaphoreSlim _lock = new(1, 1);
     // One decoder for the whole output: a character can be split between two %output lines; invalid bytes become U+FFFD.
     private readonly Decoder _decoder = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: false).GetDecoder();
+    // The escape sequence the output ends inside (EscapeTail); fed and read only on the control client's reader.
+    private readonly EscapeTail _tail = new();
     private TmuxControlClient? _client;
     private volatile string _pane = "";
     private long _seq;
@@ -53,7 +55,7 @@ public sealed class TerminalSession(string id, string title, string cwd, TmuxSer
             }
             var start = tmux.StartInfo(["-C", "new-session", "-s", SessionName, "-c", directory.Replace("#", "##"),
                 "-x", $"{cols}", "-y", $"{rows}"]);
-            _client = new TmuxControlClient(start, OnOutputAsync, () => Interlocked.Read(ref _seq), log);
+            _client = new TmuxControlClient(start, OnOutputAsync, () => Interlocked.Read(ref _seq), () => _tail.Open, log);
             _ = WatchAsync(_client);
             TmuxReply started;
             try
@@ -189,7 +191,8 @@ public sealed class TerminalSession(string id, string title, string cwd, TmuxSer
         }
     }
 
-    // Under the lock, so no Input or Resize of this terminal runs in between.
+    // Under the lock, so no Input or Resize of this terminal runs in between. The escape sequence the output was inside
+    // at the capture goes last, so the next TerminalOutput completes it.
     private async Task<Attachment> SnapshotAsync(int cols, int rows, long inputSeq)
     {
         await RunAsync($"refresh-client -C {cols}x{rows}");
@@ -197,13 +200,14 @@ public sealed class TerminalSession(string id, string title, string cwd, TmuxSer
         var display = TerminalSnapshot.Display.Parse(replies[0]);
         if (!display.AlternateOn)
         {
-            return new Attachment(TerminalSnapshot.Normal(display, replies[1].Lines), replies[1].SeqAtBegin, inputSeq);
+            return new Attachment(TerminalSnapshot.Normal(display, replies[1].Lines, replies[1].OpenAtBegin),
+                replies[1].SeqAtBegin, inputSeq);
         }
         replies = await RunLineAsync(TerminalSnapshot.AlternateCommands(_pane), 3);
         display = TerminalSnapshot.Display.Parse(replies[0]);
         var text = display.AlternateOn
-            ? TerminalSnapshot.Alternate(display, replies[1].Lines, replies[2].Lines, log)
-            : TerminalSnapshot.Normal(display, replies[1].Lines);
+            ? TerminalSnapshot.Alternate(display, replies[1].Lines, replies[2].Lines, replies[1].OpenAtBegin, log)
+            : TerminalSnapshot.Normal(display, replies[1].Lines, replies[1].OpenAtBegin);
         return new Attachment(text, replies[1].SeqAtBegin, inputSeq);
     }
 
@@ -279,6 +283,7 @@ public sealed class TerminalSession(string id, string title, string cwd, TmuxSer
         {
             return;
         }
+        _tail.Feed(chars.AsSpan(0, count));
         try
         {
             await output(new TerminalOutput(id, Interlocked.Increment(ref _seq), new string(chars, 0, count)));

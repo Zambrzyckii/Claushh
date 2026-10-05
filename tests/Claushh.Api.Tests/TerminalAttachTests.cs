@@ -275,6 +275,55 @@ public sealed class TerminalAttachTests(ApiFactory api) : ApiTest(api)
         Assert.DoesNotContain("\e[?1049h", after, StringComparison.Ordinal);
     }
 
+    // tmux keeps the normal screen at its old height while a program shows the alternate screen; the snapshot still
+    // switches to the alternate screen after a resize.
+    [Fact]
+    public async Task Attach_of_the_alternate_screen_after_a_resize_still_switches_to_it()
+    {
+        await using var tab = await TestTerminal.ConnectAsync(Api, Client);
+        var id = (await tab.OpenAsync()).Id;
+        await tab.AttachAsync(id);
+        await tab.TypeAsync(id, "seq 1 60; echo kon''iec");
+        await tab.WaitForAsync(id, "koniec");
+        await tab.TypeAsync(id, "less /etc/os-release");
+        await tab.WaitForAsync(id, "NAME=");
+
+        await tab.Hub.SendAsync("Resize", new { id, cols = 80, rows = 30 });
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        while (Api.Tmux("display-message", "-p", "-t", $"=claushh-{id}:", "#{pane_height}").Output.Trim() != "30")
+        {
+            Assert.True(DateTime.UtcNow < deadline, "tmux did not apply the new height within 5 s");
+            await Task.Delay(50, TestContext.Current.CancellationToken);
+        }
+        var snapshot = (await tab.AttachAsync(id, rows: 30)).Snapshot;
+        var switchIndex = snapshot.IndexOf("\e[?1049h", StringComparison.Ordinal);
+
+        Assert.True(switchIndex > 0, $"No switch to the alternate screen in:\n{snapshot}");
+        Assert.Contains("\r\n60", snapshot[..switchIndex], StringComparison.Ordinal);
+        Assert.Contains("NAME=", snapshot[switchIndex..], StringComparison.Ordinal);
+        await tab.InputAsync(id, "q");
+    }
+
+    // tmux cuts its output wherever a read of the pane ended, also inside an escape sequence; the snapshot then ends
+    // with the sequence's beginning, so the next output completes it instead of showing its rest as text.
+    [Fact]
+    public async Task A_snapshot_taken_inside_an_escape_sequence_ends_with_its_beginning()
+    {
+        await using var tab = await TestTerminal.ConnectAsync(Api, Client);
+        var id = (await tab.OpenAsync()).Id;
+        await tab.AttachAsync(id);
+
+        await tab.TypeAsync(id, "printf 'A\\033[3'; sleep 3; printf '1''mB\\033[0m\\n'; echo kon''iec");
+        await tab.WaitForAsync(id, "A\e[3");
+        var attachment = await tab.AttachAsync(id);
+        await tab.WaitForAsync(id, "koniec");
+
+        var later = string.Concat(tab.Outputs(id).Where(f => f.Seq > attachment.Seq).Select(f => f.Data));
+        Assert.EndsWith("\e[3", attachment.Snapshot, StringComparison.Ordinal);
+        Assert.StartsWith("1mB", later, StringComparison.Ordinal);
+        Assert.DoesNotContain("1mB", Plain(attachment.Snapshot + later), StringComparison.Ordinal);
+    }
+
     // The text without escape sequences and CR, as a person reads it.
     private static string Plain(string text) =>
         Regex.Replace(text, @"\e\[[0-?]*[ -/]*[@-~]|\e\][^\a\e]*(?:\a|\e\\)|\e[=>]|\r", "");

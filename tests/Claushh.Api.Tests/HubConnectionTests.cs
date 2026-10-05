@@ -12,6 +12,11 @@ namespace Claushh.Api.Tests;
 public sealed class HubConnectionTests(ApiFactory api) : ApiTest(api)
 {
     private static readonly TimeSpan CloseWait = TimeSpan.FromSeconds(5);
+    // The sweep inside the request closes the connection before the response; HubSessionSweep's 5 s timer alone takes up
+    // to 5 s, so a close within 1 s comes from the request.
+    private static readonly TimeSpan InRequestWait = TimeSpan.FromSeconds(1);
+    // The timer's period, 5 s, with room to spare.
+    private static readonly TimeSpan TimerWait = TimeSpan.FromSeconds(10);
 
     [Fact]
     public async Task A_hub_without_a_session_is_401()
@@ -93,7 +98,7 @@ public sealed class HubConnectionTests(ApiFactory api) : ApiTest(api)
 
         Assert.Equal(HttpStatusCode.NoContent, (await Client.Http.PostAsync("/api/auth/logout", null)).StatusCode);
 
-        await closed.WaitAsync(CloseWait, TestContext.Current.CancellationToken);
+        await closed.WaitAsync(InRequestWait, TestContext.Current.CancellationToken);
     }
 
     [Fact]
@@ -108,7 +113,7 @@ public sealed class HubConnectionTests(ApiFactory api) : ApiTest(api)
         var response = await Client.Http.DeleteAsync($"/api/auth/sessions/{laptopSession.SessionId}");
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
-        await closed.WaitAsync(CloseWait, TestContext.Current.CancellationToken);
+        await closed.WaitAsync(InRequestWait, TestContext.Current.CancellationToken);
     }
 
     [Fact]
@@ -124,7 +129,7 @@ public sealed class HubConnectionTests(ApiFactory api) : ApiTest(api)
         var response = await Client.Http.PostAsync("/api/auth/sessions/revoke-others", null);
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
-        await otherClosed.WaitAsync(CloseWait, TestContext.Current.CancellationToken);
+        await otherClosed.WaitAsync(InRequestWait, TestContext.Current.CancellationToken);
         Assert.Empty(await current.InvokeAsync<JsonElement[]>("ListTerminals"));
         Assert.Equal(HubConnectionState.Connected, current.State);
     }
@@ -223,6 +228,19 @@ public sealed class HubConnectionTests(ApiFactory api) : ApiTest(api)
         await Api.Services.GetRequiredService<HubSessionSweep>().RunOnceAsync(TestContext.Current.CancellationToken);
 
         await closed.WaitAsync(CloseWait, TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task The_timer_closes_the_connections_of_an_expired_session_by_itself()
+    {
+        await Client.LoginAsOwnerAsync();
+        await using var hub = await TestHub.ConnectAsync(Api, Client);
+        var closed = TestHub.WhenClosed(hub);
+
+        // Past the idle deadline, with no call and no RunOnceAsync: only HubSessionSweep's timer can close it.
+        Api.Clock.Advance(TimeSpan.FromMinutes(31));
+
+        await closed.WaitAsync(TimerWait, TestContext.Current.CancellationToken);
     }
 
     private Task<HttpResponseMessage> SendHubAsync(HttpMethod method, string url, string? origin = TestHub.Origin)
