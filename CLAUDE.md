@@ -33,9 +33,10 @@ In this repository documentation has priority. It should let you find your way a
 ## Security
 
 The portal gives access to files, the terminal and GitHub, so the rules from the "Security" section in `docs/PLAN.md`
-are mandatory. In particular: every endpoint and hub except `/api/health`, login and the built frontend (static files
-and the `index.html` fallback, the same files for everyone, no data) requires authorization, every file path is
-checked against the projects directory, secrets never go into the repo.
+are mandatory. In particular: every endpoint and hub except `/api/health`, the login endpoints (`GET /api/auth/me`,
+`POST /api/auth/login`, `POST /api/auth/passkeys/login-options`, `POST /api/auth/passkeys/login`) and the built
+frontend (static files and the `index.html` fallback, the same files for everyone, no data) requires authorization,
+every file path is checked against the projects directory, secrets never go into the repo.
 
 ## Commands
 

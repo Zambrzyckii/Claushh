@@ -1,7 +1,7 @@
 // The account's passkeys (docs/ARCHITECTURE.md, "Authentication" → "Passkeys"; decisions: docs/PLAN.md, "Backend
-// decisions (passkeys)"): re-authentication, the list, adding, renaming and removing. Identity's passkey handler makes
-// the options and checks the credentials; this file keeps its states on the server (PasskeyCeremonies), binds them to
-// the session, and applies the login gate, the limits and the notifications.
+// decisions (passkeys)"): re-authentication, the list, adding, renaming, removing, and the passkey login. Identity's
+// passkey handler makes the options and checks the credentials; this file keeps its states on the server
+// (PasskeyCeremonies), binds them to the session, and applies the login gate, the limits and the notifications.
 using System.Buffers.Text;
 using System.Globalization;
 using System.Text;
@@ -18,6 +18,7 @@ public static class PasskeyEndpoints
     public sealed record RenamePasskeyRequest(string? Name);
     public sealed record PasskeyResponse(string Id, string Name, DateTimeOffset CreatedAt, bool Synced);
     public sealed record MessageResponse(string Message);
+    public sealed record PasskeyLoginRequest(JsonElement Credential);
 
     private const int MaxPasskeys = 10;
     private const int MaxNameLength = 64;
@@ -34,6 +35,8 @@ public static class PasskeyEndpoints
         auth.MapPost("/passkeys", Add);
         auth.MapPatch("/passkeys/{id}", Rename);
         auth.MapDelete("/passkeys/{id}", Remove);
+        auth.MapPost("/passkeys/login-options", LoginOptions).AllowAnonymous();
+        auth.MapPost("/passkeys/login", Login).AllowAnonymous();
         return api;
     }
 
@@ -61,7 +64,7 @@ public static class PasskeyEndpoints
         if (user is null || !success)
         {
             // Not the request's token: an attempt whose client went away is still recorded and counted.
-            await guard.RecordAsync(false, ip, limitKey, userAgent, CancellationToken.None);
+            await guard.RecordAsync(false, LoginMethods.Password, ip, limitKey, userAgent, CancellationToken.None);
             if (user is not null && await guard.CodeFailedAsync(user) is { } lockout)
             {
                 notifications.AccountLocked(lockout, ip, userAgent);
@@ -201,6 +204,72 @@ public static class PasskeyEndpoints
         var (ip, _) = LoginGuard.ClientIp(http.Connection.RemoteIpAddress);
         notifications.PasskeyRemoved(passkey.Name ?? "", ip, http.Request.Headers.UserAgent.ToString());
         ThrowIfFailed(await users.RemovePasskeyAsync(user, credentialId));
+        return Results.NoContent();
+    }
+
+    // Anonymous: request options for a login with any discoverable passkey; the state stays here under a random id in
+    // the challenge cookie. Outside the login gate (it writes no rows), behind the per-IP limit only.
+    private static async Task<IResult> LoginOptions(HttpContext http, LoginGuard guard, IPasskeyHandler<IdentityUser> passkeys,
+        PasskeyCeremonies ceremonies, AuthCookies cookies)
+    {
+        var (_, limitKey) = LoginGuard.ClientIp(http.Connection.RemoteIpAddress);
+        if (await guard.IpRetryAfterAsync(limitKey, http.RequestAborted) is { } retryAfter)
+        {
+            return TooManyRequests(http, retryAfter);
+        }
+        var options = await passkeys.MakeRequestOptionsAsync(null, http);
+        var id = ceremonies.AddLoginChallenge(limitKey,
+            options.AssertionState ?? throw new InvalidOperationException("Identity gave no assertion state."));
+        cookies.AppendPasskeyChallenge(http.Response, id);
+        return Results.Content(options.RequestOptionsJson, "application/json");
+    }
+
+    // Anonymous: a passkey login through the login gate and the per-IP limit. Every attempt past them uses up the
+    // challenge, expires its cookie and is recorded as a passkey attempt; a passkey login neither counts towards nor
+    // resets the lockout. A success creates the same session as a password login.
+    private static async Task<IResult> Login(HttpContext http, UserManager<IdentityUser> users, LoginGuard guard,
+        IPasskeyHandler<IdentityUser> passkeys, PasskeyCeremonies ceremonies, SessionService sessions, AuthCookies cookies,
+        LoginNotifications notifications, ILoggerFactory loggers)
+    {
+        var log = loggers.CreateLogger("Claushh.Api.Auth.PasskeyLogin");
+        var (ip, limitKey) = LoginGuard.ClientIp(http.Connection.RemoteIpAddress);
+        var userAgent = http.Request.Headers.UserAgent.ToString();
+        var body = await ReadJsonAsync<PasskeyLoginRequest>(http);
+        using var gate = await guard.EnterAsync(http.RequestAborted);
+        if (gate is null)
+        {
+            // Not recorded, like every 429; the challenge stays for a retry.
+            log.LogInformation("Passkey login from {Ip} did not start within {Seconds} s", ip, LoginGuard.GateWait.TotalSeconds);
+            return TooManyRequests(http, (int)LoginGuard.GateWait.TotalSeconds);
+        }
+        if (await guard.IpRetryAfterAsync(limitKey, http.RequestAborted) is { } retryAfter)
+        {
+            return TooManyRequests(http, retryAfter);
+        }
+        var state = ceremonies.TakeLoginChallenge(http.Request.Cookies[cookies.Passkey]);
+        cookies.ExpirePasskeyChallenge(http.Response);
+        var result = state is null || body is not { Credential.ValueKind: JsonValueKind.Object }
+            ? null
+            : await passkeys.PerformAssertionAsync(new PasskeyAssertionContext
+            {
+                HttpContext = http,
+                CredentialJson = body.Credential.GetRawText(),
+                AssertionState = state,
+            });
+        // Not the request's token: an attempt whose client went away is still recorded and counted.
+        await guard.RecordAsync(result?.Succeeded == true, LoginMethods.Passkey, ip, limitKey, userAgent, CancellationToken.None);
+        if (result is null || !result.Succeeded)
+        {
+            log.LogInformation("Passkey login from {Ip} failed: {Reason}", ip,
+                result?.Failure?.Message ?? "no challenge or no credential");
+            return Results.Unauthorized();
+        }
+        // The new sign count and backup state: Identity's handler leaves saving them to the caller.
+        ThrowIfFailed(await users.AddOrUpdatePasskeyAsync(result.User, result.Passkey));
+        var (_, secret) = await sessions.CreateAsync(result.User, userAgent, ip, http.RequestAborted);
+        cookies.AppendSession(http.Response, secret);
+        log.LogInformation("Passkey login of {UserName} from {Ip}", result.User.UserName, ip);
+        notifications.PasskeyLoggedIn(result.Passkey.Name ?? "", ip, userAgent);
         return Results.NoContent();
     }
 

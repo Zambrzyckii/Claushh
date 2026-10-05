@@ -6,9 +6,9 @@ or dependency, update the relevant section.
 
 Status: frontend done (login, session countdown and the "Bezpieczeństwo" (Security) window, explorer, editor with diff
 view, console, workspaces and git, terminal). The backend has login, sessions, login protection and notifications,
-passkeys (adding, renaming and removing), the client IP behind Cloudflare, the built frontend with the security
-headers, the files API (listing, reading and saving), the workspaces and git API, the terminal hub and the console hub
-(section "Backend").
+passkeys (logging in, adding, renaming and removing), the client IP behind Cloudflare, the built frontend with the
+security headers, the files API (listing, reading and saving), the workspaces and git API, the terminal hub and the
+console hub (section "Backend").
 The frontend is tested against a mock backend (`web/e2e/mock-api/`) that follows the contracts below.
 
 ## Flow
@@ -51,7 +51,7 @@ On the server (decisions: `PLAN.md`, "Deployment decisions"):
 | `src/Claushh.Api/Program.cs` | app configuration and endpoint mapping |
 | `src/Claushh.Api/Properties/launchSettings.json` | development profile, port 5080 |
 | `src/Claushh.Api/Data/` | `ClaushhDbContext` (Identity tables, `Sessions`, `LoginAttempts`, `Workspaces`, and the console's `Conversations`, `ConversationEvents` and `ConsoleRules`) and EF Core migrations, applied at startup |
-| `src/Claushh.Api/Auth/` | login: `Session`, `AuthSessionOptions`, `AuthCookies` (cookie names), `SessionService` (the only code with session rules), `SessionAuthenticationHandler` (cookie → user, never extends), `SessionAntiforgeryData` (XSRF token bound to the session), `TotpVerifier` (TOTP codes, each accepted once), `LoginGuard` (the client address and its limit key, limit per IP, account lockout, login history), `LoginAttempt`, `DeviceName` (User-Agent for storage and display), `AuthEndpoints` (`me`, `login`, `keepalive`, `logout`, XSRF filter), `SessionEndpoints` (session list, ending sessions, login history), `CreateUserCommand` (`create-user`), `AuthCleanup` (hourly deletion after 90 days), `PasskeysOptions` (`Passkeys:ServerDomain`), `PasskeyCeremonies` (passkey ceremonies in progress, in memory: registration states, re-authenticated sessions), `PasskeyEndpoints` (`reauthenticate`, `/api/auth/passkeys/*`) |
+| `src/Claushh.Api/Auth/` | login: `Session`, `AuthSessionOptions`, `AuthCookies` (cookie names), `SessionService` (the only code with session rules), `SessionAuthenticationHandler` (cookie → user, never extends), `SessionAntiforgeryData` (XSRF token bound to the session), `TotpVerifier` (TOTP codes, each accepted once), `LoginGuard` (the client address and its limit key, limit per IP, account lockout, login history), `LoginAttempt` and `LoginMethods` (`password`, `passkey`), `DeviceName` (User-Agent for storage and display), `AuthEndpoints` (`me`, `login`, `keepalive`, `logout`, XSRF filter), `SessionEndpoints` (session list, ending sessions, login history), `CreateUserCommand` (`create-user`), `AuthCleanup` (hourly deletion after 90 days), `PasskeysOptions` (`Passkeys:ServerDomain`), `PasskeyCeremonies` (passkey ceremonies in progress, in memory: login challenges, registration states, re-authenticated sessions), `PasskeyEndpoints` (`reauthenticate`, `/api/auth/passkeys/*`, the passkey login) |
 | `src/Claushh.Api/Files/` | files: `ProjectsOptions` (`Projects:Root`), `ProjectPaths` (the only code that turns an API path into a path on disk: syntax, symlinks resolved with `realpath`, `.git` refused, file types from `statx`), `Libc` (the five libc calls: `realpath`, `statx`, `access`, `prctl` to make the process non-dumpable, and `kill` for SIGTERM to git's process tree), `FileStore` (reading and saving: versions, the 5 MB limit, the text rule `DecodeText`, atomic saves under a per-file lock), `FileEndpoints` (`/api/files/*`) |
 | `src/Claushh.Api/Workspaces/` | workspaces: `Workspace` (entity: display name and creation time), `WorkspaceNames` (the name rule and the directory made from a name), `CloneUrl` (the frontend's clone URL rule in .NET terms), `WorkspaceStore` (what a workspace is, the list in display order, creating one), `WorkspaceEndpoints` (`/api/workspaces`, `/api/repos`, `/api/repos/clone`) |
 | `src/Claushh.Api/Git/` | git: `Repositories` (what a repository is and its state, read with LibGit2Sharp: the repository list, the status, HEAD content), `GitOptions` (`Git:NetworkTimeout`, `Git:Environment:*`), `GitRunner` (the git CLI: safety options, https only through `GIT_ALLOW_PROTOCOL`, environment through `ChildEnvironment`, output, time limits, stopping the process tree: SIGTERM, then a kill 1 s later), `RepoLocks` (one lock per repository), `BackgroundFetch` (the fetch after `GET /api/repos`, at most every 5 minutes per repository), `GitEndpoints` (`/api/git/*`: status, show, pull, push) |
@@ -235,7 +235,7 @@ Implemented in the backend (section "Backend").
 | GET | `/api/auth/sessions` | `200 [{"id","current","device","ip","createdAt","lastActivityAt"}]`, newest first. `id` is a public ID, **never the secret from the cookie**. `device` e.g. "Chrome · Linux" from the User-Agent header, `ip` from `CF-Connecting-IP` when the API's peer is the local `cloudflared` (loopback), otherwise the connection address; IPv4-mapped addresses as IPv4 |
 | DELETE | `/api/auth/sessions/{id}` | ends another session (including its WebSockets). `204`, `404` unknown, `400` for your own session (that is what logout is for) |
 | POST | `/api/auth/sessions/revoke-others` | ends all sessions except the current one. `204` |
-| GET | `/api/auth/logins` | `200 [{"at","ip","device","success"}]`, the last 20, newest first, including failed attempts |
+| GET | `/api/auth/logins` | `200 [{"at","ip","device","success","method"}]`, the last 20, newest first, including failed attempts; `method` is `"password"` or `"passkey"` (a failed re-authentication is `"password"`) |
 
 Backend requirements that follow from the frontend:
 - session cookie: `HttpOnly; Secure; SameSite=Strict; Path=/`,
@@ -243,8 +243,9 @@ Backend requirements that follow from the frontend:
 - validation of the `X-XSRF-TOKEN` header on every POST/PUT/PATCH/DELETE, including login. The token is bound
   to the identity it was issued for (the backend adds the session ID through `IAntiforgeryAdditionalDataProvider`; ASP.NET alone binds it only to the user): a token issued for a session will not pass
   without it and vice versa (the mock does the same),
-- every endpoint except `/api/health`, the three above and the built frontend (static files and the `index.html`
-  fallback, the same files for everyone, no data) returns `401` without a session,
+- every endpoint except `/api/health`, `GET /api/auth/me`, `POST /api/auth/login`, `POST /api/auth/passkeys/login-options`,
+  `POST /api/auth/passkeys/login` and the built frontend (static files and the `index.html` fallback, the same files
+  for everyone, no data) returns `401` without a session,
 - the session expires after an idle time counted from the last `keepalive` (or login) and after the hard limit,
 - all `/api/*` responses with `Cache-Control: no-store`,
 - `index.html` with the `Cache-Control: no-store` header,
@@ -253,8 +254,9 @@ Backend requirements that follow from the frontend:
 #### Passkeys
 
 Implemented in the backend; the frontend does not use them yet (section "Backend" → "Passkeys"). A passkey is a second
-way in next to password + TOTP. `400` and `409` carry `{"message"}`; `401`, `403` and `429` have empty bodies; every
-POST, PATCH and DELETE needs the XSRF token (a `400` without a body). Passkey messages are English.
+way in next to password + TOTP; its login has no user name. `400` and `409` carry `{"message"}`; `401`, `403` and `429`
+have empty bodies; every POST, PATCH and DELETE needs the XSRF token (a `400` without a body). Passkey messages are
+English.
 
 | Method | Path | Response |
 |---|---|---|
@@ -264,10 +266,13 @@ POST, PATCH and DELETE needs the XSRF token (a `400` without a body). Passkey me
 | POST | `/api/auth/passkeys` | body `{"credential","name"?}` (`credential`: the browser's public key credential as JSON), session. `201 {"id","name","createdAt","synced"}`. `400` "A passkey name has 1 to 64 characters and no control characters." (checked first; the creation options stay usable). `400` "The passkey could not be added. Try again." (no creation options in this session, older than 5 minutes or already used, a bad body, or a check of the credential failed). `409` the limit text. `429` with `Retry-After: 10` (a login waits at most 10 s for the one before it) |
 | PATCH | `/api/auth/passkeys/{id}` | body `{"name"}`, session. `204`. `400` the name text (checked first). `404` unknown or malformed `id` |
 | DELETE | `/api/auth/passkeys/{id}` | session after `reauthenticate`. `204`. `403`: no re-authentication within 5 minutes (checked first). `404` unknown or malformed `id` |
+| POST | `/api/auth/passkeys/login-options` | no session. `200`: the WebAuthn request options as JSON (`rpId`, `allowCredentials: []`, `userVerification` `"required"`, `timeout` 300000) and the challenge cookie. `429` with `Retry-After`: the per-IP limit only |
+| POST | `/api/auth/passkeys/login` | body `{"credential"}`, no session. `204` and the session cookie, as after a password login (the frontend then asks `/me` for a new XSRF token). `401` for any failure (no, expired or used challenge, an unknown passkey, a failed check, a bad body). `429` with `Retry-After`: a login waits at most 10 s for the one before it, or the per-IP limit; never the account lock. Every other answer expires the challenge cookie |
 
 Rules: a name is trimmed and has 1-64 UTF-16 units without control or format characters; a missing or blank name when
 adding becomes the device, e.g. "Chrome · Linux"; names may repeat. At most 10 passkeys. Creation options belong to the
 session that asked for them, newer ones replace them, and they work once within 5 minutes.
+A login challenge works once within 5 minutes; the anonymous endpoints are listed under "Backend requirements" above.
 
 ## Security headers
 
@@ -666,12 +671,14 @@ Endpoints:
 | GET | `/api/health` | checks whether the API is running | none |
 | GET | `/api/auth/me` | current session, always a fresh `XSRF-TOKEN` | none (401 without a session) |
 | POST | `/api/auth/login` | password + TOTP, creates a session | none, XSRF token |
+| POST | `/api/auth/passkeys/login-options` | WebAuthn request options for a login with any passkey, and the challenge cookie | none, XSRF token |
+| POST | `/api/auth/passkeys/login` | a passkey login: creates a session like `/api/auth/login` | none, XSRF token |
 | POST | `/api/auth/keepalive` | the only request that extends a session (idle deadline, never past the absolute one) | session, XSRF token |
 | POST | `/api/auth/logout` | ends the session on the server (optionally only if the cookie still belongs to `{sessionId}`, otherwise 409), expires the cookies | session, XSRF token |
 | DELETE | `/api/auth/sessions/{id}` | ends another active session of the user; 404 for unknown, ended or expired, 400 for the own one | session, XSRF token |
 | GET | `/api/auth/sessions` | active sessions of the user, newest first, `current` for this one, `device` as e.g. "Chrome · Linux" | session |
 | POST | `/api/auth/sessions/revoke-others` | ends every other active session of the user | session, XSRF token |
-| GET | `/api/auth/logins` | the last 20 login attempts, newest first | session |
+| GET | `/api/auth/logins` | the last 20 login attempts, newest first, with their method | session |
 | POST | `/api/auth/reauthenticate` | password + TOTP again: for 5 minutes the session may add and remove passkeys; 403 on failure | session, XSRF token |
 | GET | `/api/auth/passkeys` | the account's passkeys by `createdAt` | session |
 | POST | `/api/auth/passkeys/creation-options` | WebAuthn creation options; 403 without a re-authentication within 5 minutes, 409 at 10 passkeys | session, XSRF token |
@@ -758,7 +765,9 @@ Sessions (`Auth/`):
   reading a session (`SessionAuthenticationHandler`, `/me`) never extends it. All time comes from `TimeProvider`.
 - Cookies, all `SameSite=Strict; Path=/`: `__Host-claushh-session` (the secret, `HttpOnly`, no `Expires`),
   `__Host-claushh-af` (antiforgery cookie token, `HttpOnly`), `XSRF-TOKEN` (request token that Angular sends back in
-  `X-XSRF-TOKEN`). With `Sessions:SecureCookies=false`: `claushh-session`, `claushh-af`, and `Secure` only on HTTPS.
+  `X-XSRF-TOKEN`), `__Host-claushh-passkey` (the id of a pending passkey login challenge, `HttpOnly`, `Max-Age=300`;
+  set by `login-options`, expired by every `login` answer after the gate and the per-IP limit). With
+  `Sessions:SecureCookies=false`: `claushh-session`, `claushh-af`, `claushh-passkey`, and `Secure` only on HTTPS.
 
 Client address (`Program.cs`, `LoginGuard.ClientIp`; decisions: `PLAN.md`, "Backend decisions (stage 1, part C)"):
 - `ForwardedHeaders` runs first in every environment with the framework's default trust: only a loopback peer
@@ -780,23 +789,29 @@ Login protection (`Auth/`):
   used up and the first login needs the next one. `--reset-totp` first removes the stored step, so the new key's
   current code confirms it.
 - Every attempt that reaches the check of the credentials is recorded in `LoginAttempts` (`At`, `Ip`, `LimitKey`,
-  `Device` as the User-Agent cut to at most 256 characters, `Success`), also for unknown names; the typed user name
-  never. Attempts answered with `429` are not recorded. Attempts are deleted after 90 days (`AuthCleanup`). A failed
-  re-authentication (`POST /api/auth/reauthenticate`) is recorded like a failed login; a successful one is not.
-- 10 failures with one limit key within 15 minutes give `429` with `Retry-After` (seconds until the 10th most recent
-  failure leaves the window), with an empty body. The key is the client's IPv4 address or its IPv6 /64 ("Client
-  address"). Attempts recorded before the key existed have an empty key and count for no client.
+  `Device` as the User-Agent cut to at most 256 characters, `Success`, `Method`: `password` or `passkey`), also for
+  unknown names and unknown passkeys; the typed user name never. A failed re-authentication
+  (`POST /api/auth/reauthenticate`) is recorded as a `password` attempt; a successful one is not. Rows from before the
+  method existed read as `password`. Attempts answered with `429` are not recorded. Attempts are deleted after 90 days
+  (`AuthCleanup`).
+- 10 failures with one limit key within 15 minutes, password and passkey attempts together, give `429` with
+  `Retry-After` (seconds until the 10th most recent failure leaves the window), with an empty body; `login-options`
+  too. The key is the client's IPv4 address or its IPv6 /64 ("Client address"). Attempts recorded before the key
+  existed have an empty key and count for no client.
 - 5 wrong or reused codes after a correct password lock the account (`AccessFailedCount` and `LockoutEnd` of
   `AspNetUsers`, written by `LoginGuard`; Identity's own lockout methods use the real clock): for 15 minutes the first
   time, twice as long for every further lock in a row, at most 24 hours (the number of locks in a row is the token
   `Claushh` / `LockoutsInARow` in `AspNetUserTokens`). Re-authentication counts its codes the same way. While it is
-  locked every login and re-authentication gets `429` with `Retry-After`, whatever the name and password; when both
-  limits apply, `Retry-After` is the later end. A successful login or re-authentication resets both counts;
-  `create-user --reset-totp` and `--reset-password` also clear the lockout and reset both counts.
-- Logins, re-authentications and adding a passkey run one at a time in the API process (`LoginGuard.EnterAsync`), so
-  the checks and writes of parallel attempts never interleave; each loads what it needs after entering. A login waits
-  at most 10 s for the one before it (`LoginGuard.GateWait`); then it gets `429` with `Retry-After: 10`, and nothing
-  is recorded.
+  locked every password login and re-authentication gets `429` with `Retry-After`, whatever the name and password;
+  when both limits apply, `Retry-After` is the later end (`LoginGuard.RetryAfterAsync`; a passkey login asks
+  `IpRetryAfterAsync`, the per-IP limit only). The account lockout protects the TOTP code; a passkey login checks no
+  code, so failed assertions count only towards the per-IP limit. A passkey login neither counts towards nor resets
+  the lockout. A successful password login or re-authentication resets both counts; `create-user --reset-totp` and
+  `--reset-password` also clear the lockout and reset both counts.
+- Password and passkey logins, re-authentications and adding a passkey run one at a time in the API process
+  (`LoginGuard.EnterAsync`), so the checks and writes of parallel attempts never interleave; each loads what it needs
+  after entering. A login waits at most 10 s for the one before it (`LoginGuard.GateWait`); then it gets `429` with
+  `Retry-After: 10`, and nothing is recorded.
 
 Passkeys (`Auth/`; the contract is in "Authentication" → "Passkeys"; decisions: `PLAN.md`, "Backend decisions
 (passkeys)"):
@@ -819,16 +834,26 @@ Passkeys (`Auth/`; the contract is in "Authentication" → "Passkeys"; decisions
   Then the "added" notification.
 - Removing reads the passkey first, so the "removed" notification can name it. Renaming sends none.
 - `create-user --reset-totp` and `--reset-password` remove every passkey in their transaction.
+- Login: `login-options` (outside the gate, behind the per-IP limit only) asks Identity for request options without a
+  user and keeps the state under a random id (32 bytes, base64url) in the challenge cookie: at most 3 pending
+  challenges per address (the per-IP limit's key) and 10,000 in all, the oldest dropped; 5 minutes, used once.
+  `login` enters the gate, checks the per-IP limit, takes the challenge and expires its cookie, and lets Identity check
+  the assertion (the user from the user handle, a stored passkey, the signature, a sign count that grows unless both
+  are 0). Every attempt that gets this far is recorded with the method `passkey`. A success saves the passkey's new
+  sign count and backup state, creates the session as a password login does, and sends the passkey login
+  notification.
 
 Notifications (`Notifications/`; decisions: `PLAN.md`, "Backend decisions (stage 1, part C)"):
 - `LoginNotifications` sends a phone notification through ntfy for these events, never with the user name:
-  - every successful login: title `Claushh: logowanie`, priority `default`, with the address, the device and the time
-    in UTC;
+  - every successful password login: title `Claushh: logowanie`, priority `default`, with the address, the device and
+    the time in UTC;
   - every start of an account lock: title `Claushh: konto zablokowane`, priority `high`, with the lock's length, the
     last attempt's address, device and time, and `create-user --reset-password` as the way out.
   - every passkey added or removed: title `Claushh: passkey added` or `Claushh: passkey removed`, priority `high`,
     with the passkey's name, the address, the device and the time, and `create-user --reset-password` as the way
     out (in English).
+  - every passkey login: title `Claushh: passkey login`, priority `default`, with the passkey's name, the address,
+    the device and the time (in English).
 
   Failed attempts and `429` send nothing.
 - Each message is one `POST` of the text to `Notifications:NtfyUrl`, with `Authorization: Bearer
@@ -1150,8 +1175,8 @@ Rules: `CLAUDE.md`, section "Tests" (new code: only integration and e2e tests).
 | Kind | Command | What it covers |
 |---|---|---|
 | Integration + older unit | `cd web && npm test` | Vitest (jsdom). Integration: `console.integration.spec.ts` (panel + store + editor, SignalR and HTTP stubbed; also permission requests: hidden characters, button delay, "tak, zawsze", and a double Enter), `workspaces.integration.spec.ts` (Workspace panel + router + git status + explorer + editor, HTTP stubbed; also the strict clone URL validation), `security.integration.spec.ts` (AuthService + interceptor + SessionTimer + the "Bezpieczeństwo" window, HTTP, reload and clock stubbed; also expiry without a server response), `logout-confirmation.integration.spec.ts` (routes with guards + AuthService + login screen after an unconfirmed logout, also with a newer session from another tab), `login-wait.integration.spec.ts` (routes with guards + AuthService + login screen after a `429`: the wait in seconds, minutes or hours). Older unit tests: auth, files API, paths, explorer, `EditorStore` |
-| E2E | `cd web && npm run e2e` | build + Playwright in Chromium on `e2e/mock-api/server.mjs`: login and sessions (including unconfirmed logout with "Back", a new tab and logging in again, embedding in a frame, Trusted Types), explorer and Monaco, console (steps, options, permissions, "tak, zawsze", interrupt, replay, multiple tabs, file changes), workspaces (opening a repo, git status, pull, push, create, clone, a conversation per repo), terminal (commands, keys, reload without duplicates, multiple terminals, `exit`, Ctrl+S, resizing, pasting with the decision panel, characters on a dropped connection without loss or duplication, also after closing the tab, queue limit, focus, OSC 8 links, no answers to terminal queries, closing a terminal that another tab already closed), session (countdown, "Przedłuż", activity once a minute on a fake clock, expiry, also without a server response and hubs closed by the server), the "Bezpieczeństwo" window with a second device (a separate browser context), diff view, Monaco worker startup, mock robustness and the contract rules that the frontend does not let through (clone URL, XSRF token bound to the identity, saving like the files API: `absent`, a missing directory, 5 MB, a NUL character, workspace, repo and path parameters, the console's paths, prompt length and options). **Every test** (`fixtures.ts`) fails when the page reports a CSP or Trusted Types violation, an unhandled exception (including one caught by Angular's ErrorHandler, `console.error('ERROR', …)`) or Monaco does not create a worker |
-| Backend | `dotnet test` (needs Docker) | xUnit integration tests over HTTP (`WebApplicationFactory`, PostgreSQL 17 from Testcontainers, a test clock): login and its failures, `me`, `keepalive` and both deadlines, logout and 409, ending another session, XSRF token bound to the session, `no-store`, closed `/api/*`, the built frontend (the page for app paths with its CSP and `no-store`, file types and `no-cache`, `/api` and `/hubs` paths and missing files never the page, paths that start with `//` `404` with or without a session, the security headers on every response, the start check of `Frontend:Root`), `create-user`, TOTP codes used once, the limit per IP, the client address behind Cloudflare (`CF-Connecting-IP` and `X-Forwarded-Proto` only from a loopback peer, `X-Forwarded-For` ignored, IPv6 limited per /64, IPv4-mapped peers as IPv4), the account lockout and its growth, a login that cannot start within 10 s, session list, `revoke-others`, login history, cleanup, the password reset, login notifications (content, one for the start of a lock and none for failed attempts, a failing or unreachable ntfy, the start check), passkeys (re-authentication with its limits and the lockout, fresh for 5 minutes, the creation options, adding through Identity's checks of origin, cross-origin, RP ID, user verification and a stored credential, states used once, expiring and bound to their session, names, the limit of 10 also for two adds at once, renaming, removing, the notifications, the resets of `create-user`, the start check of `Passkeys:ServerDomain`), the files API (listing, symlinks, `.git`, reading, saving, conflicts, re-creating a deleted file, limits, text rules, file modes, long names, two saves at once, empty error bodies, a link into a directory the API cannot search, a lone surrogate in the body), workspaces and git (the repository list and its order, what is and is not a repository (also a `.git` symlink), every git status (also a nested repository, and one that cannot be read), ahead and behind, HEAD content with a checkout's line endings and the files API's limits, also after the checkout's filters), workspaces (the list and its order, names and directories, creating, a stale row), cloning (every refused URL, git's own errors, the time limit against a server that never answers, only https whatever git's configuration files allow), pull and push (every answer, both paths of a rename, a branch without commits, two pulls at once, a hook that refuses, only https, no lock file left at the time limit, git's messages with the API path), the background fetch (every 5 minutes by the test clock, a list that never waits for it, a pull or push taking the repository from a fetch that hangs and ending its process tree), the hubs (session and Origin on the WebSocket, WebSockets only, connections closed at once on logout, ending a session and revoke-others, by the 5 s timer on its own, expiry and a revocation by another process, hub calls never extending the session), the terminal (opening in a directory by its real path, titles, refused paths, the limit, output seq without gaps, the allowlisted environment, exit, close, the start routine), attach and input (snapshot with CRLF, every line exactly once when attaching during output, bracketed paste restored, a batch sent twice typed once, Input only after Attach on the same connection, inputSeq after a reconnect, batch limits, UTF-8 across send-keys commands, resize limits, an exited terminal, an unknown id, calls without their argument, the history and normal screen before the switch to the alternate screen and the program's own text after it, also after a resize, a snapshot taken inside an escape sequence), the console hub (refused paths, the conversation event in every tab, the latest conversation, the stored events as sent, the config directory's mode, the API key file's place and mode, calls without their argument, session and Origin), the claude process (the command line, its directory and environment, events in contract order, replay with merged text and the open text, options before every prompt, busy and unknown conversations, prompt and option limits, prompts starting with "/", tools the CLI refuses, unknown control requests, interrupts, also ignored ones, an exit during and after them, a process that ends, a failed resume, recovery at start, the process limit, idle processes, forgotten conversations read again, a conversation retention deleted, an old CLI, logout during a turn), the console's questions (the command and its rule, deny, allow, allow-always and the next launch's rules, a write question, unknown decisions and requests, two tabs, several suggested rules, plan approval, interrupt and exit with a question open, a withdrawn question), edit counts, files-changed for edits and for commands in a repository (none for a repository the turn made), the output cap, 90-day retention; needs the git CLI ≥ 2.45 (`--ref-format=reftable`) |
+| E2E | `cd web && npm run e2e` | build + Playwright in Chromium on `e2e/mock-api/server.mjs`: login and sessions (including unconfirmed logout with "Back", a new tab and logging in again, embedding in a frame, Trusted Types), explorer and Monaco, console (steps, options, permissions, "tak, zawsze", interrupt, replay, multiple tabs, file changes), workspaces (opening a repo, git status, pull, push, create, clone, a conversation per repo), terminal (commands, keys, reload without duplicates, multiple terminals, `exit`, Ctrl+S, resizing, pasting with the decision panel, characters on a dropped connection without loss or duplication, also after closing the tab, queue limit, focus, OSC 8 links, no answers to terminal queries, closing a terminal that another tab already closed), session (countdown, "Przedłuż", activity once a minute on a fake clock, expiry, also without a server response and hubs closed by the server), the "Bezpieczeństwo" window with a second device (a separate browser context), diff view, Monaco worker startup, mock robustness and the contract rules that the frontend does not let through (clone URL, XSRF token bound to the identity, saving like the files API: `absent`, a missing directory, 5 MB, a NUL character, workspace, repo and path parameters, the console's paths, prompt length and options, the passkeys' re-authentication and login challenge). **Every test** (`fixtures.ts`) fails when the page reports a CSP or Trusted Types violation, an unhandled exception (including one caught by Angular's ErrorHandler, `console.error('ERROR', …)`) or Monaco does not create a worker |
+| Backend | `dotnet test` (needs Docker) | xUnit integration tests over HTTP (`WebApplicationFactory`, PostgreSQL 17 from Testcontainers, a test clock): login and its failures, `me`, `keepalive` and both deadlines, logout and 409, ending another session, XSRF token bound to the session, `no-store`, closed `/api/*`, the built frontend (the page for app paths with its CSP and `no-store`, file types and `no-cache`, `/api` and `/hubs` paths and missing files never the page, paths that start with `//` `404` with or without a session, the security headers on every response, the start check of `Frontend:Root`), `create-user`, TOTP codes used once, the limit per IP, the client address behind Cloudflare (`CF-Connecting-IP` and `X-Forwarded-Proto` only from a loopback peer, `X-Forwarded-For` ignored, IPv6 limited per /64, IPv4-mapped peers as IPv4), the account lockout and its growth, a login that cannot start within 10 s, session list, `revoke-others`, login history, cleanup, the password reset, login notifications (content, one for the start of a lock and none for failed attempts, a failing or unreachable ntfy, the start check), passkeys (re-authentication with its limits and the lockout, fresh for 5 minutes, the creation options, adding through Identity's checks of origin, cross-origin, RP ID, user verification and a stored credential, states used once, expiring and bound to their session, names, the limit of 10 also for two adds at once, renaming, removing, the notifications, the resets of `create-user`, the start check of `Passkeys:ServerDomain`), passkey login (the options and the challenge cookie, a login with its history row, notification and saved counter, every failed assertion recorded as a passkey attempt, challenges used once and expiring, at most 3 pending per address, the per-IP limit shared with password logins, the lock refusing password logins and re-authentication but not a passkey login, a passkey login that cannot start within 10 s), the files API (listing, symlinks, `.git`, reading, saving, conflicts, re-creating a deleted file, limits, text rules, file modes, long names, two saves at once, empty error bodies, a link into a directory the API cannot search, a lone surrogate in the body), workspaces and git (the repository list and its order, what is and is not a repository (also a `.git` symlink), every git status (also a nested repository, and one that cannot be read), ahead and behind, HEAD content with a checkout's line endings and the files API's limits, also after the checkout's filters), workspaces (the list and its order, names and directories, creating, a stale row), cloning (every refused URL, git's own errors, the time limit against a server that never answers, only https whatever git's configuration files allow), pull and push (every answer, both paths of a rename, a branch without commits, two pulls at once, a hook that refuses, only https, no lock file left at the time limit, git's messages with the API path), the background fetch (every 5 minutes by the test clock, a list that never waits for it, a pull or push taking the repository from a fetch that hangs and ending its process tree), the hubs (session and Origin on the WebSocket, WebSockets only, connections closed at once on logout, ending a session and revoke-others, by the 5 s timer on its own, expiry and a revocation by another process, hub calls never extending the session), the terminal (opening in a directory by its real path, titles, refused paths, the limit, output seq without gaps, the allowlisted environment, exit, close, the start routine), attach and input (snapshot with CRLF, every line exactly once when attaching during output, bracketed paste restored, a batch sent twice typed once, Input only after Attach on the same connection, inputSeq after a reconnect, batch limits, UTF-8 across send-keys commands, resize limits, an exited terminal, an unknown id, calls without their argument, the history and normal screen before the switch to the alternate screen and the program's own text after it, also after a resize, a snapshot taken inside an escape sequence), the console hub (refused paths, the conversation event in every tab, the latest conversation, the stored events as sent, the config directory's mode, the API key file's place and mode, calls without their argument, session and Origin), the claude process (the command line, its directory and environment, events in contract order, replay with merged text and the open text, options before every prompt, busy and unknown conversations, prompt and option limits, prompts starting with "/", tools the CLI refuses, unknown control requests, interrupts, also ignored ones, an exit during and after them, a process that ends, a failed resume, recovery at start, the process limit, idle processes, forgotten conversations read again, a conversation retention deleted, an old CLI, logout during a turn), the console's questions (the command and its rule, deny, allow, allow-always and the next launch's rules, a write question, unknown decisions and requests, two tabs, several suggested rules, plan approval, interrupt and exit with a question open, a withdrawn question), edit counts, files-changed for edits and for commands in a repository (none for a repository the turn made), the output cap, 90-day retention; needs the git CLI ≥ 2.45 (`--ref-format=reftable`) |
 
 Backend tests make repositories with the git CLI (`tests/Claushh.Api.Tests/TestGit.cs`): a fixed identity and date,
 `HOME` set to a temporary directory so the machine's `~/.gitconfig` stays out (libgit2's configuration search paths
@@ -1177,6 +1202,8 @@ the run sends one, so the notification tests use their own addresses.
 as WebAuthn defines them, with the user verification and backup flags, the origin, `crossOrigin`, the RP ID, the
 counter and the signature open to change, so every passkey test runs Identity's own checks. `ApiClient` adds a
 passkey as the Security dialog will: re-authentication, creation options, the authenticator, the add.
+`ApiClient` also logs in with a passkey as the login button will: login options and the challenge cookie, the
+authenticator, the login.
 From the terminal on, `dotnet test` needs tmux 3.7 or later on PATH. `ApiFactory` gives the API a tmux directory and a
 HOME in temporary directories and `/bin/sh` as the shell, and sets `CLAUSHH_TEST_CANARY` and `ConnectionStrings__Canary`
 in the test process (the terminal tests check that they never reach the shell). `ApiFactory.ResetAsync` closes every

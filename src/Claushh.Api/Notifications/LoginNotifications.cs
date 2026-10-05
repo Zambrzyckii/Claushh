@@ -30,6 +30,10 @@ public sealed class LoginNotifications(IHttpClientFactory clients, IOptions<Noti
         Enqueue("Claushh: konto zablokowane", "high", string.Create(CultureInfo.InvariantCulture,
             $"Konto zablokowane na {(int)lockout.TotalMinutes} min po 5 błędnych kodach przy poprawnym haśle; ostatnia próba z {ip} ({Device(userAgent)}), {Now()} UTC. Jeśli to nie Ty: create-user --reset-password."));
 
+    public void PasskeyLoggedIn(string name, string ip, string userAgent) =>
+        Enqueue("Claushh: passkey login", "default",
+            $"Logged in with the passkey \"{name}\" from {ip} ({Device(userAgent)}), {Now()} UTC.");
+
     public void PasskeyAdded(string name, string ip, string userAgent) =>
         Enqueue("Claushh: passkey added", "high",
             $"Passkey \"{name}\" added from {ip} ({Device(userAgent)}), {Now()} UTC. If this was not you: create-user --reset-password.");

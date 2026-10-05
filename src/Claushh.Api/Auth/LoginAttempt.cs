@@ -11,4 +11,12 @@ public sealed class LoginAttempt
     public required string LimitKey { get; set; }
     public required string Device { get; set; }
     public bool Success { get; set; }
+    // LoginMethods.Password or LoginMethods.Passkey; a failed re-authentication is a password attempt.
+    public required string Method { get; set; }
+}
+
+public static class LoginMethods
+{
+    public const string Password = "password";
+    public const string Passkey = "passkey";
 }

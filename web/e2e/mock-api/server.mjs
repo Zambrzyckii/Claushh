@@ -71,6 +71,7 @@ function reset() {
     passkeys: [], // { id, name, createdAt, synced }, in the order added
     registrations: new Map(), // sid -> challenge of the session's creation options
     freshUntil: new Map(), // sid -> time (ms) until which the session may add and remove passkeys
+    challenges: new Map(), // login challenge id (the passkey cookie) -> challenge
     xsrfTokens: new Map(), // token -> public id of the session it was issued for (null: no session)
     files: new Map(Object.entries(INITIAL_FILES)),
     workspaces: new Map(INITIAL_WORKSPACES),
@@ -270,6 +271,23 @@ const PASSKEY_LIMIT_TEXT = 'There are 10 passkeys already. Remove one first.';
 const USER_ID = 'mock-owner';
 const base64url = (data) => Buffer.from(data).toString('base64url');
 
+/** A new session of the owner, as after a login; returns its secret for the cookie. */
+function createSession(req) {
+  const sid = crypto.randomUUID();
+  const now = Date.now();
+  state.sessions.set(sid, {
+    id: crypto.randomUUID(),
+    userName: USER.userName,
+    ip: ipOf(req),
+    device: deviceOf(req),
+    createdAt: new Date(now).toISOString(),
+    lastActivityAt: new Date(now).toISOString(),
+    expiresAt: now + state.idleSeconds * 1000,
+    absoluteExpiresAt: now + state.absoluteSeconds * 1000
+  });
+  return sid;
+}
+
 /** A passkey name as the backend takes it: trimmed, 1-64 UTF-16 units, no control or format characters; null otherwise. */
 function passkeyName(name) {
   const trimmed = typeof name === 'string' ? name.trim() : '';
@@ -344,7 +362,7 @@ async function handle(req, res) {
   }
   if (url.pathname === '/__test/state') {
     const terminals = [...state.terminals.values()].map(({ id, title, cwd, exited, inputs, sizes }) => ({ id, title, cwd, exited, inputs, sizes }));
-    json(res, 200, { files: Object.fromEntries(state.files), log: state.log, prompts: state.prompts, terminals, passkeyCount: state.passkeys.length, registrationCount: state.registrations.size, freshCount: state.freshUntil.size });
+    json(res, 200, { files: Object.fromEntries(state.files), log: state.log, prompts: state.prompts, terminals, passkeyCount: state.passkeys.length, registrationCount: state.registrations.size, freshCount: state.freshUntil.size, challengeCount: state.challenges.size });
     return;
   }
   if (url.pathname === '/__test/file' && req.method === 'PUT') {
@@ -401,25 +419,14 @@ async function handle(req, res) {
     state.log.push({ path: url.pathname, xsrf: ok });
     if (!ok) return json(res, 400);
     if (state.loginFailures >= 3) return json(res, 429, undefined, { 'Retry-After': '30' });
-    const attempt = { at: new Date().toISOString(), ip: ipOf(req), device: deviceOf(req) };
+    const attempt = { at: new Date().toISOString(), ip: ipOf(req), device: deviceOf(req), method: 'password' };
     if (body?.userName !== USER.userName || body?.password !== USER.password || body?.totpCode !== USER.totpCode) {
       state.loginFailures++;
       state.logins.unshift({ ...attempt, success: false });
       return json(res, 401);
     }
     state.logins.unshift({ ...attempt, success: true });
-    const sid = crypto.randomUUID();
-    const now = Date.now();
-    state.sessions.set(sid, {
-      id: crypto.randomUUID(),
-      userName: USER.userName,
-      ip: ipOf(req),
-      device: deviceOf(req),
-      createdAt: new Date(now).toISOString(),
-      lastActivityAt: new Date(now).toISOString(),
-      expiresAt: now + state.idleSeconds * 1000,
-      absoluteExpiresAt: now + state.absoluteSeconds * 1000
-    });
+    const sid = createSession(req);
     return json(res, 204, undefined, { 'Set-Cookie': `sid=${sid}; Path=/; HttpOnly; SameSite=Strict` });
   }
   if (url.pathname === '/api/auth/logout' && req.method === 'POST') {
@@ -446,11 +453,45 @@ async function handle(req, res) {
     if (state.loginFailures >= 3) return json(res, 429, undefined, { 'Retry-After': '30' });
     if (body?.password !== USER.password || body?.totpCode !== USER.totpCode) {
       state.loginFailures++;
-      state.logins.unshift({ at: new Date().toISOString(), ip: ipOf(req), device: deviceOf(req), success: false });
+      state.logins.unshift({ at: new Date().toISOString(), ip: ipOf(req), device: deviceOf(req), success: false, method: 'password' });
       return json(res, 403);
     }
     state.freshUntil.set(cookies(req).sid, Date.now() + PASSKEY_FRESH_MS);
     return json(res, 204);
+  }
+  // the passkey login, anonymous like /api/auth/login
+  if ((url.pathname === '/api/auth/passkeys/login-options' || url.pathname === '/api/auth/passkeys/login') && req.method === 'POST') {
+    const ok = xsrfOk(req);
+    const body = await readBody(req).catch(() => null);
+    state.log.push({ path: url.pathname, xsrf: ok });
+    if (!ok) return json(res, 400);
+    if (state.loginFailures >= 3) return json(res, 429, undefined, { 'Retry-After': '30' });
+    if (url.pathname === '/api/auth/passkeys/login-options') {
+      const id = base64url(crypto.randomBytes(32));
+      const challenge = base64url(crypto.randomBytes(32));
+      state.challenges.set(id, challenge);
+      return json(res, 200, { challenge, timeout: 300000, rpId: 'localhost', allowCredentials: [], userVerification: 'required' },
+        { 'Set-Cookie': `passkey=${id}; Path=/; Max-Age=300; HttpOnly; SameSite=Strict` });
+    }
+    const challengeId = cookies(req).passkey;
+    const challenge = challengeId ? state.challenges.get(challengeId) : undefined;
+    if (challengeId) state.challenges.delete(challengeId);
+    const expire = 'passkey=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict';
+    const credential = body?.credential;
+    const clientData = clientDataOf(credential);
+    const authenticatorData = Buffer.from(credential?.response?.authenticatorData ?? '', 'base64url');
+    const rpIdHash = crypto.createHash('sha256').update('localhost').digest();
+    const attempt = { at: new Date().toISOString(), ip: ipOf(req), device: deviceOf(req), method: 'passkey' };
+    if (!challenge || clientData?.type !== 'webauthn.get' || clientData.challenge !== challenge || !ORIGINS.includes(clientData.origin)
+      || !state.passkeys.some((p) => p.id === credential?.id) || credential.response?.userHandle !== base64url(USER_ID)
+      || authenticatorData.length < 37 || !authenticatorData.subarray(0, 32).equals(rpIdHash) || (authenticatorData[32] & 0x04) === 0) {
+      state.loginFailures++;
+      state.logins.unshift({ ...attempt, success: false });
+      return json(res, 401, undefined, { 'Set-Cookie': expire });
+    }
+    state.logins.unshift({ ...attempt, success: true });
+    const sid = createSession(req);
+    return json(res, 204, undefined, { 'Set-Cookie': [`sid=${sid}; Path=/; HttpOnly; SameSite=Strict`, expire] });
   }
   if (url.pathname === '/api/auth/passkeys' || url.pathname.startsWith('/api/auth/passkeys/')) {
     if (!session) return json(res, 401);

@@ -7,7 +7,7 @@ namespace Claushh.Api.Auth;
 public static class SessionEndpoints
 {
     public sealed record SessionResponse(Guid Id, bool Current, string Device, string Ip, DateTimeOffset CreatedAt, DateTimeOffset LastActivityAt);
-    public sealed record LoginAttemptResponse(DateTimeOffset At, string Ip, string Device, bool Success);
+    public sealed record LoginAttemptResponse(DateTimeOffset At, string Ip, string Device, bool Success, string Method);
 
     public static RouteGroupBuilder MapSessionEndpoints(this RouteGroupBuilder api)
     {
@@ -72,6 +72,6 @@ public static class SessionEndpoints
     private static async Task<IResult> Logins(HttpContext http, LoginGuard guard)
     {
         var attempts = await guard.RecentAsync(http.RequestAborted);
-        return Results.Ok(attempts.Select(a => new LoginAttemptResponse(a.At, a.Ip, DeviceName.From(a.Device), a.Success)));
+        return Results.Ok(attempts.Select(a => new LoginAttemptResponse(a.At, a.Ip, DeviceName.From(a.Device), a.Success, a.Method)));
     }
 }

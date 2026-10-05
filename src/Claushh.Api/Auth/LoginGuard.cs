@@ -35,8 +35,8 @@ public sealed class LoginGuard(ClaushhDbContext db, UserManager<IdentityUser> us
             return null;
         }
         // What the request loaded before the gate (the user of its session cookie) may be stale by now: forget it, so the
-        // checks read the rows as the previous login left them. Callers (login, re-authentication, adding a passkey) have
-        // no unsaved changes here and load what they need after entering.
+        // checks read the rows as the previous login left them. Callers (password and passkey login, re-authentication,
+        // adding a passkey) have no unsaved changes here and load what they need after entering.
         db.ChangeTracker.Clear();
         return new GateLease();
     }
@@ -64,25 +64,25 @@ public sealed class LoginGuard(ClaushhDbContext db, UserManager<IdentityUser> us
         return (text, new IPAddress(prefix) + "/64");
     }
 
-    // Whole seconds until a login may be tried again (the later end of both limits), or null when it may be tried now.
+    // Whole seconds until a password login or a re-authentication may be tried again (the later end of both limits), or
+    // null when it may be tried now.
     public async Task<int?> RetryAfterAsync(string limitKey, CancellationToken ct)
     {
         var now = clock.GetUtcNow();
-        var windowStart = now - IpWindow;
-        var failures = await db.LoginAttempts
-            .Where(a => a.LimitKey == limitKey && !a.Success && a.At > windowStart)
-            .OrderByDescending(a => a.At)
-            .Take(MaxFailuresPerIp)
-            .Select(a => a.At)
-            .ToListAsync(ct);
-        DateTimeOffset? ipLimitEnd = failures.Count == MaxFailuresPerIp ? failures[^1] + IpWindow : null;
-        // One account: while it is locked every attempt is refused, whatever the name and password.
-        var lockoutEnd = await db.Users.Where(u => u.LockoutEnd > now).MaxAsync(u => u.LockoutEnd, ct);
-        var end = new[] { ipLimitEnd, lockoutEnd }.Max();
+        var end = new[] { await IpLimitEndAsync(limitKey, now, ct), await LockoutEndAsync(now, ct) }.Max();
         return end is { } later ? SecondsUntil(later, now) : null;
     }
 
-    public async Task RecordAsync(bool success, string ip, string limitKey, string userAgent, CancellationToken ct)
+    // Whole seconds until a passkey login or its options may be tried again, or null when they may be tried now.
+    // The account lockout protects the TOTP code; a passkey login checks no code, so failed assertions count only towards the per-IP limit.
+    public async Task<int?> IpRetryAfterAsync(string limitKey, CancellationToken ct)
+    {
+        var now = clock.GetUtcNow();
+        return await IpLimitEndAsync(limitKey, now, ct) is { } end ? SecondsUntil(end, now) : null;
+    }
+
+    // method: LoginMethods.Password or LoginMethods.Passkey.
+    public async Task RecordAsync(bool success, string method, string ip, string limitKey, string userAgent, CancellationToken ct)
     {
         db.LoginAttempts.Add(new LoginAttempt
         {
@@ -91,6 +91,7 @@ public sealed class LoginGuard(ClaushhDbContext db, UserManager<IdentityUser> us
             LimitKey = limitKey,
             Device = DeviceName.Stored(userAgent),
             Success = success,
+            Method = method,
         });
         await db.SaveChangesAsync(ct);
     }
@@ -152,6 +153,24 @@ public sealed class LoginGuard(ClaushhDbContext db, UserManager<IdentityUser> us
         user.LockoutEnd = null;
         await SaveAsync(user);
     }
+
+    // When the 10th most recent failure of this key within the window leaves it; null with fewer than 10.
+    private async Task<DateTimeOffset?> IpLimitEndAsync(string limitKey, DateTimeOffset now, CancellationToken ct)
+    {
+        var windowStart = now - IpWindow;
+        var failures = await db.LoginAttempts
+            .Where(a => a.LimitKey == limitKey && !a.Success && a.At > windowStart)
+            .OrderByDescending(a => a.At)
+            .Take(MaxFailuresPerIp)
+            .Select(a => a.At)
+            .ToListAsync(ct);
+        return failures.Count == MaxFailuresPerIp ? failures[^1] + IpWindow : null;
+    }
+
+    // One account: while it is locked every password login and re-authentication is refused, whatever the name and
+    // password.
+    private Task<DateTimeOffset?> LockoutEndAsync(DateTimeOffset now, CancellationToken ct) =>
+        db.Users.Where(u => u.LockoutEnd > now).MaxAsync(u => u.LockoutEnd, ct);
 
     private async Task<int> LockoutsInARowAsync(IdentityUser user) =>
         int.TryParse(await users.GetAuthenticationTokenAsync(user, TotpVerifier.LoginProvider, LockoutsToken),

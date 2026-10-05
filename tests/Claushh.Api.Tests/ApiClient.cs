@@ -80,6 +80,22 @@ public sealed class ApiClient
     public Task<HttpResponseMessage> PostPasskeyAsync(JsonObject credential, string? name = "Laptop") =>
         Http.PostAsJsonAsync("/api/auth/passkeys", new { credential, name });
 
+    // Like the login button: GET /me for an XSRF token, then the request options and the challenge cookie.
+    public async Task<HttpResponseMessage> LoginOptionsAsync()
+    {
+        await Http.GetAsync("/api/auth/me");
+        return await Http.PostAsync("/api/auth/passkeys/login-options", null);
+    }
+
+    // The whole passkey login of the frontend: options, the authenticator's assertion, the login.
+    public async Task<HttpResponseMessage> PasskeyLoginAsync(TestAuthenticator authenticator)
+    {
+        var options = await LoginOptionsAsync();
+        Assert.Equal(HttpStatusCode.OK, options.StatusCode);
+        return await Http.PostAsJsonAsync("/api/auth/passkeys/login",
+            new { credential = authenticator.Assert(await options.Content.ReadFromJsonAsync<JsonElement>()) });
+    }
+
     public sealed record MeBody(string UserName, Guid SessionId, int ExpiresIn, int AbsoluteExpiresIn);
 
     private sealed class BrowserHandler(ApiClient client) : DelegatingHandler

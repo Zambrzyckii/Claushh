@@ -24,6 +24,7 @@ export interface MockState {
   passkeyCount: number;
   registrationCount: number;
   freshCount: number;
+  challengeCount: number;
 }
 
 export async function resetMock(request: APIRequestContext): Promise<void> {

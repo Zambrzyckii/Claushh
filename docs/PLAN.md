@@ -81,7 +81,8 @@ console conversations with their events, and the console's "always" rules (model
 
 ### Login and sessions
 
-- Password (hash from ASP.NET Core Identity) + **mandatory TOTP**, optionally a passkey.
+- Password (hash from ASP.NET Core Identity) + **mandatory TOTP**, or a passkey (username-less, user verification
+  required) as a second way in; password + TOTP keeps working.
 - No registration endpoint. The account is created by an installation command (e.g. `dotnet run -- create-user`).
 - Login attempt limit per IP and an account lockout after several wrong codes (own code, see "Backend decisions (stage 1)").
 - Phone notification through ntfy of every successful login, every start of an account lock, and every passkey added or removed.
@@ -113,8 +114,8 @@ Backend decisions (stage 1):
 - The XSRF token is bound to the session, not only to the user (`IAntiforgeryAdditionalDataProvider`), and one filter on
   `/api` validates it for POST/PUT/PATCH/DELETE: the built-in antiforgery middleware skips DELETE and does not stop the request.
 - Closed by default: `FallbackPolicy` requires a session; anonymous are only `/api/health`, `GET /api/auth/me`,
-  `POST /api/auth/login` and the built frontend (static files and the `index.html` fallback, the same files for
-  everyone, no data).
+  `POST /api/auth/login`, `POST /api/auth/passkeys/login-options`, `POST /api/auth/passkeys/login` and the built
+  frontend (static files and the `index.html` fallback, the same files for everyone, no data).
 - Development runs over plain http, where ASP.NET antiforgery refuses `Secure`-only cookies, so there the cookies have
   no `__Host-` prefix (`Sessions:SecureCookies=false`). Behind Cloudflare Tunnel requests also reach the API as HTTP;
   `ForwardedHeaders` takes `X-Forwarded-Proto: https` from the local `cloudflared`, so production keeps `Secure` and the
@@ -128,26 +129,29 @@ Backend decisions (stage 1):
   step and earlier ones, so a code works once. Rejected: Identity's validator (±2 steps, the real clock, no reuse check)
   with a remembered last code (another, older code from the same window would still pass).
 - Login protection has two layers in own code (`LoginGuard`, time from `TimeProvider`): a limit of failed attempts per
-  IP protects the password, the account lockout protects the code. Rejected: the `RateLimiter` middleware and Identity's
-  lockout (both use the real clock, so their windows cannot be tested without waiting; the middleware also counts
-  successful requests and forgets everything on restart). Logins, re-authentications and adding a passkey run one at a
-  time in the API process, so parallel attempts cannot slip between a check and its write.
+  IP protects the password, the account lockout protects the code. Rejected: the `RateLimiter` middleware and
+  Identity's lockout (both use the real clock, so their windows cannot be tested without waiting; the middleware also
+  counts successful requests and forgets everything on restart). Password and passkey logins, re-authentications and
+  adding a passkey run one at a time in the API process, so parallel attempts cannot slip between a check and its write.
 - The login history records every attempt that reaches the check, also for unknown names (guessing stays visible), but
   never the typed name (it sometimes holds a mistyped password) and not attempts refused with 429 (a flood would drown
   the list).
-- A failed re-authentication is recorded like a failed login and counts towards the per-IP limit; a successful one is
-  not recorded (it creates no session).
+- Every attempt records its method, `password` or `passkey`; rows from before the column read as `password`. A failed
+  re-authentication is recorded as a `password` attempt and counts towards the per-IP limit; a successful one is not
+  recorded (it creates no session).
 - The limits are constants in code (10 failures per IP in 15 minutes, 5 wrong codes, lockouts from 15 minutes to
   24 hours, 90 days). Rejected: configuration (nothing to tune for one user, and a setting could weaken the protection
   by accident).
 - The User-Agent is stored as sent (cut to at most 256 characters) and turned into "Chrome · Linux" on read
   (`DeviceName`, the mock's rules). Rejected: formatting on write (a fix of the rules would need a data migration).
 - The account lockout counts only wrong or reused codes after a correct password (5 → 15 minutes the first time), so a
-  stranger without the password cannot lock the only account. While it is locked every login gets 429 whatever the
-  credentials (a 429 only after a correct password would confirm the password, and a 401 would not tell the owner why
-  login fails). The way out is `create-user --reset-totp` or `--reset-password` on the server, which also clear the
-  lockout. Rejected: a separate unlock command (one more command for the same situation; shell access proves more than
-  a code).
+  stranger without the password cannot lock the only account. While it is locked every password login and
+  re-authentication gets 429 whatever the credentials (a 429 only after a correct password would confirm the password,
+  and a 401 would not tell the owner why login fails). The way out is `create-user --reset-totp` or `--reset-password`
+  on the server, which also clear the lockout. Rejected: a separate unlock command (one more command for the same
+  situation; shell access proves more than a code).
+- The account lockout protects the TOTP code; a passkey login checks no code, so failed assertions count only towards
+  the per-IP limit. A passkey login neither counts towards nor resets the lockout.
 - Repeated lockouts grow: every lock in a row without a successful login lasts twice as long (15 minutes up to
   24 hours), so someone who knows the password gets about 35 code guesses on the first day and 5 a day after that,
   instead of 480 a day. Rejected: a lock that lasts until `create-user` (SSH works only from the home network, so the
@@ -225,6 +229,16 @@ Backend decisions (passkeys):
 - `create-user --reset-totp` and `--reset-password` remove every passkey in their transaction: no way in that was
   added before a reset survives it.
 - Adding and removing a passkey send a `high` notification that names it. Passkey texts are English.
+- Login with a passkey is username-less and starts from a button (no autofill). `POST /api/auth/passkeys/login-options`
+  is anonymous, runs outside the login gate (it writes no rows) and only behind the per-IP limit; it keeps the login's
+  state under a random id in the challenge cookie (`HttpOnly`, `SameSite=Strict`, 5 minutes, used once). At most 3
+  pending login challenges per address (the per-IP limit's key) and 10,000 in all; beyond that the oldest goes.
+- `POST /api/auth/passkeys/login` runs through the login gate and the per-IP limit like a password login, and every
+  attempt past them is recorded with the method `passkey` and uses up the challenge. The account lockout protects the
+  TOTP code; a passkey login checks no code, so failed assertions count only towards the per-IP limit. A passkey login
+  neither counts towards nor resets the lockout.
+- After a passkey login the passkey's sign count and backup state are saved (Identity's handler leaves that to the
+  app). The login creates the same session as a password login, and its notification names the passkey.
 
 Backend decisions (stage 2):
 - The projects directory is the configuration key `Projects:Root` (`/srv/projects` in `appsettings.json`, a user-secret
@@ -578,8 +592,10 @@ passkey on someone else's computer.
   - Cloudflare Access comes before the tunnel: the Access application, with a policy for the owner's e-mail and the
     one-time PIN, exists before the tunnel's public hostname and before `cloudflared` starts.
   - Cloudflare: HSTS for 12 months with `includeSubDomains`, without preload (HTTPS must then stay on for as long as
-    browsers keep the policy); "Always Use HTTPS"; one rate-limiting rule `http.request.uri.path eq "/api/auth/login"`,
-    5 requests in 10 s per IP, blocked for 10 s; Pseudo IPv4 off; "Remove visitor IP headers" off.
+    browsers keep the policy); "Always Use HTTPS"; one rate-limiting rule `http.request.uri.path in {"/api/auth/login"
+    "/api/auth/passkeys/login-options" "/api/auth/passkeys/login" "/api/auth/reauthenticate"}` (if the rule editor
+    refuses `in`, the same paths joined with `or`), 5 requests in 10 s per IP, blocked for 10 s; Pseudo IPv4 off;
+    "Remove visitor IP headers" off.
   - The tunnel acceptance check (phase B), through the real tunnel: a failed login with a forged `CF-Connecting-IP`
     and a forged `X-Forwarded-For`, and a request over `http://` with `X-Forwarded-Proto: https`. Then check that:
     - a browser without an Access session gets the PIN page before any page of the portal;
@@ -590,6 +606,9 @@ passkey on someone else's computer.
     - two networks (phone data and home Wi-Fi) show different IPs;
     - a terminal still answers after 10 idle minutes (the hub's WebSocket through the tunnel);
     - the login notification arrives.
+    - a passkey, once the Security dialog has them: adding one asks for the password and a code first and sends the
+      "added" notification; a login with it shows `passkey` in the history and its notification names it; removing it
+      sends the "removed" notification.
 
 Deployment decisions:
 - The API runs as `claushh.service` (`deploy/claushh.service`), as the user `workspace`, on `http://127.0.0.1:5090`
@@ -676,7 +695,8 @@ Deployment decisions:
   `--Hubs:AllowedOrigins:1=http://127.0.0.1:5090` and `--AllowedHosts=*` (command-line settings win over the
   environment). It is removed before the tunnel starts, and the `__Host-` cookie behind the tunnel shows that it is
   gone. Rejected: an `Environment=` drop-in (the environment file wins over it), a separate `systemd-run` shell (it
-  would not test the terminal inside the service) and the tunnel first.
+  would not test the terminal inside the service) and the tunnel first. Passkeys need a domain, so they are registered
+  and tried through the tunnel (phase B), never on `127.0.0.1`.
 - In Production, once the host has started, the API makes its process non-dumpable (`prctl(PR_SET_DUMPABLE, 0)`,
   `Files/Libc.cs`): its `/proc` files belong to root, and no process of its user can attach to it. When that fails,
   the API logs it with its errno and ends with exit status 71 (`EX_OSERR`); the unit's `RestartPreventExitStatus=71`
@@ -733,5 +753,6 @@ The order is chosen so that only already secured things reach the internet.
         permission requests in the console, strict clone URL, unconfirmed logout without returning to the app,
         expiry without the server, "Wyloguj wszędzie", CSP with Trusted Types and headers, XSRF token bound to the identity,
         mock only on `127.0.0.1`), verified in several rounds of independent review, with integration and e2e tests.
-  - [ ] Backend: passkeys.
+  - [x] Backend: passkeys.
+  - [ ] Frontend: passkeys (Security dialog, login button).
   - [ ] Colors (the owner will refine them in later iterations), a possible phone view (low priority).

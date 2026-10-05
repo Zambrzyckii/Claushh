@@ -254,3 +254,40 @@ function fakeCredential(
   const authenticatorData = Buffer.concat([rpIdHash, Buffer.from([flags, 0, 0, 0, 1])]).toString('base64url');
   return { id, rawId: id, type: 'public-key', clientExtensionResults: {}, response: { clientDataJSON, authenticatorData, userHandle } };
 }
+
+test('the mock follows the passkey login contract like the backend', async ({ request }) => {
+  let xsrf = await apiLogin(request);
+  const post = (path: string, data?: object) => request.post(path, { headers: { 'X-XSRF-TOKEN': xsrf }, data });
+  expect((await post('/api/auth/reauthenticate', { password: USER.password, totpCode: USER.totpCode })).status()).toBe(204);
+  const creation = await (await post('/api/auth/passkeys/creation-options')).json();
+  expect((await post('/api/auth/passkeys', { credential: fakeCredential('k1', creation, 'webauthn.create') })).status()).toBe(201);
+  expect((await post('/api/auth/logout')).status()).toBe(204);
+  await request.get('/api/auth/me');
+  xsrf = await xsrfToken(request);
+  const assertion = (options: { challenge: string }, flags?: number) =>
+    ({ credential: fakeCredential('k1', options, 'webauthn.get', { userHandle: creation.user.id, flags }) });
+
+  const first = await post('/api/auth/passkeys/login-options');
+  expect(first.status()).toBe(200);
+  expect(first.headers()['set-cookie']).toContain('HttpOnly');
+  const firstOptions = await first.json();
+  expect(firstOptions).toMatchObject({ rpId: 'localhost', allowCredentials: [], userVerification: 'required' });
+  // Without user verification: 401, and the challenge is used up either way.
+  expect((await post('/api/auth/passkeys/login', assertion(firstOptions, 0x01))).status()).toBe(401);
+  expect((await post('/api/auth/passkeys/login', assertion(firstOptions))).status()).toBe(401);
+
+  const second = await (await post('/api/auth/passkeys/login-options')).json();
+  expect((await post('/api/auth/passkeys/login', assertion(second))).status()).toBe(204);
+  expect((await request.get('/api/auth/me')).status()).toBe(200);
+  const logins: { success: boolean; method: string }[] = await (await request.get('/api/auth/logins')).json();
+  expect(logins.map((l) => [l.success, l.method])).toEqual([[true, 'passkey'], [false, 'passkey'], [false, 'passkey'], [true, 'password']]);
+
+  // Like login: the third failure turns both passkey endpoints into 429.
+  xsrf = await xsrfToken(request);
+  expect((await post('/api/auth/passkeys/login', { credential: null })).status()).toBe(401);
+  for (const path of ['/api/auth/passkeys/login-options', '/api/auth/passkeys/login']) {
+    const limited = await post(path);
+    expect(limited.status(), path).toBe(429);
+    expect(limited.headers()['retry-after']).toBe('30');
+  }
+});

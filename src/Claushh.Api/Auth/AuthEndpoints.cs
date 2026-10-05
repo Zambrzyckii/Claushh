@@ -79,7 +79,7 @@ public static class AuthEndpoints
         var user = await CheckPasswordAsync(users, body);
         var success = user is not null && await totp.VerifyAsync(user, body.TotpCode!);
         // Not the request's token: an attempt whose client went away is still recorded and counted.
-        await guard.RecordAsync(success, ip, limitKey, userAgent, CancellationToken.None);
+        await guard.RecordAsync(success, LoginMethods.Password, ip, limitKey, userAgent, CancellationToken.None);
         if (user is null || !success)
         {
             // The password was right: only wrong or reused codes count towards the lockout. Queuing does not wait for ntfy.
