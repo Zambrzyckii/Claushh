@@ -1,5 +1,5 @@
-// An "always" rule the owner saved for a project with "tak, zawsze" (docs/ARCHITECTURE.md, "Backend" → "Console"),
-// passed back to every launch of the project's console in --settings permissions.allow.
+// An "always" rule the owner saved for a project with the allow-always answer (docs/ARCHITECTURE.md, "Backend" →
+// "Console"), passed back to every launch of the project's console in --settings permissions.allow.
 namespace Claushh.Api.Claude;
 
 public sealed class ConsoleRule

@@ -92,7 +92,7 @@ test('saved edits and console changes show up as git changes', async ({ page }) 
 
 test('push sends local commits and reports rejections', async ({ page, request }) => {
   await repoRow(page, 'lab-3-sieci').getByRole('button', { name: 'Push lab-3-sieci' }).click();
-  await expect(panel(page).getByRole('status')).toHaveText('Wypchnięto 1 commit do origin/main.');
+  await expect(panel(page).getByRole('status')).toHaveText('Pushed 1 commit to origin/main.');
   await expect(repoRow(page, 'lab-3-sieci').locator('td').nth(4)).toHaveText('origin');
 
   // bazy-danych-lab is ahead 0 / behind 2 by default (nothing to push without the network); its own state here, so
@@ -113,7 +113,7 @@ test('pull updates files, including a clean file open in the editor', async ({ p
   await expectEditorToContain(page, 'SELECT 1');
 
   await repoRow(page, 'bazy-danych-lab').getByRole('button', { name: 'Pull bazy-danych-lab' }).click();
-  await expect(panel(page).getByRole('status')).toHaveText('Pobrano 2 commity.');
+  await expect(panel(page).getByRole('status')).toHaveText('Pulled 2 commits.');
   await expectEditorToContain(page, 'SELECT 2');
   const row = await cells(page, 'bazy-danych-lab');
   expect(row[3]).toMatch(/^poprawki od prowadzącego · /);

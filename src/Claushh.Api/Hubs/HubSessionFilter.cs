@@ -8,7 +8,7 @@ namespace Claushh.Api.Hubs;
 
 public sealed class HubSessionFilter(HubConnections connections) : IHubFilter
 {
-    public const string SessionEnded = "Sesja wygasła";
+    public const string SessionEnded = "Session expired";
 
     public async Task OnConnectedAsync(HubLifetimeContext context, Func<HubLifetimeContext, Task> next)
     {

@@ -127,7 +127,7 @@ public sealed class TerminalSession(string id, string title, string cwd, TmuxSer
             }
             if (!_owners.TryGetValue(client, out var owner) || owner != connection)
             {
-                throw new HubException("Najpierw Attach na tym połączeniu");
+                throw new HubException("Attach on this connection first");
             }
             if (seq <= _inputSeq.GetValueOrDefault(client))
             {

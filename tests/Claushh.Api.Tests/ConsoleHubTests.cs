@@ -68,8 +68,8 @@ public sealed partial class ConsoleHubTests(ApiFactory api) : ApiTest(api)
         var get = await Assert.ThrowsAsync<HubException>(() => tab.GetAsync(projectPath));
         var start = await Assert.ThrowsAsync<HubException>(() => tab.StartAsync(projectPath));
 
-        Assert.EndsWith("Nieprawidłowa ścieżka", get.Message, StringComparison.Ordinal);
-        Assert.EndsWith("Nieprawidłowa ścieżka", start.Message, StringComparison.Ordinal);
+        Assert.EndsWith("Invalid path", get.Message, StringComparison.Ordinal);
+        Assert.EndsWith("Invalid path", start.Message, StringComparison.Ordinal);
         Assert.Empty(tab.Events());
     }
 
@@ -184,8 +184,8 @@ public sealed partial class ConsoleHubTests(ApiFactory api) : ApiTest(api)
         var answer = await Assert.ThrowsAsync<HubException>(() => tab.Hub.InvokeAsync("AnswerPermission", (object?)null).WaitAsync(deadline));
         await tab.Hub.InvokeAsync("Interrupt", (object?)null).WaitAsync(deadline);
 
-        Assert.EndsWith("Nieprawidłowe polecenie", prompt.Message, StringComparison.Ordinal);
-        Assert.EndsWith("Nieznana decyzja", answer.Message, StringComparison.Ordinal);
+        Assert.EndsWith("Invalid prompt", prompt.Message, StringComparison.Ordinal);
+        Assert.EndsWith("Unknown decision", answer.Message, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -5,7 +5,7 @@ using System.Text.Json;
 namespace Claushh.Api.Claude;
 
 // A question waiting for the browser: the CLI's own request id, the tool and its input (passed back unchanged on
-// allow), and the one rule allow-always saves (null: no "tak, zawsze").
+// allow), and the one rule allow-always saves (null: no allow-always).
 internal sealed record PendingPermission(string CliRequestId, string ToolName, JsonElement Input, JsonElement? Rule, string? AlwaysRule);
 
 internal sealed class Turn(string directory)

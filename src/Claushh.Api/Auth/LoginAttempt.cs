@@ -1,4 +1,4 @@
-// One login attempt, for the per-IP limit and the history in the "Bezpieczeństwo" window (docs/ARCHITECTURE.md,
+// One login attempt, for the per-IP limit and the history in the security window (docs/ARCHITECTURE.md,
 // "Backend", "Login protection"). No user name: it is unvalidated input and sometimes a mistyped password.
 namespace Claushh.Api.Auth;
 

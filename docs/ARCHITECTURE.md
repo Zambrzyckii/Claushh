@@ -354,9 +354,9 @@ XSRF header.
 
 | Method | Path | Response |
 |---|---|---|
-| GET | `/api/files/list?path=<katalog>` | `200 [{"name","path","kind":"file"\|"directory"}]`. Without the `.git` directory. `404` when the directory does not exist |
-| GET | `/api/files/content?path=<plik>` | `200 {"path","content","version"}`. `404` no file, `413` too large, `415` binary file |
-| PUT | `/api/files/content?path=<plik>` | body `{"content","baseVersion"}`. `200 {"version"}` or `409 {"currentVersion"}` when the version on disk differs from `baseVersion`. `413` content too large, `415` content that is not text (a NUL character) |
+| GET | `/api/files/list?path=<dir>` | `200 [{"name","path","kind":"file"\|"directory"}]`. Without the `.git` directory. `404` when the directory does not exist |
+| GET | `/api/files/content?path=<file>` | `200 {"path","content","version"}`. `404` no file, `413` too large, `415` binary file |
+| PUT | `/api/files/content?path=<file>` | body `{"content","baseVersion"}`. `200 {"version"}` or `409 {"currentVersion"}` when the version on disk differs from `baseVersion`. `413` content too large, `415` content that is not text (a NUL character) |
 
 Listing: it includes dotfiles such as `.gitignore`. It leaves out `.git` (a directory or a file), names that are not
 valid API paths (a name containing `\`, or one that is not valid UTF-8), symlinks that lead outside the projects
@@ -473,23 +473,23 @@ Implemented in the backend (section "Backend" → "Console").
 
 Backend rules the tables do not show:
 - `projectPath` of `GetConversation` and `StartConversation` is checked like file paths and must be a directory:
-  "Nieprawidłowa ścieżka".
-- `SendPrompt`: `text` of 1-100,000 characters ("Nieprawidłowe polecenie", also without the argument object) and
-  options from the values above ("Nieprawidłowe opcje"), checked before "Nieznana rozmowa" and "Rozmowa jest zajęta".
-- Without the argument object `AnswerPermission` gets "Nieznana decyzja" and `Interrupt` does nothing.
+  "Invalid path".
+- `SendPrompt`: `text` of 1-100,000 characters ("Invalid prompt", also without the argument object) and
+  options from the values above ("Invalid options"), checked before "Unknown conversation" and "Conversation is busy".
+- Without the argument object `AnswerPermission` gets "Unknown decision" and `Interrupt` does nothing.
 - `alwaysRule` is the CLI's own suggestion (e.g. `Bash(git push *)`, the same as `Bash(git push:*)`); the server saves
   it for the conversation's project, not in a repository file.
 - Steps appear once their tool has run: a question comes before its step, and a denied tool has no step. Edit counts
   come from the tool's own diff. `files-changed` follows edits, and turns with commands in a project that was a
   repository at the prompt.
 - Conversations are kept 90 days after their last event. Processes end with the API; a conversation goes on through
-  `--resume`. A turn cut off by a stop ends with `status idle` "przerwano", by a crash with `status error` "Serwer
-  został zatrzymany w trakcie pracy.".
+  `--resume`. A turn cut off by a stop ends with `status idle` "interrupted", by a crash with `status error` "The
+  server stopped during the turn.".
 - Limits: 8 live processes, 15 minutes idle, prompts up to 100,000 characters, step output up to 32,000 characters.
-- Error texts: "Nieprawidłowa ścieżka", "Nieznana rozmowa", "Rozmowa jest zajęta", "Nieprawidłowe polecenie",
-  "Nieprawidłowe opcje", "Nieznana decyzja", "To pytanie nie ma reguły do zapisania", "Konsola niedostępna", "Konsola
-  nie odpowiada", "Za dużo aktywnych rozmów", "Sesja wygasła". The mock's own texts stay as they are; the frontend
-  shows its own texts instead.
+- Error texts: "Invalid path", "Unknown conversation", "Conversation is busy", "Invalid prompt", "Invalid options",
+  "Unknown decision", "This question has no rule to save", "Console unavailable", "Console not responding", "Too
+  many active conversations", "Session expired". The mock uses the same texts; the frontend shows its own texts
+  instead.
 
 ## Workspaces and git
 
@@ -533,13 +533,13 @@ Errors have a `{"message"}` body with a description (e.g. git output), which the
 | Method | Path | Response |
 |---|---|---|
 | GET | `/api/workspaces` | `200 [{"name","path","repoCount"}]` in creation order; directories made outside the app after them, by name (ordinal, ignoring case), under their directory name |
-| POST | `/api/workspaces` | body `{"name"}`. `201 {"name","path","repoCount":0}`. Name: trimmed, 1-40 code points, each a letter, a digit, a space, `-` or `_`. Directory: lower case, `ł`→`l`, other letters without their diacritics, every run of other characters → one `-`, no `-` at either end (`Zażółć gęślą jaźń` → `zazolc-gesla-jazn`). `400 {"message":"Nieprawidłowa nazwa."}` for a bad name or one whose directory would be empty (`ß`, `Привет`); `409 {"message":"Workspace już istnieje."}` when anything (a directory, a file, a symlink) already has that name |
-| GET | `/api/repos?workspace=<katalog>` | `200 [RepoSummary]` sorted by name (ordinal, ignoring case). `404` when the workspace does not exist |
-| POST | `/api/repos/clone` | body `{"workspace","url"}`. `201 RepoSummary`. Directory name from the last URL segment without `.git`, it must match `^[A-Za-z0-9_][A-Za-z0-9._-]{0,99}$` (so not `.`, `..`, `.git` or `-…`). `400` bad URL or name (`{"message":"Nieprawidłowy adres."}` or `{"message":"Nieprawidłowa nazwa katalogu."}`), `404` no workspace, `409 {"message":"Katalog już istnieje."}` when anything has that name, `502` with git's message, or `"Git nie skończył w ciągu N s i został przerwany."` at the time limit; a failed or stopped clone leaves no directory |
-| GET | `/api/git/show?repo=<repo>&path=<plik>` | `200 {"content"}`: the file content in HEAD (for the diff view). `404` when the file is not in HEAD (also a directory, a symlink, a submodule, or no commit yet). The content is what a checkout writes (line endings and ident from .gitattributes); 413 over 5 MB, 415 for a NUL byte or invalid UTF-8, a UTF-8 BOM is dropped (the files API's rules). `400` when `path` is not inside `repo` |
+| POST | `/api/workspaces` | body `{"name"}`. `201 {"name","path","repoCount":0}`. Name: trimmed, 1-40 code points, each a letter, a digit, a space, `-` or `_`. Directory: lower case, `ł`→`l`, other letters without their diacritics, every run of other characters → one `-`, no `-` at either end (`Zażółć gęślą jaźń` → `zazolc-gesla-jazn`). `400 {"message":"Invalid name."}` for a bad name or one whose directory would be empty (`ß`, `Привет`); `409 {"message":"Workspace already exists."}` when anything (a directory, a file, a symlink) already has that name |
+| GET | `/api/repos?workspace=<dir>` | `200 [RepoSummary]` sorted by name (ordinal, ignoring case). `404` when the workspace does not exist |
+| POST | `/api/repos/clone` | body `{"workspace","url"}`. `201 RepoSummary`. Directory name from the last URL segment without `.git`, it must match `^[A-Za-z0-9_][A-Za-z0-9._-]{0,99}$` (so not `.`, `..`, `.git` or `-…`). `400` bad URL or name (`{"message":"Invalid URL."}` or `{"message":"Invalid directory name."}`), `404` no workspace, `409 {"message":"Directory already exists."}` when anything has that name, `502` with git's message, or `"Git did not finish within N s and was stopped."` at the time limit; a failed or stopped clone leaves no directory |
+| GET | `/api/git/show?repo=<repo>&path=<file>` | `200 {"content"}`: the file content in HEAD (for the diff view). `404` when the file is not in HEAD (also a directory, a symlink, a submodule, or no commit yet). The content is what a checkout writes (line endings and ident from .gitattributes); 413 over 5 MB, 415 for a NUL byte or invalid UTF-8, a UTF-8 BOM is dropped (the files API's rules). `400` when `path` is not inside `repo` |
 | GET | `/api/git/status?repo=<repo>` | `200 {"branch","ahead","behind","files":[{"path","status"}]}`. `status`: `modified`/`added`/`deleted`/`renamed`/`untracked`/`conflicted`. Untracked files individually (`--untracked-files=all`); a repository inside the repository's untracked files is one `untracked` entry with its directory's path. `404` when it is not a repository |
-| POST | `/api/git/pull?repo=<repo>` | `git pull --ff-only`, run as a fetch and a fast-forward merge. `200 {"message","changedPaths"}`: `"Pobrano N commit/commity/commitów."` with the files that differ between the old and the new HEAD (a rename gives both paths), or `"Już aktualne."` with `[]`. `400 {"message":"Gałąź nie ma gałęzi zdalnej."}` without an upstream (also on a detached HEAD). `409` with git's message when the merge cannot fast-forward or would overwrite local changes. `502` with git's message when the fetch fails, or the time-limit message |
-| POST | `/api/git/push?repo=<repo>` | `200 {"message"}`: `"Wypchnięto N commit/commity/commitów do <upstream>."`, `"Wypchnięto gałąź <branch> do origin/<branch>."` for a new upstream (`git push -u origin HEAD`), or `"Nic do wypchnięcia."` without the network when nothing is ahead. `400` `"Odłączony HEAD: przełącz się na gałąź, żeby zrobić push."` or `"Brak zdalnego repozytorium 'origin'."`. `409` with git's output when a ref is `[rejected]` (pull first). `502` for any other failure (network, authentication, `[remote rejected]` by a hook or a protection rule) or the time limit |
+| POST | `/api/git/pull?repo=<repo>` | `git pull --ff-only`, run as a fetch and a fast-forward merge. `200 {"message","changedPaths"}`: `"Pulled N commits."` (`"Pulled 1 commit."`) with the files that differ between the old and the new HEAD (a rename gives both paths), or `"Already up to date."` with `[]`. `400 {"message":"The branch has no upstream."}` without an upstream (also on a detached HEAD). `409` with git's message when the merge cannot fast-forward or would overwrite local changes. `502` with git's message when the fetch fails, or the time-limit message |
+| POST | `/api/git/push?repo=<repo>` | `200 {"message"}`: `"Pushed N commits to <upstream>."` (`"Pushed 1 commit to <upstream>."`), `"Pushed branch <branch> to origin/<branch>."` for a new upstream (`git push -u origin HEAD`), or `"Nothing to push."` without the network when nothing is ahead. `400` `"Detached HEAD: switch to a branch to push."` or `"No remote 'origin'."`. `409` with git's output when a ref is `[rejected]` (pull first). `502` for any other failure (network, authentication, `[remote rejected]` by a hook or a protection rule) or the time limit |
 
 `RepoSummary`: `{"name","path","branch" | null,"changes","upstream" | null,"ahead","behind","lastCommit": {"message","date"} | null}`.
 Paths (`path`, `files[].path`, `changedPaths`) are always relative to the projects directory.
@@ -552,7 +552,7 @@ fetches in the background when the repository list is read: every repository wit
 minutes, and the answer never waits. New ↑/↓ appear at the panel's next refresh (returning to the tab, a save,
 "Odśwież").
 
-The backend's own messages are Polish (as the mock's); git's messages pass through in English (`LC_ALL=C.UTF-8`).
+The backend's own messages are English (as the mock's); git's messages pass through in English (`LC_ALL=C.UTF-8`).
 
 Security requirements for the backend:
 - `workspace` and `repo` are checked like file paths (inside the projects directory, also after resolving symlinks).
@@ -648,19 +648,19 @@ Server events to all of the user's connections to this hub:
 
 Backend rules the tables do not show:
 - `exitCode` is `null` (the backend does not report it).
-- `Attach` of an unknown id fails with "Nieznany terminal"; `Attach` of an exited terminal gives an empty `snapshot`.
+- `Attach` of an unknown id fails with "Unknown terminal"; `Attach` of an exited terminal gives an empty `snapshot`.
   `Attach` without a valid `client` (1-64 characters) gives the snapshot, and none of that view's `Input` is accepted.
-- Without the argument object `OpenTerminal` gets "Nieprawidłowa ścieżka", `Attach` "Nieznany terminal" and `Input`
-  "Nieprawidłowa paczka"; `Resize` and `CloseTerminal` do nothing.
+- Without the argument object `OpenTerminal` gets "Invalid path", `Attach` "Unknown terminal" and `Input`
+  "Invalid batch"; `Resize` and `CloseTerminal` do nothing.
 - `CloseTerminal` of an unknown id succeeds without an error (another tab may have closed it); no event is sent.
 - `Resize` of an unknown id is ignored.
 - Limits: 20 terminals (exited ones included); sizes clamped to 10..1000 columns and 2..500 rows; history 5000 lines;
   a snapshot of at most 1,000,000 characters, the oldest lines dropped first.
 - Terminals end when the API stops.
 - Hubs refuse a missing or foreign `Origin` with `403`.
-- Error texts: "Nieznany terminal", "Nieprawidłowa paczka", "Najpierw Attach na tym połączeniu", "Nieprawidłowa
-  ścieżka", "Za dużo terminali", "Terminal niedostępny", "Terminal nie odpowiada", "Sesja wygasła". The frontend shows
-  its own texts instead.
+- Error texts: "Unknown terminal", "Invalid batch", "Attach on this connection first", "Invalid path", "Too many
+  terminals", "Terminal unavailable", "Terminal not responding", "Session expired". The mock uses the same texts;
+  the frontend shows its own texts instead.
 
 ## Backend
 
@@ -737,7 +737,7 @@ Configuration:
 | `Frontend:Root` | not set (development uses `ng serve`); to try the build: `dotnet user-secrets`; server: variable `Frontend__Root` (`/opt/claushh/web`, the unit) | the absolute path of the Angular build (`web/dist/web/browser`) the API serves at `/`; when set, its `index.html` must carry the CSP `<meta>`, checked at start (the API does not start otherwise). Read once: restart the API after a build that changes the policy |
 | `Notifications:NtfyUrl` | server: variable `Notifications__NtfyUrl` (required in Production: the API does not start without it); development: optional, `dotnet user-secrets` | the URL of the ntfy topic (an absolute https URL, checked at start). A secret: whoever knows the topic can read it, so it is never logged. Empty: no notifications |
 | `Notifications:NtfyToken` | server: variable `Notifications__NtfyToken`; optional | an ntfy access token, sent as `Authorization: Bearer` |
-| `Console:ClaudePath` | not set: `claude` on PATH; server: `/home/workspace/.local/bin/claude` (the unit), the launcher of Anthropic's installer | the `claude` CLI the console runs, at least 2.1.285 (checked with `--version` before the first claude process; below that or missing, the console answers "Konsola niedostępna" and conversations can still be read) |
+| `Console:ClaudePath` | not set: `claude` on PATH; server: `/home/workspace/.local/bin/claude` (the unit), the launcher of Anthropic's installer | the `claude` CLI the console runs, at least 2.1.285 (checked with `--version` before the first claude process; below that or missing, the console answers "Console unavailable" and conversations can still be read) |
 | `Console:ConfigDirectory` | not set: `$XDG_STATE_HOME/claushh/claude`, else `~/.local/state/claushh/claude` (server: `/home/workspace/.local/state/claushh/claude`) | the CLI's own state and login (`CLAUDE_CONFIG_DIR`), created with mode 0700 at start |
 | `Console:ApiKeyFile` | not set: the login in the config directory; server: optional, variable `Console__ApiKeyFile` in `/etc/claushh/claushh.env` | a file with an Anthropic API key, read by the CLI through `apiKeyHelper`: the absolute path of an existing file, readable by the API's user, that lies outside the projects directory as written and with symlinks resolved (its directory and the file itself), and whose mode has no group or other bit (e.g. 0600); otherwise the console is unavailable and the error log says why |
 | `Console:Environment:<NAME>` | none (tests: `DOTNET_ROOT` for the fake CLI) | variables for the `claude` process on top of its allowlisted environment |
@@ -845,15 +845,14 @@ Passkeys (`Auth/`; the contract is in "Authentication" → "Passkeys"; decisions
 
 Notifications (`Notifications/`; decisions: `PLAN.md`, "Backend decisions (stage 1, part C)"):
 - `LoginNotifications` sends a phone notification through ntfy for these events, never with the user name:
-  - every successful password login: title `Claushh: logowanie`, priority `default`, with the address, the device and
+  - every successful password login: title `Claushh: login`, priority `default`, with the address, the device and
     the time in UTC;
-  - every start of an account lock: title `Claushh: konto zablokowane`, priority `high`, with the lock's length, the
+  - every start of an account lock: title `Claushh: account locked`, priority `high`, with the lock's length, the
     last attempt's address, device and time, and `create-user --reset-password` as the way out.
   - every passkey added or removed: title `Claushh: passkey added` or `Claushh: passkey removed`, priority `high`,
-    with the passkey's name, the address, the device and the time, and `create-user --reset-password` as the way
-    out (in English).
+    with the passkey's name, the address, the device and the time, and `create-user --reset-password` as the way out.
   - every passkey login: title `Claushh: passkey login`, priority `default`, with the passkey's name, the address,
-    the device and the time (in English).
+    the device and the time.
 
   Failed attempts and `429` send nothing.
 - Each message is one `POST` of the text to `Notifications:NtfyUrl`, with `Authorization: Bearer
@@ -925,7 +924,7 @@ Workspaces and git (`Workspaces/`, `Git/`):
 - Time limits: one deadline per request, `Git:NetworkTimeout` from its start, covering the lock wait and every step;
   local steps (merge, diff) are also capped at 30 s. At a limit the process tree (`git` starts `git-remote-https` and
   hooks) gets SIGTERM, so git removes its lock files, and if git still runs 1 s later, the whole tree is killed; the
-  answer is `502` "Git nie skończył w ciągu N s i został przerwany.". A local step keeps running under its own cap
+  answer is `502` "Git did not finish within N s and was stopped.". A local step keeps running under its own cap
   when the client goes away (only a network step is stopped then): there is no one to answer either way, but a
   `git merge` half done would leave the repository in a worse state than letting it finish.
 - One lock per repository directory (`RepoLocks`), also for the target of a clone; a request waits for it within its
@@ -941,10 +940,10 @@ Workspaces and git (`Workspaces/`, `Git/`):
   the destination given by name (not the resolved path), so git's own "Cloning into '…'" message never puts a
   resolved path in a `502` response. A failure or a timeout removes the target directory if it exists and answers
   `502`; a clone that is not a repository the portal can read is a `500`.
-- Pull: no upstream (also a detached HEAD) → `400`; `git fetch <remote>` (a failure → `502`); nothing new → "Już
-  aktualne."; `git merge --ff-only @{upstream}` (a failure → `409` with git's message); then `changedPaths` from `git diff
-  --name-only --no-renames -z <old HEAD> HEAD` (on a branch that had no commits, `git ls-tree -r --name-only -z HEAD`).
-- Push: a detached HEAD → `400`; an upstream with nothing ahead → "Nic do wypchnięcia." without the network; with an
+- Pull: no upstream (also a detached HEAD) → `400`; `git fetch <remote>` (a failure → `502`); nothing new → "Already
+  up to date."; `git merge --ff-only @{upstream}` (a failure → `409` with git's message); then `changedPaths` from `git
+  diff --name-only --no-renames -z <old HEAD> HEAD` (on a branch that had no commits, `git ls-tree -r --name-only -z HEAD`).
+- Push: a detached HEAD → `400`; an upstream with nothing ahead → "Nothing to push." without the network; with an
   upstream `git push --porcelain <remote> HEAD:<its branch>` (explicit, so `push.default` does not matter); without one
   but with `origin`, `git push --porcelain -u origin HEAD`; neither → `400`. When ahead cannot be computed (the
   upstream has no tip yet, e.g. a freshly cloned empty remote, or there is no common history) the shortcut is skipped
@@ -956,12 +955,12 @@ Workspaces and git (`Workspaces/`, `Git/`):
 
 Hubs (`Hubs/`, shared by every hub):
 - SignalR with the JSON protocol, WebSocket only; the frontend skips negotiation. Detailed errors are off: a client
-  sees only `HubException` texts, which are Polish, and the frontend shows its own texts anyway.
+  sees only `HubException` texts, which are English, and the frontend shows its own texts anyway.
 - `HubOrigins` runs before authentication for every path under `/hubs`.
 - `HubSessionFilter`, a global hub filter: on connect it registers the connection under its session (claim
   `session_id`) and checks the session once; on every call it checks it again (`SessionService.IsActiveAsync`, one
   indexed query). An ended session: the connection is aborted (the client does not reconnect and checks the session
-  over HTTP) and the call fails; the connection closes before the "Sesja wygasła" error can be sent, so the client
+  over HTTP) and the call fails; the connection closes before the "Session expired" error can be sent, so the client
   sees the call cancelled. It never extends the session. A connection whose connect fails (the check or the hub's own
   `OnConnectedAsync`) is removed from the registry right away, so it is not kept forever.
 - `HubSessionSweep` asks which registered sessions are still active (`SessionService.ActiveIdsAsync`, one query) and
@@ -978,7 +977,7 @@ Terminal (`Terminal/`; the contract is in "Terminal"):
   checks `tmux -V`, writes the configuration and ends a server a previous run left (`kill-server`); on a graceful stop
   (also Ctrl+C on `dotnet run`) it closes every terminal and ends the server. Terminals do not survive a restart.
   Without tmux 3.7, or without `Terminal:SocketDirectory` and `XDG_RUNTIME_DIR`, the error log says so,
-  `ListTerminals` is empty and the other methods answer "Terminal niedostępny"; the rest of the API works.
+  `ListTerminals` is empty and the other methods answer "Terminal unavailable"; the rest of the API works.
 - Every tmux process gets only HOME, USER, LOGNAME, SHELL, PATH, LANG, LANGUAGE, LC_* and TZ of the API's environment
   (`Processes/ChildEnvironment`), `LANG=C.UTF-8` when no locale variable is set, `COLORTERM=truecolor`, then
   `Terminal:Environment`: none of the API's own variables reach tmux or the shell (the connection string,
@@ -986,14 +985,14 @@ Terminal (`Terminal/`; the contract is in "Terminal"):
   shell is the login shell from SHELL and runs as the API's user.
 - A terminal is the tmux session `claushh-<id>` (`id`: a new GUID as 32 hex digits) in the real path of `projectPath`,
   which must be a directory (`ProjectPaths`), and one control client for its whole life. Its title is the last segment
-  of `projectPath` or "projekty", plus " (k)" with the smallest free k from 2. At most 20 terminals, exited ones
+  of `projectPath` or "projects", plus " (k)" with the smallest free k from 2. At most 20 terminals, exited ones
   included; sizes are clamped to 10..1000 columns and 2..500 rows.
 - Output: the `%output` lines of the terminal's pane, tmux's octal escapes undone, one UTF-8 decoder per terminal (a
   character split between lines is kept, invalid bytes become U+FFFD). Every non-empty piece is a `TerminalOutput` to
   all connections with `seq` + 1 from 1. The reader waits for each send, so every connection gets the order and a slow
   browser slows the terminal instead of filling memory.
 - Commands go to the control client one line at a time and are matched to tmux's `%begin`…`%end`/`%error` blocks in
-  order; inside a block a line starting with `%` is pane text. Each command has 10 s ("Terminal nie odpowiada"); a late
+  order; inside a block a line starting with `%` is pane text. Each command has 10 s ("Terminal not responding"); a late
   reply still takes its own command's place. Waiting for and writing a command's line also has the 10 s limit; a write
   cut off by that deadline ends the control client, so the terminal reports its exit.
 - `Attach` (one at a time with `Input` and `Resize` of the same terminal, under its lock): `refresh-client -C` to the
@@ -1010,9 +1009,9 @@ Terminal (`Terminal/`; the contract is in "Terminal"):
   `EscapeTail` follows the output: when the fragment at `seq` ends inside an escape sequence (tmux cuts its output
   wherever a read ended), the text ends with that sequence's beginning, so the next `TerminalOutput` completes it in
   the view; an unfinished sequence over 4096 characters is not kept.
-- `Input`: `client` 1-64 characters, `seq` ≥ 1, `data` at most 4096 UTF-16 units, otherwise "Nieprawidłowa paczka";
+- `Input`: `client` 1-64 characters, `seq` ≥ 1, `data` at most 4096 UTF-16 units, otherwise "Invalid batch";
   an unknown or exited terminal is skipped. Under the lock: a `client` whose last `Attach` was on another connection
-  gets "Najpierw Attach na tym połączeniu"; a `seq` not above the last accepted is skipped; otherwise the UTF-8 bytes
+  gets "Attach on this connection first"; a `seq` not above the last accepted is skipped; otherwise the UTF-8 bytes
   go to the pane with `send-keys -H` (each byte as it is), at most 1024 per command, and `seq` is recorded as soon as
   the batch is written to tmux, before its replies: a reply can wait behind heavy output past the 10 s deadline, and the
   batch the frontend then sends again with the same `seq` is not typed twice. The last `seq` and `Attach` connection of
@@ -1029,7 +1028,7 @@ Terminal (`Terminal/`; the contract is in "Terminal"):
 Console (`Claude/`, `Hubs/ConsoleHub.cs`; the contract is in "Console"; decisions: `PLAN.md`, "Backend decisions
 (stage 3)"):
 - `/hubs/console` has the shared hub rules ("Hubs"). `GetConversation` and `StartConversation` need `projectPath` to be
-  a directory in the projects directory (`ProjectPaths`, as for the terminal), otherwise "Nieprawidłowa ścieżka".
+  a directory in the projects directory (`ProjectPaths`, as for the terminal), otherwise "Invalid path".
   Conversations are keyed by `projectPath` as sent; a conversation's id is a new GUID.
 - Tables `Conversations` (`Id`, `ProjectPath`, `StartedAt`, `LastEventAt`, `Resumable`; index `ProjectPath` +
   `StartedAt`), `ConversationEvents` (`ConversationId` with cascade, `Seq`, `Json` as text; key on both) and
@@ -1045,7 +1044,7 @@ Console (`Claude/`, `Hubs/ConsoleHub.cs`; the contract is in "Console"; decision
   unavailable, with the reason in the error log. No claude process runs while the host starts: before the first claude
   process the API runs `<Console:ClaudePath> --version` within 10 s with the console's environment, and a failed
   check is repeated by the next prompt. Below 2.1.285, or without the CLI, the error log says so and the console
-  answers "Konsola niedostępna"; `GetConversation` and `StartConversation` still work. The version found is logged.
+  answers "Console unavailable"; `GetConversation` and `StartConversation` still work. The version found is logged.
 - One long-lived process per conversation, started at the first prompt that finds none, in the real path of
   `projectPath`, without a shell, with `--session-id <conversation id>`, or `--resume <conversation id>` once the CLI
   has reported that id as its session (`system/init`, `Conversations.Resumable`):
@@ -1064,7 +1063,7 @@ Console (`Claude/`, `Hubs/ConsoleHub.cs`; the contract is in "Console"; decision
   helper), `CLAUDE_CONFIG_DIR`, `DISABLE_UPDATES=1`, `DISABLE_AUTOUPDATER=1`, `TERM=dumb`, then `Console:Environment`.
   The API's own variables (the connection string, `ANTHROPIC_API_KEY`, `CLAUDECODE*`) never reach the CLI.
 - `initialize` must answer within 30 s. Before every prompt `set_model`, `set_permission_mode` and
-  `apply_flag_settings {effortLevel}` are sent and each reply awaited (10 s; then "Konsola nie odpowiada" and the
+  `apply_flag_settings {effortLevel}` are sent and each reply awaited (10 s; then "Console not responding" and the
   process is killed). Then `prompt` and `status working` are stored and sent, and the prompt goes to stdin as a `user`
   line with `origin: {kind: "human"}` and a new `uuid`. A prompt starting with `/` also gets `client_composed: true`,
   so the CLI gives it to the model as text instead of running its own command; that turn goes without the CLI's
@@ -1080,23 +1079,23 @@ Console (`Claude/`, `Hubs/ConsoleHub.cs`; the contract is in "Console"; decision
   step, nor does a tool that did not run (`non_execution_kind`). A command's output is its stdout, then its stderr when
   not empty, or the result's text when it failed; other tools show output only on an error. A tool the CLI refuses by
   itself (`system/permission_denied`, e.g. a file outside the directory) is a step of kind `other` with the CLI's reason
-  as error output. `result` ends the turn: `idle`, `idle` "przerwano" after an interrupt, or `error` "Polecenie
-  zakończone błędem: <text, at most 500 characters>". Thinking, rate limits, costs and unknown lines are ignored. Every
+  as error output. `result` ends the turn: `idle`, `idle` "interrupted" after an interrupt, or `error` "The prompt
+  failed: <text, at most 500 characters>". Thinking, rate limits, costs and unknown lines are ignored. Every
   control request of the CLI is answered; one the console does not support gets an error reply.
 - `Interrupt` sends the CLI's `interrupt` request; open questions end as denied at once. Without a `result` within 10 s
-  the process tree is killed and the turn ends as `idle` "przerwano". An unknown or idle conversation is a no-op.
-- A process that ends during a turn ends the turn: open questions denied, then `status error` "Proces konsoli zakończył
-  się (kod N)." (during an interrupt: `status idle` "przerwano"); one that ends while idle sends nothing (exit code 1
-  after an interrupted turn is normal). A `--resume` launch that fails stores and sends `status error` "Nie udało się
-  wznowić rozmowy. Zacznij nową („Nowa”)."; every failed start answers "Konsola niedostępna".
-- At most 8 live processes: a launch closes the least recently used idle one, and with 8 busy it is refused ("Za dużo
-  aktywnych rozmów"). A process without a turn for 15 minutes gets EOF on stdin and is killed 5 s later if it still
-  runs (checked every minute); the next prompt resumes the conversation. A conversation with no process for 15 minutes
-  is dropped from memory at that check and read again from the database at its next use, so one that retention deleted
-  is then "Nieznana rozmowa".
+  the process tree is killed and the turn ends as `idle` "interrupted". An unknown or idle conversation is a no-op.
+- A process that ends during a turn ends the turn: open questions denied, then `status error` "The console process
+  exited (code N)." (during an interrupt: `status idle` "interrupted"); one that ends while idle sends nothing (exit
+  code 1 after an interrupted turn is normal). A `--resume` launch that fails stores and sends `status error` "Could
+  not resume the conversation. Start a new one (“New”)."; every failed start answers "Console unavailable".
+- At most 8 live processes: a launch closes the least recently used idle one, and with 8 busy it is refused ("Too
+  many active conversations"). A process without a turn for 15 minutes gets EOF on stdin and is killed 5 s later if it
+  still runs (checked every minute); the next prompt resumes the conversation. A conversation with no process for 15
+  minutes is dropped from memory at that check and read again from the database at its next use, so one that
+  retention deleted is then "Unknown conversation".
 - On a graceful stop open turns are interrupted and stdin is closed; whatever runs after 5 s in total is killed, and
-  the turns end as `idle` "przerwano". At start a conversation whose log ends with `working` or `waiting` gets `deny`
-  for its unanswered questions and `status error` "Serwer został zatrzymany w trakcie pracy.". Logout and session
+  the turns end as `idle` "interrupted". At start a conversation whose log ends with `working` or `waiting` gets `deny`
+  for its unanswered questions and `status error` "The server stopped during the turn.". Logout and session
   expiry close the connections, not the turns; the next login replays them.
 - In plan mode the CLI may run another model than the chosen one; the console leaves that to the CLI.
 - Questions come as the CLI's `control_request` `can_use_tool` on stdout (`--permission-prompt-tool stdio`) and are
@@ -1107,9 +1106,9 @@ Console (`Claude/`, `Hubs/ConsoleHub.cs`; the contract is in "Console"; decision
   `addRules` entry that allows exactly one rule and `suppress_always_allow_rule` is not set (file edits never have
   one). Then `status waiting`. Read-only commands such as `git status` never ask inside the directory; reads outside it
   ask (`blockReadsOutsideWorkingDirectories`).
-- `AnswerPermission` checks `decision` first ("Nieznana decyzja"). An unknown conversation or `requestId`, or one
-  already answered, is silent (the first answer wins); `allow-always` without a rule fails ("To pytanie nie ma reguły
-  do zapisania") and leaves the question open. `permission-resolved` (then `status working` when no other question is
+- `AnswerPermission` checks `decision` first ("Unknown decision"). An unknown conversation or `requestId`, or one
+  already answered, is silent (the first answer wins); `allow-always` without a rule fails ("This question has no
+  rule to save") and leaves the question open. `permission-resolved` (then `status working` when no other question is
   open) is stored and sent before the answer is written, so the allowed tool's step always follows its question. The
   CLI gets: allow → `{"behavior":"allow","updatedInput":<the input as received>}`; an allowed ExitPlanMode → the same
   plus `setMode default` for the session, so edits ask again; allow-always → the same plus the one rule as `addRules`
@@ -1126,7 +1125,7 @@ Console (`Claude/`, `Hubs/ConsoleHub.cs`; the contract is in "Console"; decision
   `files-changed` with every path whose git status (`Repositories.Status`) differs from the status at the prompt
   (new, gone or changed); the status at the prompt is read before the conversation's lock is taken. A file the command
   changes again after it was already modified is missed; a save of it then gets the editor's `409`.
-- A step's output over 32,000 characters keeps its end after `⟨pominięto N znaków⟩`.
+- A step's output over 32,000 characters keeps its end after `⟨N characters omitted⟩` (`⟨1 character omitted⟩`).
 - Conversations whose last event is more than 90 days old are deleted with their events, at start and every hour
   (`ConversationCleanup`, by `TimeProvider`); the rules stay. The CLI keeps its transcripts as long
   (`cleanupPeriodDays: 90`).
@@ -1176,7 +1175,7 @@ Rules: `CLAUDE.md`, section "Tests" (new code: only integration and e2e tests).
 |---|---|---|
 | Integration + older unit | `cd web && npm test` | Vitest (jsdom). Integration: `console.integration.spec.ts` (panel + store + editor, SignalR and HTTP stubbed; also permission requests: hidden characters, button delay, "tak, zawsze", and a double Enter), `workspaces.integration.spec.ts` (Workspace panel + router + git status + explorer + editor, HTTP stubbed; also the strict clone URL validation), `security.integration.spec.ts` (AuthService + interceptor + SessionTimer + the "Bezpieczeństwo" window, HTTP, reload and clock stubbed; also expiry without a server response), `logout-confirmation.integration.spec.ts` (routes with guards + AuthService + login screen after an unconfirmed logout, also with a newer session from another tab), `login-wait.integration.spec.ts` (routes with guards + AuthService + login screen after a `429`: the wait in seconds, minutes or hours). Older unit tests: auth, files API, paths, explorer, `EditorStore` |
 | E2E | `cd web && npm run e2e` | build + Playwright in Chromium on `e2e/mock-api/server.mjs`: login and sessions (including unconfirmed logout with "Back", a new tab and logging in again, embedding in a frame, Trusted Types), explorer and Monaco, console (steps, options, permissions, "tak, zawsze", interrupt, replay, multiple tabs, file changes), workspaces (opening a repo, git status, pull, push, create, clone, a conversation per repo), terminal (commands, keys, reload without duplicates, multiple terminals, `exit`, Ctrl+S, resizing, pasting with the decision panel, characters on a dropped connection without loss or duplication, also after closing the tab, queue limit, focus, OSC 8 links, no answers to terminal queries, closing a terminal that another tab already closed), session (countdown, "Przedłuż", activity once a minute on a fake clock, expiry, also without a server response and hubs closed by the server), the "Bezpieczeństwo" window with a second device (a separate browser context), diff view, Monaco worker startup, mock robustness and the contract rules that the frontend does not let through (clone URL, XSRF token bound to the identity, saving like the files API: `absent`, a missing directory, 5 MB, a NUL character, workspace, repo and path parameters, the console's paths, prompt length and options, the passkeys' re-authentication and login challenge). **Every test** (`fixtures.ts`) fails when the page reports a CSP or Trusted Types violation, an unhandled exception (including one caught by Angular's ErrorHandler, `console.error('ERROR', …)`) or Monaco does not create a worker |
-| Backend | `dotnet test` (needs Docker) | xUnit integration tests over HTTP (`WebApplicationFactory`, PostgreSQL 17 from Testcontainers, a test clock): login and its failures, `me`, `keepalive` and both deadlines, logout and 409, ending another session, XSRF token bound to the session, `no-store`, closed `/api/*`, the built frontend (the page for app paths with its CSP and `no-store`, file types and `no-cache`, `/api` and `/hubs` paths and missing files never the page, paths that start with `//` `404` with or without a session, the security headers on every response, the start check of `Frontend:Root`), `create-user`, TOTP codes used once, the limit per IP, the client address behind Cloudflare (`CF-Connecting-IP` and `X-Forwarded-Proto` only from a loopback peer, `X-Forwarded-For` ignored, IPv6 limited per /64, IPv4-mapped peers as IPv4), the account lockout and its growth, a login that cannot start within 10 s, session list, `revoke-others`, login history, cleanup, the password reset, login notifications (content, one for the start of a lock and none for failed attempts, a failing or unreachable ntfy, the start check), passkeys (re-authentication with its limits and the lockout, fresh for 5 minutes, the creation options, adding through Identity's checks of origin, cross-origin, RP ID, user verification and a stored credential, states used once, expiring and bound to their session, names, the limit of 10 also for two adds at once, renaming, removing, the notifications, the resets of `create-user`, the start check of `Passkeys:ServerDomain`), passkey login (the options and the challenge cookie, a login with its history row, notification and saved counter, every failed assertion recorded as a passkey attempt, challenges used once and expiring, at most 3 pending per address, the per-IP limit shared with password logins, the lock refusing password logins and re-authentication but not a passkey login, a passkey login that cannot start within 10 s), the files API (listing, symlinks, `.git`, reading, saving, conflicts, re-creating a deleted file, limits, text rules, file modes, long names, two saves at once, empty error bodies, a link into a directory the API cannot search, a lone surrogate in the body), workspaces and git (the repository list and its order, what is and is not a repository (also a `.git` symlink), every git status (also a nested repository, and one that cannot be read), ahead and behind, HEAD content with a checkout's line endings and the files API's limits, also after the checkout's filters), workspaces (the list and its order, names and directories, creating, a stale row), cloning (every refused URL, git's own errors, the time limit against a server that never answers, only https whatever git's configuration files allow), pull and push (every answer, both paths of a rename, a branch without commits, two pulls at once, a hook that refuses, only https, no lock file left at the time limit, git's messages with the API path), the background fetch (every 5 minutes by the test clock, a list that never waits for it, a pull or push taking the repository from a fetch that hangs and ending its process tree), the hubs (session and Origin on the WebSocket, WebSockets only, connections closed at once on logout, ending a session and revoke-others, by the 5 s timer on its own, expiry and a revocation by another process, hub calls never extending the session), the terminal (opening in a directory by its real path, titles, refused paths, the limit, output seq without gaps, the allowlisted environment, exit, close, the start routine), attach and input (snapshot with CRLF, every line exactly once when attaching during output, bracketed paste restored, a batch sent twice typed once, Input only after Attach on the same connection, inputSeq after a reconnect, batch limits, UTF-8 across send-keys commands, resize limits, an exited terminal, an unknown id, calls without their argument, the history and normal screen before the switch to the alternate screen and the program's own text after it, also after a resize, a snapshot taken inside an escape sequence), the console hub (refused paths, the conversation event in every tab, the latest conversation, the stored events as sent, the config directory's mode, the API key file's place and mode, calls without their argument, session and Origin), the claude process (the command line, its directory and environment, events in contract order, replay with merged text and the open text, options before every prompt, busy and unknown conversations, prompt and option limits, prompts starting with "/", tools the CLI refuses, unknown control requests, interrupts, also ignored ones, an exit during and after them, a process that ends, a failed resume, recovery at start, the process limit, idle processes, forgotten conversations read again, a conversation retention deleted, an old CLI, logout during a turn), the console's questions (the command and its rule, deny, allow, allow-always and the next launch's rules, a write question, unknown decisions and requests, two tabs, several suggested rules, plan approval, interrupt and exit with a question open, a withdrawn question), edit counts, files-changed for edits and for commands in a repository (none for a repository the turn made), the output cap, 90-day retention; needs the git CLI ≥ 2.45 (`--ref-format=reftable`) |
+| Backend | `dotnet test` (needs Docker) | xUnit integration tests over HTTP (`WebApplicationFactory`, PostgreSQL 17 from Testcontainers, a test clock): login and its failures, `me`, `keepalive` and both deadlines, logout and 409, ending another session, XSRF token bound to the session, `no-store`, closed `/api/*`, the built frontend (the page for app paths with its CSP and `no-store`, file types and `no-cache`, `/api` and `/hubs` paths and missing files never the page, paths that start with `//` `404` with or without a session, the security headers on every response, the start check of `Frontend:Root`), `create-user`, TOTP codes used once, the limit per IP, the client address behind Cloudflare (`CF-Connecting-IP` and `X-Forwarded-Proto` only from a loopback peer, `X-Forwarded-For` ignored, IPv6 limited per /64, IPv4-mapped peers as IPv4), the account lockout and its growth, a login that cannot start within 10 s, session list, `revoke-others`, login history, cleanup, the password reset, login notifications (content, one for the start of a lock and none for failed attempts, a failing or unreachable ntfy, the start check), passkeys (re-authentication with its limits and the lockout, fresh for 5 minutes, the creation options, adding through Identity's checks of origin, cross-origin, RP ID, user verification and a stored credential, states used once, expiring and bound to their session, names, the limit of 10 also for two adds at once, renaming, removing, the notifications, the resets of `create-user`, the start check of `Passkeys:ServerDomain`), passkey login (the options and the challenge cookie, a login with its history row, notification and saved counter, every failed assertion recorded as a passkey attempt, challenges used once and expiring, at most 3 pending per address, the per-IP limit shared with password logins, the lock refusing password logins and re-authentication but not a passkey login, a passkey login that cannot start within 10 s), the files API (listing, symlinks, `.git`, reading, saving, conflicts, re-creating a deleted file, limits, text rules, file modes, long names, two saves at once, empty error bodies, a link into a directory the API cannot search, a lone surrogate in the body), workspaces and git (the repository list and its order, what is and is not a repository (also a `.git` symlink), every git status (also a nested repository, and one that cannot be read), ahead and behind, HEAD content with a checkout's line endings and the files API's limits, also after the checkout's filters), workspaces (the list and its order, names and directories, creating, a stale row), cloning (every refused URL, git's own errors, the time limit against a server that never answers, only https whatever git's configuration files allow), pull and push (every answer, both paths of a rename, a branch without commits, two pulls at once, a hook that refuses, only https, no lock file left at the time limit, git's messages with the API path), the background fetch (every 5 minutes by the test clock, a list that never waits for it, a pull or push taking the repository from a fetch that hangs and ending its process tree), the hubs (session and Origin on the WebSocket, WebSockets only, connections closed at once on logout, ending a session and revoke-others, by the 5 s timer on its own, expiry and a revocation by another process, hub calls never extending the session), the terminal (opening in a directory by its real path, titles, refused paths, the limit, output seq without gaps, the allowlisted environment, exit, close, the start routine), attach and input (snapshot with CRLF, every line exactly once when attaching during output, bracketed paste restored, a batch sent twice typed once, Input only after Attach on the same connection, inputSeq after a reconnect, batch limits, UTF-8 across send-keys commands, resize limits, an exited terminal, an unknown id, calls without their argument, the history and normal screen before the switch to the alternate screen and the program's own text after it, also after a resize, a snapshot taken inside an escape sequence), the console hub (refused paths, the conversation event in every tab, the latest conversation, the stored events as sent, the config directory's mode, the API key file's place and mode, calls without their argument, session and Origin), the claude process (the command line, its directory and environment, events in contract order, replay with merged text and the open text, options before every prompt, busy and unknown conversations, prompt and option limits, prompts starting with "/", tools the CLI refuses, unknown control requests, interrupts, also ignored ones, an exit during and after them, a process that ends, a failed resume, recovery at start, the process limit, idle processes, forgotten conversations read again, a conversation retention deleted, an old CLI, logout during a turn), the console's questions (the command and its rule, deny, allow, allow-always and the next launch's rules, a write question, unknown decisions and requests, two tabs, several suggested rules, plan approval, interrupt and exit with a question open, a withdrawn question), edit counts, files-changed for edits and for commands in a repository (none for a repository the turn made), the output cap (also for one character), 90-day retention; needs the git CLI ≥ 2.45 (`--ref-format=reftable`) |
 
 Backend tests make repositories with the git CLI (`tests/Claushh.Api.Tests/TestGit.cs`): a fixed identity and date,
 `HOME` set to a temporary directory so the machine's `~/.gitconfig` stays out (libgit2's configuration search paths

@@ -132,8 +132,8 @@ const sessionTimes = (session) => ({
 
 function deviceOf(req) {
   const ua = req.headers['user-agent'] ?? '';
-  const browser = /Firefox\//.test(ua) ? 'Firefox' : /Edg\//.test(ua) ? 'Edge' : /Chrom/.test(ua) ? 'Chrome' : /Safari\//.test(ua) ? 'Safari' : 'Przeglądarka';
-  const os = /Windows/.test(ua) ? 'Windows' : /Android/.test(ua) ? 'Android' : /iPhone|iPad/.test(ua) ? 'iOS' : /Mac OS/.test(ua) ? 'macOS' : /Linux/.test(ua) ? 'Linux' : 'nieznany system';
+  const browser = /Firefox\//.test(ua) ? 'Firefox' : /Edg\//.test(ua) ? 'Edge' : /Chrom/.test(ua) ? 'Chrome' : /Safari\//.test(ua) ? 'Safari' : 'Browser';
+  const os = /Windows/.test(ua) ? 'Windows' : /Android/.test(ua) ? 'Android' : /iPhone|iPad/.test(ua) ? 'iOS' : /Mac OS/.test(ua) ? 'macOS' : /Linux/.test(ua) ? 'Linux' : 'unknown system';
   return `${browser} · ${os}`;
 }
 
@@ -223,15 +223,15 @@ function repoSummary(repoPath) {
  */
 function cloneUrlProblem(url) {
   if (typeof url !== 'string' || !/^https:\/\/[a-z0-9.-]+(?::\d{1,5})?(?:\/[A-Za-z0-9._~-]+)+\/?$/.test(url)) {
-    return 'Nieprawidłowy adres.';
+    return 'Invalid URL.';
   }
   try {
     const parsed = new URL(url);
-    if (parsed.href !== url || parsed.username || parsed.password) return 'Nieprawidłowy adres.';
+    if (parsed.href !== url || parsed.username || parsed.password) return 'Invalid URL.';
   } catch {
-    return 'Nieprawidłowy adres.';
+    return 'Invalid URL.';
   }
-  return /^[A-Za-z0-9_][A-Za-z0-9._-]{0,99}$/.test(cloneName(url)) ? null : 'Nieprawidłowa nazwa katalogu.';
+  return /^[A-Za-z0-9_][A-Za-z0-9._-]{0,99}$/.test(cloneName(url)) ? null : 'Invalid directory name.';
 }
 
 /** Repository directory name: the last URL segment without `.git` (POST /api/repos/clone contract). */
@@ -240,8 +240,8 @@ const cloneName = (url) => url.replace(/\/+$/, '').split('/').pop().replace(/\.g
 const reposIn = (workspace) => [...state.repos.keys()].filter((p) => p.split('/')[0] === workspace);
 const slug = (name) => name.trim().toLowerCase().replace(/ł/g, 'l').normalize('NFD').replace(/\p{M}/gu, '').replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '');
 
-/** Polish plural of "commit" (docs/ARCHITECTURE.md, "Workspaces and git"): 1 commit, 2-4 commity (but 12-14 commitów), otherwise commitów. */
-const commitWord = (n) => (n === 1 ? 'commit' : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? 'commity' : 'commitów');
+/** English plural of "commit" (docs/ARCHITECTURE.md, "Workspaces and git"): 1 commit, otherwise commits. */
+const commitWord = (n) => (n === 1 ? 'commit' : 'commits');
 
 /**
  * `workspace`, `repo` and `path` parameters use the files API's path syntax (docs/ARCHITECTURE.md, "Workspaces and
@@ -318,7 +318,7 @@ const SECURITY_HEADERS = {
 function pageCsp() {
   const html = fs.readFileSync(path.join(DIST, 'index.html'), 'utf8');
   const meta = html.match(/<meta http-equiv="Content-Security-Policy" content="([^"]+)"/);
-  if (!meta) throw new Error('index.html nie ma polityki CSP');
+  if (!meta) throw new Error('index.html has no CSP policy');
   return `${meta[1]}; frame-ancestors 'none'`;
 }
 
@@ -583,7 +583,7 @@ async function handle(req, res) {
     if (match && req.method === 'DELETE') {
       const entry = [...state.sessions].find(([, s]) => s.id === decodeURIComponent(match[1]));
       if (!entry) return json(res, 404);
-      if (entry[0] === currentSid) return json(res, 400, { message: 'Własną sesję kończy się wylogowaniem.' });
+      if (entry[0] === currentSid) return json(res, 400, { message: 'Your own session ends with a logout.' });
       endSession(entry[0]);
       state.log.push({ path: 'revoke', id: entry[1].id });
       return json(res, 204);
@@ -594,7 +594,7 @@ async function handle(req, res) {
   // workspaces and git
   if (['/api/workspaces', '/api/repos', '/api/repos/clone'].includes(url.pathname) || url.pathname.startsWith('/api/git/')) {
     if (!session) return json(res, 401);
-    if (req.method !== 'GET' && !xsrfOk(req)) return json(res, 400, { message: 'Brak tokenu XSRF.' });
+    if (req.method !== 'GET' && !xsrfOk(req)) return json(res, 400, { message: 'Missing XSRF token.' });
 
     if (url.pathname === '/api/workspaces' && req.method === 'GET') {
       return json(res, 200, [...state.workspaces].map(([p, name]) => ({ name, path: p, repoCount: reposIn(p).length })));
@@ -603,10 +603,10 @@ async function handle(req, res) {
       const { name } = (await readBody(req)) ?? {};
       state.log.push({ path: 'create-workspace', name });
       if (typeof name !== 'string' || !/^[\p{L}\p{N} _-]{1,40}$/u.test(name.trim()) || !slug(name)) {
-        return json(res, 400, { message: 'Nieprawidłowa nazwa.' });
+        return json(res, 400, { message: 'Invalid name.' });
       }
       const p = slug(name);
-      if (state.workspaces.has(p)) return json(res, 409, { message: 'Workspace już istnieje.' });
+      if (state.workspaces.has(p)) return json(res, 409, { message: 'Workspace already exists.' });
       state.workspaces.set(p, name.trim());
       return json(res, 201, { name: name.trim(), path: p, repoCount: 0 });
     }
@@ -626,7 +626,7 @@ async function handle(req, res) {
       await sleep(300);
       const name = cloneName(remote);
       const repoPath = `${workspace}/${name}`;
-      if (state.repos.has(repoPath)) return json(res, 409, { message: 'Katalog już istnieje.' });
+      if (state.repos.has(repoPath)) return json(res, 409, { message: 'Directory already exists.' });
       if (remote.includes('nie-istnieje')) {
         return json(res, 502, { message: `remote: Repository not found.\nfatal: repository '${remote}' not found` });
       }
@@ -659,8 +659,8 @@ async function handle(req, res) {
     if (url.pathname === '/api/git/pull' && req.method === 'POST') {
       state.log.push({ path: 'pull', repo: repoPath });
       await sleep(150);
-      if (!repo.upstream) return json(res, 400, { message: 'Gałąź nie ma gałęzi zdalnej.' });
-      if (repo.behind === 0 || !repo.remote) return json(res, 200, { message: 'Już aktualne.', changedPaths: [] });
+      if (!repo.upstream) return json(res, 400, { message: 'The branch has no upstream.' });
+      if (repo.behind === 0 || !repo.remote) return json(res, 200, { message: 'Already up to date.', changedPaths: [] });
       // Diverged (ahead and behind both non-zero): not a fast-forward, as the backend's `git merge --ff-only` answers.
       if (repo.ahead > 0) {
         return json(res, 409, { message: `fatal: Not possible to fast-forward, aborting.` });
@@ -678,19 +678,19 @@ async function handle(req, res) {
       repo.remote = null;
       const pulled = repo.behind;
       repo.behind = 0;
-      return json(res, 200, { message: `Pobrano ${pulled} ${commitWord(pulled)}.`, changedPaths: incoming });
+      return json(res, 200, { message: `Pulled ${pulled} ${commitWord(pulled)}.`, changedPaths: incoming });
     }
     if (url.pathname === '/api/git/push' && req.method === 'POST') {
       state.log.push({ path: 'push', repo: repoPath });
       await sleep(150);
-      if (!repo.upstream) return json(res, 400, { message: "Brak zdalnego repozytorium 'origin'." });
+      if (!repo.upstream) return json(res, 400, { message: "No remote 'origin'." });
       // Nothing ahead: nothing to push, without the network, whatever "behind" is (the contract's rule).
-      if (repo.ahead === 0) return json(res, 200, { message: 'Nic do wypchnięcia.' });
+      if (repo.ahead === 0) return json(res, 200, { message: 'Nothing to push.' });
       // Ahead and behind both non-zero: the remote has newer commits too, so the push is [rejected].
       if (repo.behind > 0) return json(res, 409, { message: ` ! [rejected]        ${repo.branch} -> ${repo.branch} (fetch first)` });
       const pushed = repo.ahead;
       repo.ahead = 0;
-      return json(res, 200, { message: `Wypchnięto ${pushed} ${commitWord(pushed)} do ${repo.upstream}.` });
+      return json(res, 200, { message: `Pushed ${pushed} ${commitWord(pushed)} to ${repo.upstream}.` });
     }
     return json(res, 404);
   }
@@ -852,12 +852,12 @@ const consolePathOk = (p) => typeof p === 'string' && !p.startsWith('/') && !p.s
 async function invoke(target, args) {
   switch (target) {
     case 'GetConversation': {
-      if (!consolePathOk(args[0])) throw new Error('Nieprawidłowa ścieżka');
+      if (!consolePathOk(args[0])) throw new Error('Invalid path');
       const id = state.latestByProject.get(args[0]) ?? null;
       return { conversationId: id, events: id ? state.conversations.get(id).events : [] };
     }
     case 'StartConversation': {
-      if (!consolePathOk(args[0])) throw new Error('Nieprawidłowa ścieżka');
+      if (!consolePathOk(args[0])) throw new Error('Invalid path');
       const id = crypto.randomUUID();
       state.conversations.set(id, { projectPath: args[0], events: [], running: null });
       state.latestByProject.set(args[0], id);
@@ -866,13 +866,13 @@ async function invoke(target, args) {
     }
     case 'SendPrompt': {
       const request = args[0];
-      if (typeof request?.text !== 'string' || request.text.length < 1 || request.text.length > 100_000) throw new Error('Nieprawidłowe polecenie');
+      if (typeof request?.text !== 'string' || request.text.length < 1 || request.text.length > 100_000) throw new Error('Invalid prompt');
       if (!CONSOLE_MODELS.includes(request.model) || !CONSOLE_EFFORTS.includes(request.effort) || !CONSOLE_MODES.includes(request.mode)) {
-        throw new Error('Nieprawidłowe opcje');
+        throw new Error('Invalid options');
       }
       const conversation = state.conversations.get(request.conversationId);
-      if (!conversation) throw new Error('Nieznana rozmowa');
-      if (conversation.running) throw new Error('Rozmowa jest zajęta');
+      if (!conversation) throw new Error('Unknown conversation');
+      if (conversation.running) throw new Error('Conversation is busy');
       state.prompts.push(request);
       void runScript(request.conversationId, conversation, request.text);
       return null;
@@ -881,10 +881,10 @@ async function invoke(target, args) {
       const { conversationId, requestId, decision } = args[0];
       const conversation = state.conversations.get(conversationId);
       const permission = conversation?.running?.permission;
-      if (!['allow', 'allow-always', 'deny'].includes(decision)) throw new Error('Nieznana decyzja');
+      if (!['allow', 'allow-always', 'deny'].includes(decision)) throw new Error('Unknown decision');
       // Permanent permission only for a permission request with a rule (contract: allow-always saves exactly `alwaysRule`).
       if (decision === 'allow-always' && permission?.requestId === requestId && !permission.alwaysRule) {
-        throw new Error('To pytanie nie ma reguły do zapisania');
+        throw new Error('This question has no rule to save');
       }
       if (permission?.requestId === requestId) {
         permission.resolve(decision);
@@ -897,7 +897,7 @@ async function invoke(target, args) {
       return null;
     }
     default:
-      throw new Error(`Nieznana metoda ${target}`);
+      throw new Error(`Unknown method ${target}`);
   }
 }
 
@@ -982,7 +982,7 @@ async function invokeTerminal(target, args, ws) {
       return [...state.terminals.values()].map(terminalInfo);
     case 'OpenTerminal': {
       const cwd = request.projectPath ?? '';
-      const base = cwd ? cwd.slice(cwd.lastIndexOf('/') + 1) : 'projekty';
+      const base = cwd ? cwd.slice(cwd.lastIndexOf('/') + 1) : 'projects';
       const same = [...state.terminals.values()].filter((t) => t.title === base || t.title.startsWith(base + ' (')).length;
       const created = {
         id: `t${++state.terminalCounter}`,
@@ -1003,7 +1003,7 @@ async function invokeTerminal(target, args, ws) {
       return terminalInfo(created);
     }
     case 'Attach': {
-      if (!terminal) throw new Error('Nieznany terminal');
+      if (!terminal) throw new Error('Unknown terminal');
       if (state.faults.attachDelayMs) await sleep(state.faults.attachDelayMs);
       terminal.sizes.push([request.cols, request.rows]);
       const client = String(request.client ?? '');
@@ -1021,13 +1021,13 @@ async function invokeTerminal(target, args, ws) {
       const seq = Number(request.seq);
       const data = String(request.data ?? '');
       if (client.length < 1 || client.length > 64 || !Number.isSafeInteger(seq) || seq < 1 || data.length > 4096) {
-        throw new Error('Nieprawidłowa paczka');
+        throw new Error('Invalid batch');
       }
       if (!terminal || terminal.exited) return null;
       // Batches are accepted only from the connection that last performed Attach for this sender. Late batches from the
-      // old connection are rejected (`inputSeq` from Attach is final, and "Porzuć" (Discard) really discards),
+      // old connection are rejected (`inputSeq` from Attach is final, and "Discard" really discards),
       // and a new connection must attach first (then the client knows what arrived and holds back old characters).
-      if (terminal.inputOwner.get(client) !== ws) throw new Error('Najpierw Attach na tym połączeniu');
+      if (terminal.inputOwner.get(client) !== ws) throw new Error('Attach on this connection first');
       if (seq <= (terminal.inputSeq.get(client) ?? 0)) return null;
       terminal.inputSeq.set(client, seq);
       terminalInput(terminal, data);
@@ -1048,7 +1048,7 @@ async function invokeTerminal(target, args, ws) {
       state.log.push({ path: 'terminal-close', id: request.id });
       return null;
     default:
-      throw new Error(`Nieznana metoda ${target}`);
+      throw new Error(`Unknown method ${target}`);
   }
 }
 
@@ -1135,7 +1135,7 @@ async function runScript(conversationId, conversation, text) {
     }
     emit({ type: 'status', state: 'idle' });
   } catch {
-    emit({ type: 'status', state: 'idle', message: 'przerwano' });
+    emit({ type: 'status', state: 'idle', message: 'interrupted' });
   } finally {
     conversation.running = null;
   }

@@ -103,7 +103,7 @@ public sealed class WorkspaceTests(ApiFactory api) : ApiTest(api)
         var response = await CreateAsync(name);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        Assert.Equal(new MessageBody("Nieprawidłowa nazwa."), await response.Content.ReadFromJsonAsync<MessageBody>());
+        Assert.Equal(new MessageBody("Invalid name."), await response.Content.ReadFromJsonAsync<MessageBody>());
         Assert.Empty(Directory.GetFileSystemEntries(Api.ProjectsRoot));
     }
 
@@ -125,7 +125,7 @@ public sealed class WorkspaceTests(ApiFactory api) : ApiTest(api)
         {
             var response = await CreateAsync(name);
             Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
-            Assert.Equal(new MessageBody("Workspace już istnieje."), await response.Content.ReadFromJsonAsync<MessageBody>());
+            Assert.Equal(new MessageBody("Workspace already exists."), await response.Content.ReadFromJsonAsync<MessageBody>());
         }
         Assert.Equal("a file", File.ReadAllText(Api.ProjectPath("notatki")));
     }

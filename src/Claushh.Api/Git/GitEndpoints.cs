@@ -74,7 +74,7 @@ public static class GitEndpoints
             var before = repositories.Head(repository);
             if (before is not { Upstream: not null, Remote: { } remote })
             {
-                return Results.BadRequest(new MessageResponse("Gałąź nie ma gałęzi zdalnej."));
+                return Results.BadRequest(new MessageResponse("The branch has no upstream."));
             }
             var fetch = await git.RunAsync(repository.FullPath, ["fetch", remote], deadline);
             if (!fetch.Succeeded)
@@ -84,7 +84,7 @@ public static class GitEndpoints
             var behind = repositories.Head(repository).Behind;
             if (behind == 0)
             {
-                return Results.Ok(new PullResponse("Już aktualne.", []));
+                return Results.Ok(new PullResponse("Already up to date.", []));
             }
             var merge = await git.RunAsync(repository.FullPath, ["merge", "--ff-only", "@{upstream}"], deadline, GitRunner.LocalStepLimit);
             if (!merge.Succeeded)
@@ -99,7 +99,7 @@ public static class GitEndpoints
             IReadOnlyList<string> paths = changed.Succeeded
                 ? changed.Output.Split('\0', StringSplitOptions.RemoveEmptyEntries).Select(path => $"{repository.Relative}/{path}").ToList()
                 : [];
-            return Results.Ok(new PullResponse($"Pobrano {behind} {Commits(behind)}.", paths));
+            return Results.Ok(new PullResponse($"Pulled {behind} {Commits(behind)}.", paths));
         }
         catch (GitTimeoutException e)
         {
@@ -128,7 +128,7 @@ public static class GitEndpoints
             var head = repositories.Head(repository);
             if (head.Branch is not { } branch)
             {
-                return Results.BadRequest(new MessageResponse("Odłączony HEAD: przełącz się na gałąź, żeby zrobić push."));
+                return Results.BadRequest(new MessageResponse("Detached HEAD: switch to a branch to push."));
             }
             string[] arguments;
             string pushed;
@@ -136,22 +136,22 @@ public static class GitEndpoints
             {
                 if (head.AheadKnown && head.Ahead == 0)
                 {
-                    return Results.Ok(new MessageResponse("Nic do wypchnięcia."));
+                    return Results.Ok(new MessageResponse("Nothing to push."));
                 }
                 arguments = ["push", "--porcelain", remote, $"HEAD:{mergeRef}"];
                 // Ahead unknown (no common history with the upstream, e.g. a freshly cloned empty remote): every
                 // commit of HEAD is one that this push sends.
                 var count = head.AheadKnown ? head.Ahead : repositories.CommitCount(repository);
-                pushed = $"Wypchnięto {count} {Commits(count)} do {upstream}.";
+                pushed = $"Pushed {count} {Commits(count)} to {upstream}.";
             }
             else if (head.HasOrigin)
             {
                 arguments = ["push", "--porcelain", "-u", "origin", "HEAD"];
-                pushed = $"Wypchnięto gałąź {branch} do origin/{branch}.";
+                pushed = $"Pushed branch {branch} to origin/{branch}.";
             }
             else
             {
-                return Results.BadRequest(new MessageResponse("Brak zdalnego repozytorium 'origin'."));
+                return Results.BadRequest(new MessageResponse("No remote 'origin'."));
             }
             var push = await git.RunAsync(repository.FullPath, arguments, deadline);
             // --porcelain: a line per ref, starting with "!" for one that was refused.
@@ -179,7 +179,6 @@ public static class GitEndpoints
     private static string Redacted(string message, ProjectPath repository) =>
         message.Replace(repository.FullPath, repository.Relative, StringComparison.Ordinal);
 
-    // Polish plural: 1 commit, 2-4 commity (but 12-14 commitów), otherwise commitów.
-    private static string Commits(int count) =>
-        count == 1 ? "commit" : count % 10 is >= 2 and <= 4 && count % 100 is < 12 or > 14 ? "commity" : "commitów";
+    // English plural: 1 commit, otherwise commits.
+    private static string Commits(int count) => count == 1 ? "commit" : "commits";
 }

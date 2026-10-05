@@ -1,7 +1,7 @@
 // The claude CLI as the console runs it (docs/ARCHITECTURE.md, "Backend" → "Console"; decisions: docs/PLAN.md,
 // "Backend decisions (stage 3)"): its config directory (prepared at start), the version check before the first claude
-// process and the allowlisted environment of every claude process. Without a usable CLI the console answers "Konsola
-// niedostępna" and its conversations can still be read.
+// process and the allowlisted environment of every claude process. Without a usable CLI the console answers "Console
+// unavailable" and its conversations can still be read.
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
@@ -15,7 +15,7 @@ namespace Claushh.Api.Claude;
 
 public sealed partial class ClaudeCli(IOptions<ConsoleOptions> options, ProjectPaths paths, ILogger<ClaudeCli> log)
 {
-    public const string Unavailable = "Konsola niedostępna";
+    public const string Unavailable = "Console unavailable";
     public static readonly Version Minimum = new(2, 1, 285);
 
     private static readonly TimeSpan VersionTimeout = TimeSpan.FromSeconds(10);

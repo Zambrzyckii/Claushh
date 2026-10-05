@@ -32,7 +32,7 @@ public sealed class PullTests(ApiFactory api) : ApiTest(api)
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var pulled = (await response.Content.ReadFromJsonAsync<PullBody>())!;
-        Assert.Equal("Pobrano 2 commity.", pulled.Message);
+        Assert.Equal("Pulled 2 commits.", pulled.Message);
         // A rename gives both of its paths.
         Assert.Equal(new[] { "studia/lab/README.md", "studia/lab/new.txt", "studia/lab/old.txt" }, pulled.ChangedPaths);
         Assert.Equal("# changed\n", File.ReadAllText(Api.ProjectPath("studia/lab/README.md")));
@@ -48,7 +48,7 @@ public sealed class PullTests(ApiFactory api) : ApiTest(api)
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var pulled = (await response.Content.ReadFromJsonAsync<PullBody>())!;
-        Assert.Equal("Już aktualne.", pulled.Message);
+        Assert.Equal("Already up to date.", pulled.Message);
         Assert.Empty(pulled.ChangedPaths);
     }
 
@@ -63,7 +63,7 @@ public sealed class PullTests(ApiFactory api) : ApiTest(api)
         {
             var response = await PullAsync(repo);
             Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-            Assert.Equal(new MessageBody("Gałąź nie ma gałęzi zdalnej."), await response.Content.ReadFromJsonAsync<MessageBody>());
+            Assert.Equal(new MessageBody("The branch has no upstream."), await response.Content.ReadFromJsonAsync<MessageBody>());
         }
     }
 
@@ -139,7 +139,7 @@ public sealed class PullTests(ApiFactory api) : ApiTest(api)
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var pulled = (await response.Content.ReadFromJsonAsync<PullBody>())!;
-        Assert.Equal("Pobrano 1 commit.", pulled.Message);
+        Assert.Equal("Pulled 1 commit.", pulled.Message);
         Assert.Equal(new[] { "studia/lab/src/main.c" }, pulled.ChangedPaths);
         Assert.True(File.Exists(Api.ProjectPath("studia/lab/src/main.c")));
     }
@@ -157,7 +157,7 @@ public sealed class PullTests(ApiFactory api) : ApiTest(api)
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var pulled = (await response.Content.ReadFromJsonAsync<PullBody>())!;
-        Assert.Equal("Pobrano 1 commit.", pulled.Message);
+        Assert.Equal("Pulled 1 commit.", pulled.Message);
         Assert.True(File.Exists(Api.ProjectPath("studia/empty/README.md")));
     }
 
@@ -199,7 +199,7 @@ public sealed class PullTests(ApiFactory api) : ApiTest(api)
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
             messages.Add((await response.Content.ReadFromJsonAsync<PullBody>())!.Message);
         }
-        Assert.Equal(new[] { "Już aktualne.", "Pobrano 1 commit." }, messages.Order(StringComparer.Ordinal));
+        Assert.Equal(new[] { "Already up to date.", "Pulled 1 commit." }, messages.Order(StringComparer.Ordinal));
     }
 
     [Fact]
@@ -231,7 +231,7 @@ public sealed class PullTests(ApiFactory api) : ApiTest(api)
         var response = await PullAsync("studia/lab");
 
         Assert.Equal(HttpStatusCode.BadGateway, response.StatusCode);
-        Assert.Equal("Git nie skończył w ciągu 2 s i został przerwany.", (await response.Content.ReadFromJsonAsync<MessageBody>())!.Message);
+        Assert.Equal("Git did not finish within 2 s and was stopped.", (await response.Content.ReadFromJsonAsync<MessageBody>())!.Message);
         Assert.Empty(Directory.GetFiles(Path.Join(lab, ".git"), "*.lock", SearchOption.AllDirectories));
     }
 

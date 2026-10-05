@@ -25,9 +25,9 @@ public sealed class LoginNotificationTests(ApiFactory api) : ApiTest(api)
         Assert.Equal(HttpMethod.Post, login.Method);
         Assert.Equal("https://ntfy.test/claushh-test", login.Url?.ToString());
         Assert.Equal("Bearer tk_test", login.Authorization);
-        Assert.Equal("Claushh: logowanie", login.Title);
+        Assert.Equal("Claushh: login", login.Title);
         Assert.Equal("default", login.Priority);
-        Assert.Equal($"Zalogowano z 192.0.2.41 (Chrome · Linux), {time} UTC.", login.Body);
+        Assert.Equal($"Logged in from 192.0.2.41 (Chrome · Linux), {time} UTC.", login.Body);
         Assert.DoesNotContain(ApiFactory.UserName, login.Body, StringComparison.Ordinal);
     }
 
@@ -48,10 +48,10 @@ public sealed class LoginNotificationTests(ApiFactory api) : ApiTest(api)
         var sent = await Api.Ntfy.UntilAsync(m => m.Body.Contains("192.0.2.43", StringComparison.Ordinal));
 
         var locked = Assert.Single(sent, m => m.Body.Contains("192.0.2.42", StringComparison.Ordinal));
-        Assert.Equal("Claushh: konto zablokowane", locked.Title);
+        Assert.Equal("Claushh: account locked", locked.Title);
         Assert.Equal("high", locked.Priority);
-        Assert.Equal("Konto zablokowane na 15 min po 5 błędnych kodach przy poprawnym haśle; ostatnia próba z 192.0.2.42 "
-            + $"(Chrome · Linux), {lockedAt} UTC. Jeśli to nie Ty: create-user --reset-password.", locked.Body);
+        Assert.Equal("Account locked for 15 min after 5 wrong codes with a correct password; last attempt from 192.0.2.42 "
+            + $"(Chrome · Linux), {lockedAt} UTC. If this was not you: create-user --reset-password.", locked.Body);
     }
 
     [Theory]

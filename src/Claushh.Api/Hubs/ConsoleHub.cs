@@ -26,11 +26,11 @@ public sealed class ConsoleHub(Conversations conversations) : Hub
     {
         if (request is null || request.Text is not { Length: >= 1 and <= MaxPrompt } text)
         {
-            throw new HubException("Nieprawidłowe polecenie");
+            throw new HubException("Invalid prompt");
         }
         if (!PromptOptions.IsValid(request.Model, request.Effort, request.Mode))
         {
-            throw new HubException("Nieprawidłowe opcje");
+            throw new HubException("Invalid options");
         }
         await conversations.SendPromptAsync(request.ConversationId, text, new PromptOptions(request.Model!, request.Effort!, request.Mode!));
     }
@@ -41,7 +41,7 @@ public sealed class ConsoleHub(Conversations conversations) : Hub
     {
         if (request is null || request.Decision is not { } decision || decision is not ("allow" or "allow-always" or "deny"))
         {
-            throw new HubException("Nieznana decyzja");
+            throw new HubException("Unknown decision");
         }
         await conversations.AnswerPermissionAsync(request.ConversationId, request.RequestId, decision);
     }

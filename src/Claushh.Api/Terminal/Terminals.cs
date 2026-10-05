@@ -43,7 +43,7 @@ public sealed class Terminals(TmuxServer tmux, ProjectPaths paths, IHubContext<T
         EnsureAvailable();
         if (projectPath is null || paths.Resolve(projectPath) is not { Kind: PathKind.Directory } directory)
         {
-            throw new HubException("Nieprawidłowa ścieżka");
+            throw new HubException("Invalid path");
         }
         TerminalSession terminal;
         lock (_terminals)
@@ -54,7 +54,7 @@ public sealed class Terminals(TmuxServer tmux, ProjectPaths paths, IHubContext<T
             }
             if (_terminals.Count >= Limit)
             {
-                throw new HubException("Za dużo terminali");
+                throw new HubException("Too many terminals");
             }
             // A new id on every start of the API: a view that kept an old id's lastSeq would drop all new output.
             terminal = new TerminalSession(Guid.NewGuid().ToString("N"), Title(projectPath), projectPath, tmux,
@@ -85,7 +85,7 @@ public sealed class Terminals(TmuxServer tmux, ProjectPaths paths, IHubContext<T
     public TerminalSession Find(string? id)
     {
         EnsureAvailable();
-        return TryFind(id) ?? throw new HubException("Nieznany terminal");
+        return TryFind(id) ?? throw new HubException("Unknown terminal");
     }
 
     public TerminalSession? TryFind(string? id)
@@ -138,11 +138,11 @@ public sealed class Terminals(TmuxServer tmux, ProjectPaths paths, IHubContext<T
         }
     }
 
-    // The last segment of the path, or "projekty" for the projects directory, plus " (k)" with the smallest free k from
+    // The last segment of the path, or "projects" for the projects directory, plus " (k)" with the smallest free k from
     // 2, so titles stay unique also after a close. Called under the list's lock.
     private string Title(string projectPath)
     {
-        var name = projectPath.Length == 0 ? "projekty" : projectPath[(projectPath.LastIndexOf('/') + 1)..];
+        var name = projectPath.Length == 0 ? "projects" : projectPath[(projectPath.LastIndexOf('/') + 1)..];
         var taken = _terminals.Select(terminal => terminal.Title).ToHashSet(StringComparer.Ordinal);
         if (!taken.Contains(name))
         {

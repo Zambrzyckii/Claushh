@@ -32,8 +32,8 @@ public static class WorkspaceEndpoints
         return result.Status switch
         {
             CreateStatus.Created => Results.Json(result.Workspace, statusCode: StatusCodes.Status201Created),
-            CreateStatus.Exists => Results.Conflict(new MessageResponse("Workspace już istnieje.")),
-            _ => Results.BadRequest(new MessageResponse("Nieprawidłowa nazwa.")),
+            CreateStatus.Exists => Results.Conflict(new MessageResponse("Workspace already exists.")),
+            _ => Results.BadRequest(new MessageResponse("Invalid name.")),
         };
     }
 
@@ -76,16 +76,16 @@ public static class WorkspaceEndpoints
         }
         if (!CloneUrl.IsValid(body.Url))
         {
-            return Results.BadRequest(new MessageResponse("Nieprawidłowy adres."));
+            return Results.BadRequest(new MessageResponse("Invalid URL."));
         }
         if (CloneUrl.DirectoryName(body.Url) is not { } name)
         {
-            return Results.BadRequest(new MessageResponse("Nieprawidłowa nazwa katalogu."));
+            return Results.BadRequest(new MessageResponse("Invalid directory name."));
         }
         var target = Path.Join(workspace.FullPath, name);
         if (Libc.FileType(target) is not null)
         {
-            return Results.Conflict(new MessageResponse("Katalog już istnieje."));
+            return Results.Conflict(new MessageResponse("Directory already exists."));
         }
         using var deadline = new GitDeadline(options.CurrentValue.NetworkTimeout, http.RequestAborted);
         try
@@ -94,7 +94,7 @@ public static class WorkspaceEndpoints
             {
                 if (Libc.FileType(target) is not null)
                 {
-                    return Results.Conflict(new MessageResponse("Katalog już istnieje."));
+                    return Results.Conflict(new MessageResponse("Directory already exists."));
                 }
                 GitResult result;
                 try

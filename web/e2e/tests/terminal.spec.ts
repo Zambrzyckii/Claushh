@@ -61,7 +61,7 @@ test('a terminal survives a page reload without duplicated output', async ({ pag
 
   await page.reload();
   await openTerminalTab(page);
-  await expect(tabs(page)).toHaveText(['projekty']);
+  await expect(tabs(page)).toHaveText(['projects']);
   await expect.poll(async () => (await terminalText(page)).match(/zachowane/g)?.length).toBe(2);
   expect((await mockState(request)).terminals).toHaveLength(1);
 
@@ -76,7 +76,7 @@ test('several terminals can be opened, switched and closed', async ({ page, requ
   await expectTerminalToContain(page, 'pierwszy');
 
   await page.getByRole('button', { name: '+ Nowy' }).click();
-  await expect(tabs(page)).toHaveText(['projekty', 'projekty (2)']);
+  await expect(tabs(page)).toHaveText(['projects', 'projects (2)']);
   await expect(activeTerminal(page).locator('.xterm-rows')).toBeVisible();
   await expect.poll(() => terminalText(page)).not.toContain('pierwszy');
 
@@ -84,29 +84,29 @@ test('several terminals can be opened, switched and closed', async ({ page, requ
   await expectTerminalToContain(page, 'pierwszy');
 
   page.once('dialog', (dialog) => dialog.dismiss());
-  await page.getByRole('button', { name: 'Zamknij terminal projekty (2)' }).click();
+  await page.getByRole('button', { name: 'Zamknij terminal projects (2)' }).click();
   await expect(tabs(page)).toHaveCount(2);
 
   page.once('dialog', (dialog) => dialog.accept());
-  await page.getByRole('button', { name: 'Zamknij terminal projekty (2)' }).click();
-  await expect(tabs(page)).toHaveText(['projekty']);
+  await page.getByRole('button', { name: 'Zamknij terminal projects (2)' }).click();
+  await expect(tabs(page)).toHaveText(['projects']);
   expect((await mockState(request)).log.filter((l) => l.path === 'terminal-close')).toHaveLength(1);
 });
 
 test('a terminal already closed in another tab closes there without an error', async ({ page, request }) => {
   await openTerminalTab(page);
-  await expect(tabs(page)).toHaveText(['projekty']);
+  await expect(tabs(page)).toHaveText(['projects']);
   const other = await page.context().newPage();
   await other.goto('/');
   await openTerminalTab(other);
-  await expect(tabs(other)).toHaveText(['projekty']);
+  await expect(tabs(other)).toHaveText(['projects']);
 
   page.once('dialog', (dialog) => dialog.accept());
-  await page.getByRole('button', { name: 'Zamknij terminal projekty' }).click();
+  await page.getByRole('button', { name: 'Zamknij terminal projects' }).click();
   await expect(tabs(page)).toHaveCount(0);
 
   other.once('dialog', (dialog) => dialog.accept());
-  await other.getByRole('button', { name: 'Zamknij terminal projekty' }).click();
+  await other.getByRole('button', { name: 'Zamknij terminal projects' }).click();
   await expect(tabs(other)).toHaveCount(0);
   await expect(other.locator('app-terminal-panel').getByRole('alert')).toHaveCount(0);
   expect((await mockState(request)).log.filter((l) => l.path === 'terminal-close')).toHaveLength(1);
@@ -116,14 +116,14 @@ test('exit ends the shell and the tab closes without asking', async ({ page }) =
   await openTerminalTab(page);
   await typeInTerminal(page, 'exit');
   await expectTerminalToContain(page, '[proces zakończony]');
-  await expect(tabs(page)).toHaveText(['projekty (zakończony)']);
+  await expect(tabs(page)).toHaveText(['projects (zakończony)']);
 
   let asked = false;
   page.once('dialog', (dialog) => {
     asked = true;
     void dialog.dismiss();
   });
-  await page.getByRole('button', { name: 'Zamknij terminal projekty' }).click();
+  await page.getByRole('button', { name: 'Zamknij terminal projects' }).click();
   await expect(tabs(page)).toHaveCount(0);
   expect(asked).toBe(false);
   await expect(page.locator('app-terminal-panel')).toContainText('Brak otwartych terminali.');

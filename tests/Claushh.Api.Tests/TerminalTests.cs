@@ -45,7 +45,7 @@ public sealed class TerminalTests(ApiFactory api) : ApiTest(api)
         var third = await tab.OpenAsync();
         var fourth = await tab.OpenAsync();
 
-        Assert.Equal(new[] { "projekty", "projekty (2)", "projekty", "projekty (3)" },
+        Assert.Equal(new[] { "projects", "projects (2)", "projects", "projects (3)" },
             new[] { first.Title, second.Title, third.Title, fourth.Title });
         Assert.Equal(new[] { second.Id, third.Id, fourth.Id }, (await tab.ListAsync()).Select(t => t.Id));
     }
@@ -68,7 +68,7 @@ public sealed class TerminalTests(ApiFactory api) : ApiTest(api)
         var error = await Assert.ThrowsAsync<HubException>(() =>
             tab.Hub.InvokeAsync<TestTerminal.Info>("OpenTerminal", new { projectPath, cols = 80, rows = 24 }));
 
-        Assert.EndsWith("Nieprawidłowa ścieżka", error.Message);
+        Assert.EndsWith("Invalid path", error.Message);
         Assert.Empty(await tab.ListAsync());
     }
 
@@ -83,7 +83,7 @@ public sealed class TerminalTests(ApiFactory api) : ApiTest(api)
 
         var error = await Assert.ThrowsAsync<HubException>(() => tab.OpenAsync());
 
-        Assert.EndsWith("Za dużo terminali", error.Message);
+        Assert.EndsWith("Too many terminals", error.Message);
         Assert.Equal(20, (await tab.ListAsync()).Length);
     }
 
@@ -212,9 +212,9 @@ public sealed class TerminalTests(ApiFactory api) : ApiTest(api)
         await tab.Hub.InvokeAsync("CloseTerminal", (object?)null).WaitAsync(deadline);
         await tab.Hub.SendAsync("Resize", (object?)null);
 
-        Assert.EndsWith("Nieprawidłowa ścieżka", open.Message, StringComparison.Ordinal);
-        Assert.EndsWith("Nieznany terminal", attach.Message, StringComparison.Ordinal);
-        Assert.EndsWith("Nieprawidłowa paczka", input.Message, StringComparison.Ordinal);
+        Assert.EndsWith("Invalid path", open.Message, StringComparison.Ordinal);
+        Assert.EndsWith("Unknown terminal", attach.Message, StringComparison.Ordinal);
+        Assert.EndsWith("Invalid batch", input.Message, StringComparison.Ordinal);
         Assert.Empty(await tab.ListAsync());
     }
 

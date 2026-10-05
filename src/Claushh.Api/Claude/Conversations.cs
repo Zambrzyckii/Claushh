@@ -22,18 +22,18 @@ public sealed record ConversationSnapshot(string? ConversationId, IReadOnlyList<
 public sealed class Conversations(ClaudeCli cli, ConversationLog store, ProjectPaths paths, Repositories repositories,
     IHubContext<ConsoleHub> hub, TimeProvider clock, ILogger<Conversations> log) : IHostedService
 {
-    public const string InvalidPath = "Nieprawidłowa ścieżka";
-    public const string UnknownConversation = "Nieznana rozmowa";
-    public const string BusyConversation = "Rozmowa jest zajęta";
-    public const string TooMany = "Za dużo aktywnych rozmów";
-    public const string NoRule = "To pytanie nie ma reguły do zapisania";
+    public const string InvalidPath = "Invalid path";
+    public const string UnknownConversation = "Unknown conversation";
+    public const string BusyConversation = "Conversation is busy";
+    public const string TooMany = "Too many active conversations";
+    public const string NoRule = "This question has no rule to save";
     public const int ProcessLimit = 8;
     public static readonly TimeSpan IdleTimeout = TimeSpan.FromMinutes(15);
     public static readonly TimeSpan DefaultInterruptTimeout = TimeSpan.FromSeconds(10);
 
-    private const string Interrupted = "przerwano";
-    private const string ResumeFailed = "Nie udało się wznowić rozmowy. Zacznij nową („Nowa”).";
-    private const string StoppedMidTurn = "Serwer został zatrzymany w trakcie pracy.";
+    private const string Interrupted = "interrupted";
+    private const string ResumeFailed = "Could not resume the conversation. Start a new one (“New”).";
+    private const string StoppedMidTurn = "The server stopped during the turn.";
     // How long a closed process may take to exit before its tree is killed; also the whole stop's limit.
     private static readonly TimeSpan CloseWait = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan IdleSweep = TimeSpan.FromMinutes(1);
@@ -565,7 +565,7 @@ public sealed class Conversations(ClaudeCli cli, ConversationLog store, ProjectP
                         // A process that ends during an interrupt or a stop ends its turn as interrupted.
                         await EndTurnAsync(state, _stopped || turn.Interrupting
                             ? ConsoleEvents.Status(state.Key, "idle", Interrupted)
-                            : ConsoleEvents.Status(state.Key, "error", $"Proces konsoli zakończył się (kod {code})."));
+                            : ConsoleEvents.Status(state.Key, "error", $"The console process exited (code {code})."));
                     }
                 }
             }
@@ -801,7 +801,7 @@ public sealed class Conversations(ClaudeCli cli, ConversationLog store, ProjectP
         }
     }
 
-    // The end of the turn: idle, idle "przerwano" after an interrupt, or an error with the CLI's text.
+    // The end of the turn: idle, idle "interrupted" after an interrupt, or an error with the CLI's text.
     private async Task OnResultAsync(ConversationState state, Turn turn, JsonElement line)
     {
         var detail = StreamJson.Str(line, "result") is { Length: > 0 } text ? text : StreamJson.Str(line, "subtype") ?? "";
@@ -809,7 +809,7 @@ public sealed class Conversations(ClaudeCli cli, ConversationLog store, ProjectP
             ? ConsoleEvents.Status(state.Key, "idle", Interrupted)
             : StreamJson.Str(line, "subtype") == "success" && !StreamJson.True(line, "is_error")
                 ? ConsoleEvents.Status(state.Key, "idle")
-                : ConsoleEvents.Status(state.Key, "error", "Polecenie zakończone błędem: " + (detail.Length <= 500 ? detail : detail[..500]));
+                : ConsoleEvents.Status(state.Key, "error", "The prompt failed: " + (detail.Length <= 500 ? detail : detail[..500]));
         // A command can change files the CLI does not report: in a project that was a repository at the prompt, every
         // path whose git status changed since then.
         if (turn.RanCommand && turn.Before is { } before

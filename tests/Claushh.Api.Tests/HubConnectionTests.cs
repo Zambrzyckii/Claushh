@@ -144,7 +144,7 @@ public sealed class HubConnectionTests(ApiFactory api) : ApiTest(api)
         Api.Clock.Advance(TimeSpan.FromMinutes(31));
 
         // caller.Abort() in InvokeMethodAsync (HubSessionFilter.cs) runs before the HubException is written back, so
-        // the client observes a cancelled call rather than "Sesja wygasła": any exception, not a particular type.
+        // the client observes a cancelled call rather than "Session expired": any exception, not a particular type.
         await Assert.ThrowsAnyAsync<Exception>(() => hub.InvokeAsync<JsonElement[]>("ListTerminals"));
 
         await closed.WaitAsync(CloseWait, TestContext.Current.CancellationToken);
@@ -164,7 +164,7 @@ public sealed class HubConnectionTests(ApiFactory api) : ApiTest(api)
             await scope.ServiceProvider.GetRequiredService<SessionService>().RevokeAllAsync(owner!.Id, TestContext.Current.CancellationToken);
         }
 
-        // Same as above: the client sees the connection close, not the "Sesja wygasła" text.
+        // Same as above: the client sees the connection close, not the "Session expired" text.
         await Assert.ThrowsAnyAsync<Exception>(() => hub.InvokeAsync<JsonElement[]>("ListTerminals"));
 
         await closed.WaitAsync(CloseWait, TestContext.Current.CancellationToken);

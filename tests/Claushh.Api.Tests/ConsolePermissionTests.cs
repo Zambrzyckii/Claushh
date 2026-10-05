@@ -132,7 +132,7 @@ public sealed class ConsolePermissionTests(ApiFactory api) : ApiTest(api)
         await tab.AnswerAsync(id, requestId, "allow");
         await tab.WaitForAsync(id, "status idle");
 
-        Assert.EndsWith("To pytanie nie ma reguły do zapisania", refused.Message, StringComparison.Ordinal);
+        Assert.EndsWith("This question has no rule to save", refused.Message, StringComparison.Ordinal);
         Assert.Equal(new[]
         {
             "conversation studia/lab", "prompt utwórz plik", "status working", "permission created.txt", "status waiting",
@@ -155,8 +155,8 @@ public sealed class ConsolePermissionTests(ApiFactory api) : ApiTest(api)
         await tab.AnswerAsync(id, Guid.NewGuid().ToString(), "allow");
         await tab.AnswerAsync(Guid.NewGuid().ToString(), requestId, "allow");
 
-        Assert.EndsWith("Nieznana decyzja", maybe.Message, StringComparison.Ordinal);
-        Assert.EndsWith("Nieznana decyzja", first.Message, StringComparison.Ordinal);
+        Assert.EndsWith("Unknown decision", maybe.Message, StringComparison.Ordinal);
+        Assert.EndsWith("Unknown decision", first.Message, StringComparison.Ordinal);
         Assert.Equal("status waiting", tab.Shown(id)[^1]);
         Assert.DoesNotContain(Api.Claude.Requests(id), line => line.StartsWith("answer", StringComparison.Ordinal));
     }
@@ -223,12 +223,12 @@ public sealed class ConsolePermissionTests(ApiFactory api) : ApiTest(api)
         await tab.WaitForAsync(id, "status waiting");
 
         await tab.InterruptAsync(id);
-        await tab.WaitForAsync(id, "status idle przerwano");
+        await tab.WaitForAsync(id, "status idle interrupted");
 
         Assert.Equal(new[]
         {
             "conversation studia/lab", "prompt zainicjuj repozytorium", "status working", Question, "status waiting",
-            "resolved deny", "status idle przerwano",
+            "resolved deny", "status idle interrupted",
         }, tab.Shown(id));
         Assert.Contains("interrupt", Api.Claude.Requests(id));
         Assert.DoesNotContain(Api.Claude.Requests(id), line => line.StartsWith("answer", StringComparison.Ordinal));
@@ -241,12 +241,12 @@ public sealed class ConsolePermissionTests(ApiFactory api) : ApiTest(api)
         var id = await tab.StartScriptedAsync(Api, "studia/lab", "turn-start.jsonl", "bash-question.jsonl", TestClaude.Exit(2));
 
         await tab.SendAsync(id, "zainicjuj repozytorium");
-        await tab.WaitForAsync(id, "status error Proces konsoli zakończył się (kod 2).");
+        await tab.WaitForAsync(id, "status error The console process exited (code 2).");
 
         Assert.Equal(new[]
         {
             "conversation studia/lab", "prompt zainicjuj repozytorium", "status working", Question, "status waiting",
-            "resolved deny", "status error Proces konsoli zakończył się (kod 2).",
+            "resolved deny", "status error The console process exited (code 2).",
         }, tab.Shown(id));
     }
 

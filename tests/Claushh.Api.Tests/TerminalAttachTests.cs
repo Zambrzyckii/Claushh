@@ -102,8 +102,8 @@ public sealed class TerminalAttachTests(ApiFactory api) : ApiTest(api)
         var stolen = await Assert.ThrowsAsync<HubException>(() => other.InputAsync(id, "x", seq: 1, client: tab.Client));
         var own = await Assert.ThrowsAsync<HubException>(() => other.InputAsync(id, "x"));
 
-        Assert.EndsWith("Najpierw Attach na tym połączeniu", stolen.Message);
-        Assert.EndsWith("Najpierw Attach na tym połączeniu", own.Message);
+        Assert.EndsWith("Attach on this connection first", stolen.Message);
+        Assert.EndsWith("Attach on this connection first", own.Message);
     }
 
     [Fact]
@@ -123,7 +123,7 @@ public sealed class TerminalAttachTests(ApiFactory api) : ApiTest(api)
         Assert.Equal(3, again.InputSeq);
         Assert.Equal(0, (await tab.AttachAsync(id, client: "another-view")).InputSeq);
         var late = await Assert.ThrowsAsync<HubException>(() => tab.InputAsync(id, "c"));
-        Assert.EndsWith("Najpierw Attach na tym połączeniu", late.Message);
+        Assert.EndsWith("Attach on this connection first", late.Message);
     }
 
     public static TheoryData<string?, long, string?> BadBatches => new()
@@ -147,7 +147,7 @@ public sealed class TerminalAttachTests(ApiFactory api) : ApiTest(api)
 
         var error = await Assert.ThrowsAsync<HubException>(() => tab.Hub.InvokeAsync("Input", new { id, client, seq, data }));
 
-        Assert.EndsWith("Nieprawidłowa paczka", error.Message);
+        Assert.EndsWith("Invalid batch", error.Message);
     }
 
     [Fact]
@@ -243,7 +243,7 @@ public sealed class TerminalAttachTests(ApiFactory api) : ApiTest(api)
 
         var error = await Assert.ThrowsAsync<HubException>(() => tab.AttachAsync("unknown"));
 
-        Assert.EndsWith("Nieznany terminal", error.Message);
+        Assert.EndsWith("Unknown terminal", error.Message);
     }
 
     // A program on the alternate screen: the snapshot has the history and normal screen before the switch to the

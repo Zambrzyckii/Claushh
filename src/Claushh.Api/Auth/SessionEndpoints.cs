@@ -1,4 +1,4 @@
-// Session list, ending sessions and the login history for the "Bezpieczeństwo" window
+// Session list, ending sessions and the login history for the security window
 // (docs/ARCHITECTURE.md, "Authentication" → "Sessions and login history").
 using Claushh.Api.Hubs;
 

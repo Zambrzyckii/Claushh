@@ -1,5 +1,5 @@
 // One browser tab on /hubs/console in the tests (docs/ARCHITECTURE.md, "Tests"): records every ConsoleEvent in arrival
-// order and shows each as one short line ("step read notes.txt", "status idle przerwano"), so a test reads the stream
+// order and shows each as one short line ("step read notes.txt", "status idle interrupted"), so a test reads the stream
 // as the panel does. Every call and wait has a deadline, so a server that hangs fails the test instead of the run.
 using System.Text.Json;
 using Microsoft.AspNetCore.SignalR.Client;

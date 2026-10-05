@@ -1,5 +1,5 @@
 // The console's questions (docs/ARCHITECTURE.md, "Backend" → "Console"; decisions: docs/PLAN.md, "Backend decisions
-// (stage 3)"): what a can_use_tool request shows, the one rule "tak, zawsze" may save, and the CLI's answer to each
+// (stage 3)"): what a can_use_tool request shows, the one rule allow-always may save, and the CLI's answer to each
 // decision. The answer is built from the server's own copy of the question, so allow-always saves exactly the rule the
 // browser showed.
 using System.Text.Json;
@@ -20,7 +20,7 @@ internal static class PermissionRequests
     };
 
     // The suggestion's rule written Tool(ruleContent), only for exactly one addRules suggestion that allows exactly one
-    // rule and is not suppressed; otherwise no rule and no "tak, zawsze".
+    // rule and is not suppressed; otherwise no rule and no allow-always.
     public static (JsonElement? Rule, string? Text) Rule(JsonElement request)
     {
         if (StreamJson.True(request, "suppress_always_allow_rule"))

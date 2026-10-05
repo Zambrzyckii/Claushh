@@ -19,7 +19,7 @@ test('the test server listens only on the loopback interface', async ({ request 
   const external = Object.values(os.networkInterfaces())
     .flat()
     .find((address) => address && address.family === 'IPv4' && !address.internal);
-  test.skip(!external, 'brak interfejsu sieciowego innego niż loopback');
+  test.skip(!external, 'no network interface other than loopback');
   await expect(request.get(`http://${external!.address}:4400/__test/state`, { timeout: 3000 })).rejects.toThrow();
 });
 
@@ -119,7 +119,7 @@ test('push and pull follow the contract\'s ahead/behind rule (docs/ARCHITECTURE.
   // on its own, since it only pushes a repository the panel shows with ↑ > 0).
   const nothingToPush = await push({ 'X-XSRF-TOKEN': sessionXsrf });
   expect(nothingToPush.status()).toBe(200);
-  expect(await nothingToPush.json()).toEqual({ message: 'Nic do wypchnięcia.' });
+  expect(await nothingToPush.json()).toEqual({ message: 'Nothing to push.' });
 
   // Ahead and behind both non-zero: diverged, so pull cannot fast-forward.
   await setRepoState(request, repo, { ahead: 1 });
@@ -172,11 +172,11 @@ test('the mock refuses console paths, prompts and options that the contract forb
     return replies.map((reply) => reply.error);
   });
   expect(errors).toEqual([
-    'Nieprawidłowa ścieżka',
-    'Nieprawidłowa ścieżka',
-    'Nieprawidłowe polecenie',
-    'Nieprawidłowe polecenie',
-    'Nieprawidłowe opcje'
+    'Invalid path',
+    'Invalid path',
+    'Invalid prompt',
+    'Invalid prompt',
+    'Invalid options'
   ]);
   expect((await mockState(request)).prompts).toHaveLength(0);
 });

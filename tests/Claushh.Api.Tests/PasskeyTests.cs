@@ -60,7 +60,7 @@ public sealed class PasskeyTests(ApiFactory api) : ApiTest(api)
         Assert.Equal(HttpStatusCode.TooManyRequests, locked.StatusCode);
         Assert.Equal(TimeSpan.FromMinutes(15), locked.Headers.RetryAfter?.Delta);
         var sent = await Api.Ntfy.UntilAsync(m =>
-            m.Title == "Claushh: konto zablokowane" && m.Body.Contains("192.0.2.71", StringComparison.Ordinal));
+            m.Title == "Claushh: account locked" && m.Body.Contains("192.0.2.71", StringComparison.Ordinal));
         Assert.Equal("high", sent[^1].Priority);
         Assert.Contains($"(Chrome · Linux), {lockedAt} UTC.", sent[^1].Body, StringComparison.Ordinal);
     }

@@ -69,8 +69,8 @@ public sealed class BackgroundFetchTests(ApiFactory api) : ApiTest(api)
     }
 
     [Theory(Timeout = 60_000)]
-    [InlineData("push", "Nic do wypchnięcia.")]
-    [InlineData("pull", "Pobrano 1 commit.")]
+    [InlineData("push", "Nothing to push.")]
+    [InlineData("pull", "Pulled 1 commit.")]
     public async Task A_pull_or_push_takes_the_repository_from_a_background_fetch_and_ends_its_process_tree(string operation, string message)
     {
         var lab = Api.Git.MakeTrackedRepo("studia/lab");

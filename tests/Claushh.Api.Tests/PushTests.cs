@@ -25,7 +25,7 @@ public sealed class PushTests(ApiFactory api) : ApiTest(api)
         var response = await PushAsync("studia/lab");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal(new MessageBody("Wypchnięto 2 commity do origin/main."), await response.Content.ReadFromJsonAsync<MessageBody>());
+        Assert.Equal(new MessageBody("Pushed 2 commits to origin/main."), await response.Content.ReadFromJsonAsync<MessageBody>());
         Assert.Equal(Api.Git.Run(lab, "rev-parse", "HEAD"), Api.Git.Run(Api.Git.RemotePath("lab"), "rev-parse", "main"));
     }
 
@@ -39,7 +39,7 @@ public sealed class PushTests(ApiFactory api) : ApiTest(api)
         var response = await PushAsync("studia/empty");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal(new MessageBody("Wypchnięto 1 commit do origin/main."), await response.Content.ReadFromJsonAsync<MessageBody>());
+        Assert.Equal(new MessageBody("Pushed 1 commit to origin/main."), await response.Content.ReadFromJsonAsync<MessageBody>());
         Assert.Equal(Api.Git.Run(Api.ProjectPath("studia/empty"), "rev-parse", "HEAD"), Api.Git.Run(Api.Git.RemotePath("empty"), "rev-parse", "main"));
     }
 
@@ -53,7 +53,7 @@ public sealed class PushTests(ApiFactory api) : ApiTest(api)
         var response = await PushAsync("studia/lab");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal(new MessageBody("Nic do wypchnięcia."), await response.Content.ReadFromJsonAsync<MessageBody>());
+        Assert.Equal(new MessageBody("Nothing to push."), await response.Content.ReadFromJsonAsync<MessageBody>());
     }
 
     [Fact]
@@ -66,7 +66,7 @@ public sealed class PushTests(ApiFactory api) : ApiTest(api)
         var response = await PushAsync("studia/lab");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal(new MessageBody("Wypchnięto gałąź feature do origin/feature."), await response.Content.ReadFromJsonAsync<MessageBody>());
+        Assert.Equal(new MessageBody("Pushed branch feature to origin/feature."), await response.Content.ReadFromJsonAsync<MessageBody>());
         Assert.Equal("origin/feature\n", Api.Git.Run(lab, "rev-parse", "--abbrev-ref", "feature@{upstream}"));
     }
 
@@ -81,9 +81,9 @@ public sealed class PushTests(ApiFactory api) : ApiTest(api)
         var head = await PushAsync("studia/detached");
 
         Assert.Equal(HttpStatusCode.BadRequest, local.StatusCode);
-        Assert.Equal(new MessageBody("Brak zdalnego repozytorium 'origin'."), await local.Content.ReadFromJsonAsync<MessageBody>());
+        Assert.Equal(new MessageBody("No remote 'origin'."), await local.Content.ReadFromJsonAsync<MessageBody>());
         Assert.Equal(HttpStatusCode.BadRequest, head.StatusCode);
-        Assert.Equal(new MessageBody("Odłączony HEAD: przełącz się na gałąź, żeby zrobić push."), await head.Content.ReadFromJsonAsync<MessageBody>());
+        Assert.Equal(new MessageBody("Detached HEAD: switch to a branch to push."), await head.Content.ReadFromJsonAsync<MessageBody>());
     }
 
     [Fact]

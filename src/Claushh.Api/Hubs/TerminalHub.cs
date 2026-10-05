@@ -33,7 +33,7 @@ public sealed class TerminalHub(Terminals terminals) : Hub
         if (request?.Client is not { Length: >= 1 and <= MaxClient } client || request.Seq < 1
             || request.Data is not { Length: <= MaxBatch } data)
         {
-            throw new HubException("Nieprawidłowa paczka");
+            throw new HubException("Invalid batch");
         }
         if (terminals.TryFind(request.Id) is { } terminal)
         {

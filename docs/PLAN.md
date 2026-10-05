@@ -327,7 +327,7 @@ Backend decisions (stage 3):
   not used by the console. Rejected: the API user's `~/.claude`.
 - The CLI's version is checked before the first claude process, not at start (`claude --version`, at least
   2.1.285, logged): the API's start never waits on the CLI, and a failed check is repeated by the next prompt, so a
-  CLI installed while the API runs needs no restart. Without a usable CLI the console answers "Konsola niedostępna"
+  CLI installed while the API runs needs no restart. Without a usable CLI the console answers "Console unavailable"
   and replay still works. Console processes get `DISABLE_UPDATES=1` and `DISABLE_AUTOUPDATER=1`, so the CLI never
   updates itself under the API; the server's CLI is the launcher of Anthropic's installer, updated on purpose
   ("Deployment decisions"). Rejected: a pin without a check (an update in development would break silently).
@@ -445,8 +445,8 @@ Backend decisions (stage 4):
 - Time limits: one deadline per clone, pull or push request, `Git:NetworkTimeout` (100 s) from its start, covering the
   lock wait and every git step, which keeps the answer under Cloudflare's 125 s; local steps also at most 30 s each. On
   a timeout git's process tree gets SIGTERM, so git removes its lock files, and if git still runs 1 s later, the whole
-  tree is killed; a partial clone is removed, and the answer is `502` with "Git nie skończył w ciągu N s i został
-  przerwany.". Rejected: `504` (the frontend shows "błąd serwera" without the reason), a limit per git step (a pull
+  tree is killed; a partial clone is removed, and the answer is `502` with "Git did not finish within N s and was
+  stopped.". Rejected: `504` (the frontend shows "błąd serwera" without the reason), a limit per git step (a pull
   waiting behind another operation could pass 125 s) and killing at once (git's `*.lock` files would stay and block
   the next git command in that repository).
 - The clone URL is checked with the frontend's rule in .NET terms (`[0-9]` and `\z` in the pattern, then the WHATWG
@@ -467,21 +467,20 @@ Backend decisions (stage 4):
   5 minutes of using the panel (owner's decision). Rejected: a timer for all repositories (network traffic while nobody
   uses the portal) and a fetch inside the request (every save would wait for GitHub).
 - Pull is the contract's `git pull --ff-only` run as its two steps, so that the status follows the step that failed: no
-  upstream `400`, the fetch `502`, nothing new "Już aktualne.", the fast-forward merge `409` (diverged branches, local
-  changes that would be overwritten, a lock file), success "Pobrano N commit/commity/commitów." with `changedPaths` from
-  `git diff --name-only --no-renames -z` (a rename gives both paths). Rejected: one `git pull` call (its exit code does
-  not say whether the network or the merge failed).
-- Push: a detached HEAD `400`; an upstream with nothing ahead "Nic do wypchnięcia." without the network (as the mock);
+  upstream `400`, the fetch `502`, nothing new "Already up to date.", the fast-forward merge `409` (diverged branches,
+  local changes that would be overwritten, a lock file), success "Pulled N commits." ("Pulled 1 commit.") with
+  `changedPaths` from `git diff --name-only --no-renames -z` (a rename gives both paths). Rejected: one `git pull` call
+  (its exit code does not say whether the network or the merge failed).
+- Push: a detached HEAD `400`; an upstream with nothing ahead "Nothing to push." without the network (as the mock);
   with an upstream `git push --porcelain <remote> HEAD:<upstream branch>`; without one but with `origin` the contract's
   `git push --porcelain -u origin HEAD`; neither `400`. `[rejected]` in the porcelain output is `409`, any other failure
   (network, authentication, `[remote rejected]` by a hook or protection rule) `502`. Rejected: plain `git push` (with an
   upstream named differently from the branch, `push.default=simple` refuses) and telling the rejection apart from
   stderr text (the porcelain output is meant for programs).
-- The backend's own texts are Polish and equal to the mock's where the mock has one; git's messages pass through in
-  English; `404` and parameter `400`s have an empty body. Rejected: English backend texts (the panel would mix languages
-  in its own messages). Exception: passkey texts (API messages and notifications) are English; the whole UI goes
-  English in the UI refresh.
-- Hubs (SignalR, the console hub later too): WebSocket only, the JSON protocol, Polish `HubException` texts and no
+- The backend's own texts are English and equal to the mock's where the mock has one; git's messages pass through in
+  English; `404` and parameter `400`s have an empty body. Rejected: Polish backend texts (the owner reads one
+  language; reversed 2026-10-05).
+- Hubs (SignalR, the console hub later too): WebSocket only, the JSON protocol, English `HubException` texts and no
   detailed errors. Rejected: long polling and SSE (more ways in, and the frontend never uses them).
 - The `Origin` of every request under `/hubs` must equal one of `Hubs:AllowedOrigins` (ordinal), checked before
   authentication; a missing or other value is `403`. Production has an empty list until the deployment sets the public

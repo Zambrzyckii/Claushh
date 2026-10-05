@@ -89,6 +89,6 @@ internal static class FileChanges
         {
             start++;
         }
-        return $"⟨pominięto {start} znaków⟩\n{text[start..]}";
+        return $"⟨{start} {(start == 1 ? "character" : "characters")} omitted⟩\n{text[start..]}";
     }
 }

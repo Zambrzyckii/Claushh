@@ -13,7 +13,7 @@ namespace Claushh.Api.Claude;
 
 internal sealed class ClaudeProcess
 {
-    public const string Unresponsive = "Konsola nie odpowiada";
+    public const string Unresponsive = "Console not responding";
     public const int MaxLine = 16 * 1024 * 1024;
     public static readonly TimeSpan ReplyTimeout = TimeSpan.FromSeconds(10);
     public static readonly TimeSpan InitializeTimeout = TimeSpan.FromSeconds(30);

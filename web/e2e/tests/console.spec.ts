@@ -132,7 +132,7 @@ test('Esc interrupts a running prompt', async ({ page }) => {
   await expect(panel.getByRole('button', { name: 'Nowa' })).toBeDisabled();
 
   await prompt(page).press('Escape');
-  await expect(panel).toContainText('przerwano');
+  await expect(panel).toContainText('interrupted');
   await expect(panel).not.toContainText('pracuje…');
 });
 

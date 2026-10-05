@@ -50,24 +50,24 @@ public sealed class CloneTests(ApiFactory api) : ApiTest(api)
     }
 
     [Theory]
-    [InlineData("https://github.com\\@evil.example/o/r.git", "Nieprawidłowy adres.")]
-    [InlineData("https://github.com/o/../r", "Nieprawidłowy adres.")]
-    [InlineData("https://github.com/o/./r", "Nieprawidłowy adres.")]
-    [InlineData("http://github.com/o/r", "Nieprawidłowy adres.")]
-    [InlineData("https://github.com:443/o/r", "Nieprawidłowy adres.")]
-    [InlineData("https://github.com:0080/o/r", "Nieprawidłowy adres.")]
-    [InlineData("https://github.com:65536/o/r", "Nieprawidłowy adres.")]
-    [InlineData("https://127.1/o/r", "Nieprawidłowy adres.")]
-    [InlineData("https://0x7f.0.0.1/o/r", "Nieprawidłowy adres.")]
-    [InlineData("https://010.0.0.1/o/r", "Nieprawidłowy adres.")]
-    [InlineData("https://127.0.0.1./o/r", "Nieprawidłowy adres.")]
-    [InlineData("https://xn--bcher-kva.example/o/r", "Nieprawidłowy adres.")]
-    [InlineData("https://github.com/o/r\n", "Nieprawidłowy adres.")]
-    [InlineData("https://GitHub.com/o/r", "Nieprawidłowy adres.")]
-    [InlineData("-https://github.com/o/r", "Nieprawidłowy adres.")]
-    [InlineData("https://github.com/o/...git", "Nieprawidłowa nazwa katalogu.")]
-    [InlineData("https://github.com/o/.git", "Nieprawidłowa nazwa katalogu.")]
-    [InlineData("https://github.com/o/-x", "Nieprawidłowa nazwa katalogu.")]
+    [InlineData("https://github.com\\@evil.example/o/r.git", "Invalid URL.")]
+    [InlineData("https://github.com/o/../r", "Invalid URL.")]
+    [InlineData("https://github.com/o/./r", "Invalid URL.")]
+    [InlineData("http://github.com/o/r", "Invalid URL.")]
+    [InlineData("https://github.com:443/o/r", "Invalid URL.")]
+    [InlineData("https://github.com:0080/o/r", "Invalid URL.")]
+    [InlineData("https://github.com:65536/o/r", "Invalid URL.")]
+    [InlineData("https://127.1/o/r", "Invalid URL.")]
+    [InlineData("https://0x7f.0.0.1/o/r", "Invalid URL.")]
+    [InlineData("https://010.0.0.1/o/r", "Invalid URL.")]
+    [InlineData("https://127.0.0.1./o/r", "Invalid URL.")]
+    [InlineData("https://xn--bcher-kva.example/o/r", "Invalid URL.")]
+    [InlineData("https://github.com/o/r\n", "Invalid URL.")]
+    [InlineData("https://GitHub.com/o/r", "Invalid URL.")]
+    [InlineData("-https://github.com/o/r", "Invalid URL.")]
+    [InlineData("https://github.com/o/...git", "Invalid directory name.")]
+    [InlineData("https://github.com/o/.git", "Invalid directory name.")]
+    [InlineData("https://github.com/o/-x", "Invalid directory name.")]
     public async Task A_url_the_frontend_refuses_is_400_and_starts_no_git(string url, string message)
     {
         var response = await CloneAsync("studia", url);
@@ -96,7 +96,7 @@ public sealed class CloneTests(ApiFactory api) : ApiTest(api)
         var file = await CloneAsync("prywatne", url);
 
         Assert.Equal(HttpStatusCode.Conflict, directory.StatusCode);
-        Assert.Equal(new MessageBody("Katalog już istnieje."), await directory.Content.ReadFromJsonAsync<MessageBody>());
+        Assert.Equal(new MessageBody("Directory already exists."), await directory.Content.ReadFromJsonAsync<MessageBody>());
         Assert.Equal(HttpStatusCode.Conflict, file.StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await CloneAsync("missing", url)).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await CloneAsync("studia/lab", url)).StatusCode);
@@ -128,7 +128,7 @@ public sealed class CloneTests(ApiFactory api) : ApiTest(api)
         var response = await CloneAsync("studia", $"https://127.0.0.1:{port}/r.git").WaitAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.BadGateway, response.StatusCode);
-        Assert.Equal(new MessageBody("Git nie skończył w ciągu 2 s i został przerwany."), await response.Content.ReadFromJsonAsync<MessageBody>());
+        Assert.Equal(new MessageBody("Git did not finish within 2 s and was stopped."), await response.Content.ReadFromJsonAsync<MessageBody>());
         Assert.InRange(watch.Elapsed, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(15));
         Assert.False(Directory.Exists(Api.ProjectPath("studia/r")));
     }

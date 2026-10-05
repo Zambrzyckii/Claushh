@@ -20,7 +20,7 @@ public sealed record GitResult(int ExitCode, string Output, string Message)
 // SIGTERM, then a kill when git still ran 1 s later.
 public sealed class GitTimeoutException(TimeSpan limit) : Exception($"git did not finish within {(int)limit.TotalSeconds} s")
 {
-    public string ResponseMessage { get; } = $"Git nie skończył w ciągu {(int)limit.TotalSeconds} s i został przerwany.";
+    public string ResponseMessage { get; } = $"Git did not finish within {(int)limit.TotalSeconds} s and was stopped.";
 }
 
 // The one time limit of a request (or a background fetch), counted from its start. Aborted: the client went away, the

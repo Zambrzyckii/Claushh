@@ -152,19 +152,19 @@ public sealed class ConsoleTurnTests(ApiFactory api) : ApiTest(api)
         var unknown = await Assert.ThrowsAsync<HubException>(() => tab.SendAsync(Guid.NewGuid().ToString(), "x"));
         var malformed = await Assert.ThrowsAsync<HubException>(() => tab.SendAsync("nie-id", "x"));
 
-        Assert.EndsWith("Rozmowa jest zajęta", busy.Message, StringComparison.Ordinal);
-        Assert.EndsWith("Nieznana rozmowa", unknown.Message, StringComparison.Ordinal);
-        Assert.EndsWith("Nieznana rozmowa", malformed.Message, StringComparison.Ordinal);
+        Assert.EndsWith("Conversation is busy", busy.Message, StringComparison.Ordinal);
+        Assert.EndsWith("Unknown conversation", unknown.Message, StringComparison.Ordinal);
+        Assert.EndsWith("Unknown conversation", malformed.Message, StringComparison.Ordinal);
         Assert.Single(Api.Claude.Launches(id));
     }
 
     // The 100,001-character row also needs the console hub's 1 MiB message limit: with 32 KB the connection would drop.
     [Theory]
-    [InlineData(0, "haiku", "low", "default", "Nieprawidłowe polecenie")]
-    [InlineData(100_001, "haiku", "low", "default", "Nieprawidłowe polecenie")]
-    [InlineData(1, "gpt-5", "low", "default", "Nieprawidłowe opcje")]
-    [InlineData(1, "haiku", "xhigh", "default", "Nieprawidłowe opcje")]
-    [InlineData(1, "haiku", "low", "bypassPermissions", "Nieprawidłowe opcje")]
+    [InlineData(0, "haiku", "low", "default", "Invalid prompt")]
+    [InlineData(100_001, "haiku", "low", "default", "Invalid prompt")]
+    [InlineData(1, "gpt-5", "low", "default", "Invalid options")]
+    [InlineData(1, "haiku", "xhigh", "default", "Invalid options")]
+    [InlineData(1, "haiku", "low", "bypassPermissions", "Invalid options")]
     public async Task Prompts_and_options_outside_the_contract_are_refused(int length, string model, string effort, string mode, string message)
     {
         await using var tab = await TestConsole.ConnectAsync(Api, Client);
@@ -248,14 +248,14 @@ public sealed class ConsoleTurnTests(ApiFactory api) : ApiTest(api)
         await tab.WaitForAsync(id, "text msg_fixture9:0 , 3");
 
         await tab.InterruptAsync(id);
-        await tab.WaitForAsync(id, "status idle przerwano");
+        await tab.WaitForAsync(id, "status idle interrupted");
         await tab.SendAsync(id, "przeczytaj notatki");
         await TestConsole.UntilAsync(() => tab.Shown(id)[^1] == "status idle", "the second turn's end");
 
         Assert.Equal(new[]
         {
             "conversation studia/lab", "prompt policz", "status working", "text msg_fixture9:0 Liczę: 1, 2",
-            "text msg_fixture9:0 , 3", "status idle przerwano", "prompt przeczytaj notatki", "status working",
+            "text msg_fixture9:0 , 3", "status idle interrupted", "prompt przeczytaj notatki", "status working",
         }.Concat(ReadAndCommand), tab.Shown(id));
         Assert.Single(Api.Claude.Launches(id));
         Assert.Equal(new[]
@@ -274,7 +274,7 @@ public sealed class ConsoleTurnTests(ApiFactory api) : ApiTest(api)
         await tab.SendAsync(id, "policz");
         await tab.WaitForAsync(id, "text msg_fixture9:0 , 3");
         await tab.InterruptAsync(id);
-        await tab.WaitForAsync(id, "status idle przerwano");
+        await tab.WaitForAsync(id, "status idle interrupted");
         await TestConsole.UntilAsync(() => !Conversations.IsRunning(id), "the end of the process");
 
         await tab.SendAsync(id, "dalej");
@@ -300,7 +300,7 @@ public sealed class ConsoleTurnTests(ApiFactory api) : ApiTest(api)
 
         await tab.InterruptAsync(id);
 
-        await tab.WaitForAsync(id, "status idle przerwano");
+        await tab.WaitForAsync(id, "status idle interrupted");
         await TestConsole.UntilAsync(() => !Conversations.IsRunning(id), "the killed process");
         Assert.Equal("interrupt", Api.Claude.Requests(id)[^1]);
     }
@@ -318,7 +318,7 @@ public sealed class ConsoleTurnTests(ApiFactory api) : ApiTest(api)
 
         await tab.InterruptAsync(id);
 
-        await tab.WaitForAsync(id, "status idle przerwano");
+        await tab.WaitForAsync(id, "status idle interrupted");
         Assert.DoesNotContain(tab.Shown(id), line => line.StartsWith("status error", StringComparison.Ordinal));
     }
 
@@ -348,8 +348,8 @@ public sealed class ConsoleTurnTests(ApiFactory api) : ApiTest(api)
 
         await tab.SendAsync(id, "x");
 
-        await tab.WaitForAsync(id, "status error Proces konsoli zakończył się (kod 3).");
-        Assert.Equal(new[] { "conversation studia/lab", "prompt x", "status working", "status error Proces konsoli zakończył się (kod 3)." },
+        await tab.WaitForAsync(id, "status error The console process exited (code 3).");
+        Assert.Equal(new[] { "conversation studia/lab", "prompt x", "status working", "status error The console process exited (code 3)." },
             tab.Shown(id));
     }
 
@@ -365,8 +365,8 @@ public sealed class ConsoleTurnTests(ApiFactory api) : ApiTest(api)
 
         var error = await Assert.ThrowsAsync<HubException>(() => tab.SendAsync(id, "drugie"));
 
-        Assert.EndsWith("Konsola niedostępna", error.Message, StringComparison.Ordinal);
-        await tab.WaitForAsync(id, "status error Nie udało się wznowić rozmowy. Zacznij nową („Nowa”).");
+        Assert.EndsWith("Console unavailable", error.Message, StringComparison.Ordinal);
+        await tab.WaitForAsync(id, "status error Could not resume the conversation. Start a new one (“New”).");
         Assert.Equal("--resume", Api.Claude.Launches(id)[1].GetProperty("argv").EnumerateArray().Select(a => a.GetString()).ToList()[^2]);
     }
 
@@ -410,9 +410,9 @@ public sealed class ConsoleTurnTests(ApiFactory api) : ApiTest(api)
         Assert.Equal(new[]
         {
             "conversation studia/lab", "prompt zrób commit", "status working", "permission git commit -m x", "status waiting",
-            "resolved deny", "status error Serwer został zatrzymany w trakcie pracy.",
+            "resolved deny", "status error The server stopped during the turn.",
         }, replay.Events.Select(TestConsole.Show));
-        Assert.Equal(new[] { "resolved deny", "status error Serwer został zatrzymany w trakcie pracy." }, tab.Shown(cutOff.ToString("D")));
+        Assert.Equal(new[] { "resolved deny", "status error The server stopped during the turn." }, tab.Shown(cutOff.ToString("D")));
         Assert.Equal(2, (await tab.GetAsync("studia/inny")).Events.Length);
     }
 
@@ -434,7 +434,7 @@ public sealed class ConsoleTurnTests(ApiFactory api) : ApiTest(api)
 
         var error = await Assert.ThrowsAsync<HubException>(() => tab.SendAsync(tenth, "start"));
 
-        Assert.EndsWith("Za dużo aktywnych rozmów", error.Message, StringComparison.Ordinal);
+        Assert.EndsWith("Too many active conversations", error.Message, StringComparison.Ordinal);
         Assert.False(Conversations.IsRunning(ids[0]));
         Assert.All(ids.Skip(1), id => Assert.True(Conversations.IsRunning(id), id));
         Assert.Empty(Api.Claude.Launches(tenth));
@@ -499,7 +499,7 @@ public sealed class ConsoleTurnTests(ApiFactory api) : ApiTest(api)
 
         var error = await Assert.ThrowsAsync<HubException>(() => again.SendAsync(id, "x"));
 
-        Assert.EndsWith("Nieznana rozmowa", error.Message, StringComparison.Ordinal);
+        Assert.EndsWith("Unknown conversation", error.Message, StringComparison.Ordinal);
         Assert.Empty(Api.Claude.Launches(id));
     }
 
@@ -515,7 +515,7 @@ public sealed class ConsoleTurnTests(ApiFactory api) : ApiTest(api)
         var error = await Assert.ThrowsAsync<HubException>(() => tab.SendAsync(id, "x"));
 
         Assert.False(cli.Available);
-        Assert.EndsWith("Konsola niedostępna", error.Message, StringComparison.Ordinal);
+        Assert.EndsWith("Console unavailable", error.Message, StringComparison.Ordinal);
         Assert.Equal(id, (await tab.GetAsync("studia/lab")).ConversationId);
         Assert.Empty(Api.Claude.Launches(id));
     }

@@ -96,7 +96,7 @@ public sealed class LoginGuard(ClaushhDbContext db, UserManager<IdentityUser> us
         await db.SaveChangesAsync(ct);
     }
 
-    // The history for the "Bezpieczeństwo" window: the last 20, newest first (Id breaks ties of the same time).
+    // The history for the security window: the last 20, newest first (Id breaks ties of the same time).
     public Task<List<LoginAttempt>> RecentAsync(CancellationToken ct) =>
         db.LoginAttempts
             .OrderByDescending(a => a.At)

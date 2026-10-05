@@ -1,6 +1,6 @@
-// The User-Agent as it is stored with sessions and login attempts, and as it is shown in the "Bezpieczeństwo" window,
-// e.g. "Chrome · Linux" (docs/ARCHITECTURE.md, "Backend"). The rules match the mock (web/e2e/mock-api/server.mjs,
-// deviceOf); the fallbacks are Polish like the rest of the interface.
+// The User-Agent as it is stored with sessions and login attempts, and as the security window shows it, e.g.
+// "Chrome · Linux" (docs/ARCHITECTURE.md, "Backend"). The rules match the mock (web/e2e/mock-api/server.mjs,
+// deviceOf); the fallbacks are English like the rest of the interface.
 namespace Claushh.Api.Auth;
 
 public static class DeviceName
@@ -25,13 +25,13 @@ public static class DeviceName
             : userAgent.Contains("Edg/", StringComparison.Ordinal) ? "Edge"
             : userAgent.Contains("Chrom", StringComparison.Ordinal) ? "Chrome"
             : userAgent.Contains("Safari/", StringComparison.Ordinal) ? "Safari"
-            : "Przeglądarka";
+            : "Browser";
         var system = userAgent.Contains("Windows", StringComparison.Ordinal) ? "Windows"
             : userAgent.Contains("Android", StringComparison.Ordinal) ? "Android"
             : userAgent.Contains("iPhone", StringComparison.Ordinal) || userAgent.Contains("iPad", StringComparison.Ordinal) ? "iOS"
             : userAgent.Contains("Mac OS", StringComparison.Ordinal) ? "macOS"
             : userAgent.Contains("Linux", StringComparison.Ordinal) ? "Linux"
-            : "nieznany system";
+            : "unknown system";
         return $"{browser} · {system}";
     }
 }

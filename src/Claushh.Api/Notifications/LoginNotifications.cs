@@ -23,12 +23,12 @@ public sealed class LoginNotifications(IHttpClientFactory clients, IOptions<Noti
         Channel.CreateBounded<Message>(new BoundedChannelOptions(QueueLength) { SingleReader = true });
 
     public void LoggedIn(string ip, string userAgent) =>
-        Enqueue("Claushh: logowanie", "default", $"Zalogowano z {ip} ({Device(userAgent)}), {Now()} UTC.");
+        Enqueue("Claushh: login", "default", $"Logged in from {ip} ({Device(userAgent)}), {Now()} UTC.");
 
     // lockout: the length of the lock that has just started.
     public void AccountLocked(TimeSpan lockout, string ip, string userAgent) =>
-        Enqueue("Claushh: konto zablokowane", "high", string.Create(CultureInfo.InvariantCulture,
-            $"Konto zablokowane na {(int)lockout.TotalMinutes} min po 5 błędnych kodach przy poprawnym haśle; ostatnia próba z {ip} ({Device(userAgent)}), {Now()} UTC. Jeśli to nie Ty: create-user --reset-password."));
+        Enqueue("Claushh: account locked", "high", string.Create(CultureInfo.InvariantCulture,
+            $"Account locked for {(int)lockout.TotalMinutes} min after 5 wrong codes with a correct password; last attempt from {ip} ({Device(userAgent)}), {Now()} UTC. If this was not you: create-user --reset-password."));
 
     public void PasskeyLoggedIn(string name, string ip, string userAgent) =>
         Enqueue("Claushh: passkey login", "default",
@@ -71,7 +71,7 @@ public sealed class LoginNotifications(IHttpClientFactory clients, IOptions<Noti
             {
                 Content = new StringContent(message.Body, Encoding.UTF8, "text/plain"),
             };
-            // ASCII titles: header values are not UTF-8 on the wire. The body carries the text (Polish; English for passkeys).
+            // ASCII titles: header values are not UTF-8 on the wire. The body carries the text.
             request.Headers.TryAddWithoutValidation("Title", message.Title);
             request.Headers.TryAddWithoutValidation("Priority", message.Priority);
             if (options.Value.NtfyToken.Length > 0)

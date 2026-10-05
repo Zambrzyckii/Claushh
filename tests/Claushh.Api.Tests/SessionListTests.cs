@@ -30,7 +30,7 @@ public sealed class SessionListTests(ApiFactory api) : ApiTest(api)
                 Assert.Equal(me.SessionId, s.Id);
                 Assert.True(s.Current);
                 // This client sends no User-Agent at all.
-                Assert.Equal("Przeglądarka · nieznany system", s.Device);
+                Assert.Equal("Browser · unknown system", s.Device);
             },
             s =>
             {

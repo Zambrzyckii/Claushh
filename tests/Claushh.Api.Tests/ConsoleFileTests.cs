@@ -140,10 +140,12 @@ public sealed class ConsoleFileTests(ApiFactory api) : ApiTest(api)
         Assert.Equal(new[] { "step command git init", "status idle" }, tab.Shown(id).Skip(3));
     }
 
-    [Fact]
-    public async Task Output_over_32000_characters_keeps_its_end_after_a_note()
+    [Theory]
+    [InlineData(8_000, "⟨8000 characters omitted⟩")]
+    [InlineData(1, "⟨1 character omitted⟩")]
+    public async Task Output_over_32000_characters_keeps_its_end_after_a_note_with_the_count(int extra, string note)
     {
-        var output = new string('a', 8_000) + new string('b', 32_000);
+        var output = new string('a', extra) + new string('b', 32_000);
         await using var tab = await TestConsole.ConnectAsync(Api, Client);
         var id = await tab.StartScriptedAsync(Api, "studia/lab", "turn-start.jsonl", Command("toolu_fixture27", "cat duzy.log"),
             Ran("toolu_fixture27", output), TestClaude.Success);
@@ -152,7 +154,7 @@ public sealed class ConsoleFileTests(ApiFactory api) : ApiTest(api)
         await tab.WaitForAsync(id, "status idle");
 
         var text = tab.Events(id).Single(e => TestConsole.Str(e, "type") == "step-output").GetProperty("text").GetString();
-        Assert.Equal("⟨pominięto 8000 znaków⟩\n" + new string('b', 32_000), text);
+        Assert.Equal(note + "\n" + new string('b', 32_000), text);
     }
 
     [Fact]

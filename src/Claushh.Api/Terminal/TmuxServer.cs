@@ -14,8 +14,8 @@ namespace Claushh.Api.Terminal;
 
 public sealed partial class TmuxServer(IOptions<TerminalOptions> options, ILogger<TmuxServer> log)
 {
-    public const string Unavailable = "Terminal niedostępny";
-    public const string Unresponsive = "Terminal nie odpowiada";
+    public const string Unavailable = "Terminal unavailable";
+    public const string Unresponsive = "Terminal not responding";
     public static readonly TimeSpan CommandTimeout = TimeSpan.FromSeconds(10);
 
     private static readonly Version Minimum = new(3, 7);
@@ -38,7 +38,7 @@ public sealed partial class TmuxServer(IOptions<TerminalOptions> options, ILogge
     private string ConfigPath => Path.Join(_directory, "tmux.conf");
 
     // At start: checks tmux and the directory, writes the configuration and ends a server a previous run left behind.
-    // Never throws: without a usable tmux the rest of the API works and the terminal answers "Terminal niedostępny".
+    // Never throws: without a usable tmux the rest of the API works and the terminal answers "Terminal unavailable".
     public async Task PrepareAsync(CancellationToken ct)
     {
         Available = false;
