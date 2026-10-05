@@ -36,8 +36,10 @@ public static partial class FrontendFiles
             "Frontend:Root must hold the frontend build: an index.html with a Content-Security-Policy <meta> (README.md, \"Running the built frontend\")."))
             + "; frame-ancestors 'none'";
         var types = new FileExtensionContentTypeProvider();
-        // The framework's own type is application/x-font-ttf; the mock sends font/ttf.
+        // The framework's own types are application/x-font-ttf and application/font-woff; the mock sends font/ttf and
+        // font/woff (.woff2 is font/woff2 in both).
         types.Mappings[".ttf"] = "font/ttf";
+        types.Mappings[".woff"] = "font/woff";
         return new StaticFileOptions
         {
             FileProvider = new PhysicalFileProvider(frontend.Root),

@@ -8,31 +8,6 @@
   line-height: 19px;
 }
 
-button {
-  background: transparent;
-  border: 1px solid var(--border-strong);
-  border-radius: 3px;
-  color: var(--text);
-  font-family: var(--font-mono);
-  font-size: 12px;
-  padding: 5px 12px;
-
-  &:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-}
-
-.link {
-  border: none;
-  padding: 4px 6px;
-  color: var(--text-muted);
-
-  &:hover:not(:disabled) {
-    color: var(--text-strong);
-  }
-}
-
 .header {
   height: 36px;
   flex-shrink: 0;
@@ -83,11 +58,11 @@ button {
 }
 
 .error {
-  color: var(--accent);
+  color: var(--error);
 }
 
 .prompt {
-  color: #e6e4dc;
+  color: var(--text-strong);
 }
 
 .text {
@@ -130,6 +105,12 @@ button {
   &__buttons {
     display: flex;
     gap: 8px;
+
+    button {
+      border-color: var(--border-strong);
+      font-family: var(--font-mono);
+      font-size: 12px;
+    }
   }
 }
 
@@ -145,6 +126,13 @@ button {
     display: flex;
     gap: 8px;
     align-items: flex-start;
+    padding: 4px 6px;
+    border: 1px solid transparent;
+    border-radius: 4px;
+
+    &:focus-within {
+      border-color: var(--focus);
+    }
   }
 
   &__prompt {
@@ -157,12 +145,16 @@ button {
     resize: none;
     background: transparent;
     border: none;
-    outline: none;
-    color: #e6e4dc;
+    color: var(--text-strong);
     font-family: var(--font-mono);
     font-size: 12.5px;
     line-height: 20px;
     padding: 0;
+
+    // The field's frame shows the focus (.composer__input:focus-within).
+    &:focus-visible {
+      outline: none;
+    }
   }
 
   &__options {
@@ -180,10 +172,6 @@ button {
     }
 
     select {
-      background: var(--surface-2);
-      color: var(--text);
-      border: 1px solid var(--border-strong);
-      border-radius: 3px;
       font-family: var(--font-mono);
       font-size: 11px;
       padding: 2px 4px;

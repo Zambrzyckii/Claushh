@@ -18,12 +18,13 @@ import { Subscription } from 'rxjs';
 
 import { Dialogs } from '../../core/browser/dialogs';
 import { isTypingElsewhere } from '../../core/browser/focus';
+import { onFontsLoaded } from '../../core/browser/fonts';
 import { TerminalInfo } from '../../core/realtime/terminal-protocol';
 import { countLabel } from '../../core/text/format';
 import { previewText } from '../../core/text/visible-text';
 import { MAX_PENDING_INPUT, lineBreaks, sanitizePaste } from './terminal-input';
 import { TerminalStore } from './terminal-store';
-import { TERMINAL_OPTIONS, loadXterm } from './xterm-loader';
+import { TERMINAL_FONT, loadXterm, terminalOptions } from './xterm-loader';
 
 /**
  * Characters typed during a disconnection are sent after reattaching without asking, if they waited less than this many ms.
@@ -103,7 +104,7 @@ const PASTE_MARGIN = 16;
     .failed {
       position: absolute;
       margin: 12px 16px;
-      color: var(--accent);
+      color: var(--error);
     }
     .notice {
       position: absolute;
@@ -112,9 +113,9 @@ const PASTE_MARGIN = 16;
       margin: 0;
       padding: 4px 8px;
       background: var(--surface);
-      border: 1px solid var(--accent);
+      border: 1px solid var(--warning);
       border-radius: 3px;
-      color: var(--accent);
+      color: var(--warning);
       font-size: 12px;
     }
     .decision {
@@ -126,7 +127,7 @@ const PASTE_MARGIN = 16;
       overflow: auto;
       padding: 8px 12px;
       background: var(--surface);
-      border: 1px solid var(--accent);
+      border: 1px solid var(--warning);
       border-radius: 3px;
       font-size: 12px;
 
@@ -149,11 +150,7 @@ const PASTE_MARGIN = 16;
       }
       button {
         margin-right: 8px;
-        padding: 3px 10px;
-        background: transparent;
-        border: 1px solid var(--border-strong);
-        border-radius: 3px;
-        color: var(--text);
+        border-color: var(--border-strong);
       }
     }
   `
@@ -176,6 +173,8 @@ export class TerminalView {
   private pending: { seq: number; data: string }[] = [];
   private exitShown = false;
   private destroyed = false;
+  /** Stops re-measuring on late fonts (set in `init`). */
+  private stopFontWatch: (() => void) | null = null;
 
   /** Queue of typed characters of this terminal (belongs to TerminalStore, `inputQueue` creates it on first use). */
   private readonly inputQueue = computed(() => this.store.inputQueue(this.terminal().id));
@@ -226,6 +225,7 @@ export class TerminalView {
 
     inject(DestroyRef).onDestroy(() => {
       this.destroyed = true;
+      this.stopFontWatch?.();
       this.subscriptions.unsubscribe();
       this.resizeObserver?.disconnect();
       this.term?.dispose();
@@ -248,7 +248,7 @@ export class TerminalView {
       return;
     }
     const host = this.host().nativeElement;
-    const term = new xterm.Terminal(TERMINAL_OPTIONS);
+    const term = new xterm.Terminal(terminalOptions());
     const fit = new xterm.FitAddon();
     term.loadAddon(fit);
     // OSC 8 links disabled: the visible text ("https://github.com/…") could lead somewhere else.
@@ -280,6 +280,7 @@ export class TerminalView {
     this.term = term;
     this.fit = fit;
     this.fitToContainer();
+    this.stopFontWatch = onFontsLoaded(() => this.remeasure());
 
     // Custom paste handling in the capture phase, before xterm's handling (which would pass the text on unchecked).
     host.addEventListener('paste', (event) => this.onPaste(event), { capture: true });
@@ -433,6 +434,20 @@ export class TerminalView {
     if (element.clientWidth > 0 && element.clientHeight > 0) {
       this.fit?.fit();
     }
+  }
+
+  /**
+   * xterm measures its cell only when fontFamily or fontSize changes, so a font that arrives after the terminal opened
+   * needs a change of the family and back, then a new fit.
+   */
+  private remeasure(): void {
+    const term = this.term;
+    if (!term) {
+      return;
+    }
+    term.options.fontFamily = 'monospace';
+    term.options.fontFamily = TERMINAL_FONT;
+    this.fitToContainer();
   }
 }
 

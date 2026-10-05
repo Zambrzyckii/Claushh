@@ -26,7 +26,7 @@
     <p class="error" role="alert">{{ message }}</p>
   }
 
-  <button type="submit" [disabled]="submitting()">
+  <button type="submit" class="primary" [disabled]="submitting()">
     {{ submitting() ? 'Logging in…' : 'Log in' }}
   </button>
 </form>

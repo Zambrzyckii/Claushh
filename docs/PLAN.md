@@ -34,9 +34,11 @@ The mockup also shows a tunnel status in the status bar. It was dropped as it wo
 the page does not load at all while the tunnel is down, and a tunnel that fails while the page is open already shows
 in the status bar as "Console: disconnected" (console status).
 
-Colors: dark theme with a single amber accent, to be refined in later iterations.
-Fonts: IBM Plex Sans (interface), JetBrains Mono (code, console). In the terminal the Nerd Font version,
-so that the icons from the dotfiles prompt work.
+Colors: a dark theme after VS Code's structure: two surfaces, one amber accent for focus, the primary action and the
+active tab; errors, warnings and git marks in VS Code's colors.
+Fonts: IBM Plex Sans (interface) and JetBrains Mono (code, console, terminal), self-hosted through Fontsource; in the
+terminal the Nerd Font version comes first when the device has it, so that the icons from the dotfiles prompt work.
+Icons: codicons.
 
 Devices: mainly laptop and PC. The phone is secondary.
 
@@ -46,6 +48,19 @@ Frontend decisions (UI refresh):
   file names still sort with Polish collation (ł after l), a choice apart from the interface's language. Stored
   console events keep the texts they were sent with. Rejected: a language switch (translation infrastructure for one
   reader) and ISO dates.
+- The look follows VS Code's structure with the amber accent: two neutral surfaces (the editor darker), borders one
+  step lighter, and one shared system for buttons, inputs, focus and tabs in `styles.scss`, with the components
+  keeping only their layout. The accent marks focus, the primary action, the active tab and the cursor; errors,
+  warnings and git marks use VS Code's dark defaults. Rejected: VS Code's blue accent and a light theme (it doubles
+  the Monaco and xterm themes).
+- Fonts are self-hosted through Fontsource (IBM Plex Sans 400/500/600; JetBrains Mono 400, 700 and italic 400): the
+  browser fetches only the subsets a page needs. Monaco and xterm measure their cells when they are created, so they
+  wait for JetBrains Mono (3 s at most) and measure again when a font arrives later. Rejected: system font stacks
+  (each device falls back to its own) and a font CDN (the CSP allows only the portal's own files).
+- Icons are codicons (CC BY 4.0, attributed in `README.md`) in the shell; the console panel has none. Rejected:
+  inline SVGs (markup per icon) and text glyphs.
+- The Monaco and xterm themes read the tokens when they are created (`theme.ts`), so the palette lives in
+  `styles.scss` only. Rejected: hex values repeated in TypeScript.
 
 ## Tech stack
 
@@ -54,7 +69,7 @@ Frontend decisions (UI refresh):
 | System | EndeavourOS with the owner's dotfiles, user `workspace`, systemd service with sandboxing |
 | Backend | ASP.NET Core (.NET 10), SignalR, ASP.NET Core Identity (TOTP, passkeys) |
 | Database | PostgreSQL 17 in Docker (pinned version, only `127.0.0.1`), EF Core + Npgsql |
-| Frontend | Angular, Monaco (`ngx-monaco-editor-v2`), xterm.js, `@microsoft/signalr` |
+| Frontend | Angular, Monaco (`monaco-editor`), xterm.js, `@microsoft/signalr` |
 | Console | one long-lived `claude -p --input-format stream-json --output-format stream-json --verbose --include-partial-messages --permission-prompt-tool stdio` process per conversation, with the hardening flags of "Backend decisions (stage 3)" |
 | Terminal | tmux in control mode (`tmux -C`), no PTY package; terminals end with the API |
 | Git | LibGit2Sharp for everything local (status, branches, HEAD content), the git CLI for clone, fetch, pull and push |

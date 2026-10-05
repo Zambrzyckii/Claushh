@@ -116,7 +116,7 @@ describe('Workspaces (integration)', () => {
     });
     await settle();
 
-    expect(texts(root, 'app-explorer .row')).toEqual(['▸src•', 'NOTES.mdU']);
+    expect(texts(root, 'app-explorer .row')).toEqual(['src•', 'NOTES.mdU']);
     expect(root.querySelector('tr.repo button')!.textContent!.trim()).toBe('Opened');
     expect(host.status.changeCount()).toBe(2);
   });

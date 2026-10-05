@@ -402,3 +402,8 @@ dotnet test    # integration tests; needs Docker (starts PostgreSQL 17 in a cont
 
 Also needs the git CLI ≥ 2.45 (some test repositories use `--ref-format=reftable`).
 The console tests run a fake `claude` built with the solution (`tests/Claushh.FakeClaude`); the real CLI is not needed.
+
+## Third-party assets
+
+Icons: [Codicons](https://github.com/microsoft/vscode-codicons) by Microsoft, CC BY 4.0. Fonts: IBM Plex Sans and
+JetBrains Mono, SIL Open Font License 1.1, through Fontsource.

@@ -6,29 +6,12 @@
   font-size: 12px;
 }
 
-button {
-  background: transparent;
-  border: none;
-  color: var(--text-muted);
-  font-size: 12px;
-  padding: 0 8px;
-
-  &:hover:not(:disabled) {
-    color: var(--text-strong);
-  }
-
-  &:disabled {
-    opacity: 0.5;
-    cursor: default;
-  }
-}
-
 .faint {
   color: var(--text-faint);
 }
 
 .error {
-  color: var(--accent);
+  color: var(--error);
 }
 
 .bar {
@@ -38,7 +21,12 @@ button {
   align-items: stretch;
   gap: 4px;
   padding: 0 8px;
-  border-bottom: 1px solid #222429;
+  border-bottom: 1px solid var(--border);
+
+  button {
+    min-height: 0;
+    font-size: 12px;
+  }
 }
 
 .tabs {
@@ -50,14 +38,6 @@ button {
   display: flex;
   align-items: center;
 
-  &--active {
-    box-shadow: inset 0 -2px 0 var(--accent);
-
-    .tab__name {
-      color: var(--text-strong);
-    }
-  }
-
   &__name {
     height: 100%;
     font-family: var(--font-mono);
@@ -66,14 +46,12 @@ button {
 
   &__close {
     height: 100%;
-    padding: 0 6px 0 2px;
-    font-size: 14px;
     color: var(--text-faint);
   }
 }
 
 .new {
-  white-space: nowrap;
+  align-self: center;
 }
 
 .state {
@@ -98,4 +76,10 @@ app-terminal-view {
 
 .empty {
   margin: 12px 16px;
+}
+
+@media (pointer: coarse) {
+  .bar {
+    height: 40px;
+  }
 }

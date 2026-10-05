@@ -1,0 +1,51 @@
+import { expect, test } from './fixtures';
+import { MAIN, expectEditorToContain, login, openFile, resetMock, treeRow } from './helpers';
+
+/**
+ * The shipped look (docs/ARCHITECTURE.md, "Frontend"): the self-hosted fonts and the icon font are loaded and served as
+ * fonts, and Monaco's own icon font, which loads later, does not change the app's icons.
+ */
+
+test.beforeEach(async ({ request }) => resetMock(request));
+
+test('the fonts and the icon font are served by the portal and loaded', async ({ page }) => {
+  const fontTypes = new Map<string, string>();
+  page.on('response', (response) => {
+    if (/\.woff2$/.test(new URL(response.url()).pathname)) {
+      fontTypes.set(response.url(), response.headers()['content-type'] ?? '');
+    }
+  });
+  await login(page);
+  await openFile(page, MAIN);
+  await expectEditorToContain(page, 'int main');
+
+  await expect
+    .poll(() =>
+      page.evaluate(() => ['13px "JetBrains Mono"', '13px "IBM Plex Sans"', '16px codicon'].map((font) => document.fonts.check(font)))
+    )
+    .toEqual([true, true, true]);
+  expect(fontTypes.size).toBeGreaterThan(0);
+  expect([...new Set(fontTypes.values())]).toEqual(['font/woff2']);
+});
+
+test('the app icons keep their glyphs after Monaco has loaded its own icon font', async ({ page }) => {
+  await login(page);
+  const icons = [page.locator('.topbar__user .codicon'), treeRow(page, 'prywatne').locator('.codicon')];
+  const glyphs = () =>
+    Promise.all(
+      icons.map((icon) =>
+        icon.evaluate((element) => ({
+          content: getComputedStyle(element, '::before').content,
+          width: element.getBoundingClientRect().width
+        }))
+      )
+    );
+  await expect.poll(() => page.evaluate(() => document.fonts.check('16px codicon'))).toBe(true);
+  const before = await glyphs();
+
+  await openFile(page, MAIN);
+  await expectEditorToContain(page, 'int main');
+  await page.waitForTimeout(300); // monaco.css and Monaco's icon rules are in place
+
+  expect(await glyphs()).toEqual(before);
+});

@@ -733,7 +733,7 @@ async function handle(req, res) {
   // frontend (SPA)
   let file = path.join(DIST, decodeURIComponent(url.pathname));
   if (!file.startsWith(DIST + path.sep) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) file = path.join(DIST, 'index.html');
-  const types = { '.js': 'text/javascript', '.css': 'text/css', '.html': 'text/html', '.ico': 'image/x-icon', '.ttf': 'font/ttf' };
+  const types = { '.js': 'text/javascript', '.css': 'text/css', '.html': 'text/html', '.ico': 'image/x-icon', '.ttf': 'font/ttf', '.woff2': 'font/woff2', '.woff': 'font/woff' };
   const headers = { 'Content-Type': types[path.extname(file)] ?? 'application/octet-stream' };
   if (file.endsWith('index.html')) {
     headers['Cache-Control'] = 'no-store';

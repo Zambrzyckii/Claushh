@@ -1,7 +1,7 @@
 <nav class="workspaces" aria-label="Workspaces">
   @if (store.listError(); as error) {
     <p class="error" role="alert">{{ error }}</p>
-    <button type="button" class="dashed" (click)="store.load()">Try again</button>
+    <button type="button" (click)="store.load()">Try again</button>
   }
   @for (ws of store.workspaces(); track ws.path) {
     <button type="button" class="workspace" [class.workspace--active]="ws.path === store.selected()"
@@ -16,7 +16,7 @@
       <input #workspaceName type="text" aria-label="New workspace name" placeholder="name" maxlength="40"
              autocomplete="off" (keydown.escape)="cancel('create')">
       <div class="inline-form__buttons">
-        <button type="submit" [disabled]="createBusy()">Create</button>
+        <button type="submit" class="primary" [disabled]="createBusy()">Create</button>
         <button type="button" (click)="cancel('create')">Cancel</button>
       </div>
       @if (createError(); as error) {
@@ -24,7 +24,7 @@
       }
     </form>
   } @else if (store.workspaces()) {
-    <button type="button" class="dashed" (click)="startCreating()">New workspace</button>
+    <button type="button" class="workspaces__new" (click)="startCreating()"><span class="codicon codicon-add" aria-hidden="true"></span>New workspace</button>
   }
 </nav>
 
@@ -39,7 +39,7 @@
           <th scope="col">LAST COMMIT</th>
           <th scope="col">REMOTE</th>
           <th scope="col" class="actions-head">
-            <button type="button" class="link" (click)="store.refreshRepos()">Refresh</button>
+            <button type="button" class="icon" aria-label="Refresh" (click)="store.refreshRepos()"><span class="codicon codicon-refresh" aria-hidden="true"></span></button>
           </th>
         </tr>
       </thead>
@@ -58,7 +58,7 @@
             </td>
             <td class="mono faint">{{ remote(repo) }}</td>
             <td class="actions">
-              <button type="button" [class.primary]="isOpen(repo)" [disabled]="isOpen(repo)"
+              <button type="button" [class.is-on]="isOpen(repo)" [disabled]="isOpen(repo)"
                       [attr.aria-label]="(isOpen(repo) ? 'Opened: ' : 'Open ') + repo.name" (click)="store.open(repo)">
                 {{ isOpen(repo) ? 'Opened' : 'Open' }}
               </button>
@@ -95,14 +95,14 @@
           <input #cloneUrl type="url" aria-label="Repository URL to clone"
                  placeholder="https://github.com/user/project.git" autocomplete="off" spellcheck="false"
                  (keydown.escape)="cancel('clone')">
-          <button type="submit" [disabled]="cloneBusy()">{{ cloneBusy() ? 'Cloning…' : 'Clone' }}</button>
+          <button type="submit" class="primary" [disabled]="cloneBusy()">{{ cloneBusy() ? 'Cloning…' : 'Clone' }}</button>
           <button type="button" [disabled]="cloneBusy()" (click)="cancel('clone')">Cancel</button>
         </form>
         @if (cloneError(); as error) {
           <p class="error" role="alert">{{ error }}</p>
         }
       } @else {
-        <button type="button" class="dashed" (click)="startCloning()">Clone a repository into “{{ ws.name }}”</button>
+        <button type="button" (click)="startCloning()"><span class="codicon codicon-repo-clone" aria-hidden="true"></span>Clone a repository into “{{ ws.name }}”</button>
       }
     </div>
   } @else if (store.workspaces()?.length === 0) {

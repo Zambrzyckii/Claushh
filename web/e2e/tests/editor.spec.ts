@@ -36,7 +36,7 @@ test('opens a file in Monaco with highlighting, breadcrumb and status bar', asyn
   await openFile(page, MAIN);
   await expectEditorToContain(page, 'int main(void)');
   await expect(page.locator('.tab__name')).toHaveText(['main.c']);
-  await expect(page.locator('.breadcrumb')).toHaveText(/studia\s*›\s*lab-3-sieci\s*›\s*src\s*›\s*main\.c/);
+  await expect(page.locator('.breadcrumb')).toHaveText(/studia\s*lab-3-sieci\s*src\s*main\.c/);
   await expect(page.locator('.statusbar')).toContainText('Ln 1, Col 1');
   await expect(page.locator('.statusbar__language')).toHaveText('c');
   expect(await page.locator('.monaco-editor .view-lines span[class*="mtk"]').count()).toBeGreaterThan(3);

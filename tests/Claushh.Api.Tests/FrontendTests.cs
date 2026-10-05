@@ -32,6 +32,8 @@ public sealed class FrontendTests(ApiFactory api) : ApiTest(api)
     [InlineData("/worker-TEST.js", "text/javascript")]
     [InlineData("/monaco.css", "text/css")]
     [InlineData("/media/codicon-TEST.ttf", "font/ttf")]
+    [InlineData("/media/font-TEST.woff2", "font/woff2")]
+    [InlineData("/media/font-TEST.woff", "font/woff")]
     [InlineData("/favicon.ico", "image/x-icon")]
     public async Task Files_of_the_build_have_their_type_and_no_cache_and_no_policy(string url, string type)
     {

@@ -16,18 +16,6 @@
   font-weight: 600;
   letter-spacing: 0.08em;
   color: var(--text-muted);
-
-  &__refresh {
-    background: transparent;
-    border: none;
-    color: var(--text-muted);
-    font-size: 11px;
-    padding: 4px 8px;
-
-    &:hover {
-      color: var(--text-strong);
-    }
-  }
 }
 
 .tree {
@@ -39,30 +27,26 @@
 .row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   width: 100%;
+  min-height: 0;
   padding-top: 3px;
   padding-bottom: 3px;
   padding-right: 12px;
-  background: transparent;
   border: none;
-  color: #c4c4bd;
-  font-size: 13px;
+  border-radius: 0;
+  color: var(--text);
   text-align: left;
 
-  &:hover {
-    background: #1f2126;
-  }
-
   &--active {
-    background: #262830;
+    background: var(--selection);
     color: var(--text-strong);
   }
 
   &__chevron {
-    width: 10px;
+    width: 16px;
+    flex-shrink: 0;
     color: var(--text-muted);
-    font-size: 10px;
   }
 
   &__name {
@@ -76,7 +60,30 @@
     flex-shrink: 0;
     font-family: var(--font-mono);
     font-size: 11px;
-    color: var(--accent);
+
+    &[data-mark='M'] {
+      color: var(--git-modified);
+    }
+
+    &[data-mark='A'] {
+      color: var(--git-added);
+    }
+
+    &[data-mark='D'] {
+      color: var(--git-deleted);
+    }
+
+    &[data-mark='R'] {
+      color: var(--git-renamed);
+    }
+
+    &[data-mark='U'] {
+      color: var(--git-untracked);
+    }
+
+    &[data-mark='!'] {
+      color: var(--git-conflict);
+    }
 
     &--dir {
       color: var(--text-faint);
@@ -92,6 +99,12 @@
   color: var(--text-faint);
 
   &--error {
-    color: var(--accent);
+    color: var(--error);
+  }
+}
+
+@media (pointer: coarse) {
+  .row {
+    min-height: 36px;
   }
 }

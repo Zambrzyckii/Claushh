@@ -67,7 +67,7 @@ const EDITOR_OPTIONS: MonacoApi.editor.IEditorOptions & MonacoApi.editor.IGlobal
     .failed {
       position: absolute;
       margin: 16px;
-      color: var(--accent);
+      color: var(--error);
     }
   `
 })

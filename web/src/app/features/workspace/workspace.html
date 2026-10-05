@@ -22,10 +22,14 @@
     }
     @if (user(); as u) {
       <button type="button" class="topbar__user" aria-haspopup="dialog" [attr.aria-label]="'Security and sessions (' + u.userName + ')'"
-              (click)="openSecurity()">{{ u.userName }}</button>
+              (click)="openSecurity()"><span class="codicon codicon-account" aria-hidden="true"></span>{{ u.userName }}</button>
     }
-    <button type="button" [class.is-on]="bottomOpen()" (click)="toggleBottom()">Panel</button>
-    <button type="button" [class.is-on]="consoleOpen()" (click)="toggleConsole()">Console</button>
+    <button type="button" class="icon" aria-label="Panel" [attr.aria-pressed]="bottomOpen()" (click)="toggleBottom()">
+      <span class="codicon" [class.codicon-layout-panel]="bottomOpen()" [class.codicon-layout-panel-off]="!bottomOpen()" aria-hidden="true"></span>
+    </button>
+    <button type="button" class="icon" aria-label="Console" [attr.aria-pressed]="consoleOpen()" (click)="toggleConsole()">
+      <span class="codicon" [class.codicon-layout-sidebar-right]="consoleOpen()" [class.codicon-layout-sidebar-right-off]="!consoleOpen()" aria-hidden="true"></span>
+    </button>
     <button type="button" [disabled]="loggingOut()" (click)="logout()">
       {{ loggingOut() ? 'Logging out…' : 'Log out' }}
     </button>
@@ -58,11 +62,13 @@
     <div class="bottom__bar">
       <div class="bottom__tabs" role="tablist">
         <button type="button" role="tab" [attr.aria-selected]="bottomTab() === 'workspace'"
-                [class.is-on]="bottomTab() === 'workspace'" (click)="bottomTab.set('workspace')">WORKSPACE</button>
+                (click)="bottomTab.set('workspace')">WORKSPACE</button>
         <button type="button" role="tab" [attr.aria-selected]="bottomTab() === 'terminal'"
-                [class.is-on]="bottomTab() === 'terminal'" (click)="bottomTab.set('terminal')">TERMINAL</button>
+                (click)="bottomTab.set('terminal')">TERMINAL</button>
       </div>
-      <button type="button" class="bottom__collapse" (click)="toggleBottom()">Hide</button>
+      <button type="button" class="bottom__collapse icon" aria-label="Hide panel" (click)="toggleBottom()">
+        <span class="codicon codicon-close" aria-hidden="true"></span>
+      </button>
     </div>
     <div class="bottom__content" role="tabpanel">
       @if (bottomTab() === 'workspace') {

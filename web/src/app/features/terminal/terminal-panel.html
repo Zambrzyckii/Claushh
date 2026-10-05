@@ -6,11 +6,11 @@
                 [title]="t.cwd === '' ? 'projects directory' : t.cwd" (click)="store.activate(t.id)">
           {{ t.title }}@if (t.exited) {<span class="faint"> (exited)</span>}
         </button>
-        <button type="button" class="tab__close" [attr.aria-label]="'Close terminal ' + t.title" (click)="close(t)">×</button>
+        <button type="button" class="tab__close icon" [attr.aria-label]="'Close terminal ' + t.title" (click)="close(t)"><span class="codicon codicon-close" aria-hidden="true"></span></button>
       </div>
     }
   </div>
-  <button type="button" class="new" [disabled]="store.connectionState() !== 'connected'" (click)="store.open()">New terminal</button>
+  <button type="button" class="new icon" aria-label="New terminal" [disabled]="store.connectionState() !== 'connected'" (click)="store.open()"><span class="codicon codicon-add" aria-hidden="true"></span></button>
   @if (store.connectionState() === 'connecting') {
     <span class="state faint">connecting…</span>
   } @else if (store.connectionState() === 'reconnecting') {
@@ -19,7 +19,7 @@
   @if (store.error(); as error) {
     <span class="state error" role="alert">{{ error }}</span>
     @if (store.connectionState() === 'disconnected') {
-      <button type="button" class="new" (click)="retry()">reconnect</button>
+      <button type="button" class="new link" (click)="retry()">reconnect</button>
     }
   }
 </div>

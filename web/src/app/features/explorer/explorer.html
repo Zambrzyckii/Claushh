@@ -1,6 +1,6 @@
 <div class="header">
   <span>EXPLORER</span>
-  <button type="button" class="header__refresh" (click)="refreshClicked()">Refresh</button>
+  <button type="button" class="header__refresh icon" aria-label="Refresh" (click)="refreshClicked()"><span class="codicon codicon-refresh" aria-hidden="true"></span></button>
 </div>
 
 <div class="tree">
@@ -11,13 +11,13 @@
               [attr.aria-expanded]="row.entry.kind === 'directory' ? row.expanded : null"
               (click)="select(row)">
         @if (row.entry.kind === 'directory') {
-          <span class="row__chevron" aria-hidden="true">{{ row.expanded ? '▾' : '▸' }}</span>
+          <span class="row__chevron codicon" [class.codicon-chevron-down]="row.expanded" [class.codicon-chevron-right]="!row.expanded" aria-hidden="true"></span>
         } @else {
           <span class="row__chevron" aria-hidden="true"></span>
         }
         <span class="row__name">{{ row.entry.name }}</span>
         @if (decorations().get(row.entry.path); as mark) {
-          <span class="row__mark" [class.row__mark--dir]="row.entry.kind === 'directory'"
+          <span class="row__mark" [attr.data-mark]="mark" [class.row__mark--dir]="row.entry.kind === 'directory'"
                 [attr.aria-label]="markLabel(mark)" [title]="markLabel(mark)">{{ mark }}</span>
         }
       </button>

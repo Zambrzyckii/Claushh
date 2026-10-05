@@ -9,7 +9,7 @@ dialog {
   font-size: 13px;
 
   &::backdrop {
-    background: rgb(0 0 0 / 55%);
+    background: var(--scrim);
   }
 }
 
@@ -34,37 +34,12 @@ h3 {
   color: var(--text-muted);
 }
 
-button {
-  background: transparent;
-  border: 1px solid var(--border-strong);
-  border-radius: 3px;
-  color: var(--text);
-  padding: 4px 10px;
-  font-size: 12px;
-
-  &:disabled {
-    opacity: 0.45;
-    cursor: default;
-  }
-
-  &.danger {
-    border-color: var(--accent);
-    color: var(--accent);
-  }
-}
-
-.close {
-  border: none;
-  font-size: 18px;
-  color: var(--text-muted);
-}
-
 .muted {
   color: var(--text-muted);
 }
 
 .error {
-  color: var(--accent);
+  color: var(--error);
 }
 
 .mono {
@@ -93,15 +68,15 @@ th {
 
 td {
   padding: 6px 8px;
-  border-bottom: 1px solid #1f2126;
+  border-bottom: 1px solid var(--border);
 }
 
 .session--current td {
-  background: #1c1e23;
+  background: var(--hover);
 }
 
 .login--failed td:last-child {
-  color: var(--accent);
+  color: var(--error);
 }
 
 .actions {
@@ -122,4 +97,9 @@ td {
   overflow: hidden;
   clip: rect(0 0 0 0);
   white-space: nowrap;
+}
+
+.actions button,
+.buttons button {
+  border-color: var(--border-strong);
 }

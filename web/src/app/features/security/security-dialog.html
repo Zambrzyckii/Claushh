@@ -1,7 +1,7 @@
 <dialog #dialog aria-labelledby="security-title" (cancel)="close()">
   <div class="head">
     <h2 id="security-title">Security</h2>
-    <button type="button" class="close" aria-label="Close" (click)="close()">×</button>
+    <button type="button" class="icon" aria-label="Close" (click)="close()"><span class="codicon codicon-close" aria-hidden="true"></span></button>
   </div>
 
   @if (timer.label(); as remaining) {

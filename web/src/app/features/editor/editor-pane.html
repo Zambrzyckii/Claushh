@@ -5,10 +5,10 @@
               [title]="doc.path" (click)="store.activate(doc.path)">
         {{ doc.name }}
         @if (dirty(doc)) {
-          <span class="tab__dirty" aria-label="unsaved changes">●</span>
+          <span class="tab__dirty codicon codicon-circle-filled" aria-label="unsaved changes"></span>
         }
       </button>
-      <button type="button" class="tab__close" [attr.aria-label]="'Close ' + doc.name" (click)="close(doc, $event)">×</button>
+      <button type="button" class="tab__close icon" [attr.aria-label]="'Close ' + doc.name" (click)="close(doc, $event)"><span class="codicon codicon-close" aria-hidden="true"></span></button>
     </div>
   }
 </div>
@@ -18,7 +18,7 @@
     @for (part of breadcrumb(); track $index; let last = $last) {
       <span [class.breadcrumb__current]="last">{{ part }}</span>
       @if (!last) {
-        <span class="breadcrumb__sep">›</span>
+        <span class="breadcrumb__sep codicon codicon-chevron-right" aria-hidden="true"></span>
       }
     }
     <span class="breadcrumb__state">

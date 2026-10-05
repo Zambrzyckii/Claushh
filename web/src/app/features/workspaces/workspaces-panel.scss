@@ -5,58 +5,17 @@
   font-size: 13px;
 }
 
-button {
-  background: transparent;
-  border: 1px solid var(--border-strong);
-  border-radius: 3px;
-  color: var(--text);
-  padding: 3px 10px;
-  font-size: 12px;
-
-  &:disabled {
-    cursor: default;
-    opacity: 0.45;
-  }
-
-  &.primary {
-    background: var(--text);
-    border-color: var(--text);
-    color: var(--bg);
-    opacity: 1;
-  }
-}
-
-.link {
-  border: none;
-  padding: 2px 4px;
-  color: var(--text-muted);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-
-  &:hover {
-    color: var(--text-strong);
-  }
-}
-
-.dashed {
-  text-align: left;
-  border-style: dashed;
-  color: var(--text-muted);
-  padding: 6px 10px;
-}
-
 .faint {
   color: var(--text-faint);
 }
 
 .changed {
-  color: var(--accent);
+  color: var(--git-modified);
 }
 
 .error {
   margin: 4px 0;
-  color: var(--accent);
+  color: var(--error);
   font-size: 12px;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -81,8 +40,10 @@ button {
   overflow-y: auto;
   border-right: 1px solid var(--border);
 
-  .dashed {
+  &__new {
     margin-top: 6px;
+    align-self: flex-start;
+    color: var(--text-muted);
   }
 }
 
@@ -91,15 +52,11 @@ button {
   justify-content: space-between;
   align-items: center;
   width: 100%;
-  border: none;
-  border-radius: 4px;
-  padding: 7px 10px;
-  font-size: 13px;
-  color: #c4c4bd;
+  padding: 6px 10px;
   text-align: left;
 
   &--active {
-    background: #24262c;
+    background: var(--selection);
     color: var(--text-strong);
   }
 
@@ -133,15 +90,6 @@ button {
     }
   }
 
-  input {
-    padding: 5px 8px;
-    background: var(--bg);
-    border: 1px solid var(--border-strong);
-    border-radius: 3px;
-    color: var(--text);
-    font-size: 12px;
-  }
-
   &__buttons {
     display: flex;
     gap: 6px;
@@ -163,9 +111,9 @@ table {
 th {
   position: sticky;
   top: 0;
-  background: var(--surface-2);
+  background: var(--surface);
   padding: 8px 8px;
-  border-bottom: 1px solid #222429;
+  border-bottom: 1px solid var(--border);
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.06em;
@@ -198,7 +146,7 @@ th {
 
 td {
   padding: 6px 8px;
-  border-bottom: 1px solid #1f2126;
+  border-bottom: 1px solid var(--border);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -210,7 +158,7 @@ td {
 
 .repo {
   &--open {
-    background: #1c1e23;
+    background: var(--hover);
   }
 
   &__name {
@@ -226,6 +174,14 @@ td {
   text-align: right;
   padding-right: 16px;
 
+  button {
+    border-color: var(--border-strong);
+  }
+
+  button.is-on:disabled {
+    opacity: 1;
+  }
+
   button + button {
     margin-left: 6px;
   }
@@ -239,6 +195,6 @@ td {
   color: var(--text-muted);
 
   &.error {
-    color: var(--accent);
+    color: var(--error);
   }
 }

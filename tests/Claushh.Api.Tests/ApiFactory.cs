@@ -172,6 +172,7 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         foreach (var file in new[]
                  {
                      "main-TEST.js", "worker-TEST.js", "monaco.css", "favicon.ico", "media/codicon-TEST.ttf",
+                     "media/font-TEST.woff2", "media/font-TEST.woff",
                      "api/decoy.js", "hubs/decoy.js",
                  })
         {

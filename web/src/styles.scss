@@ -1,16 +1,30 @@
-// Global color and typography tokens. Values taken from the mockup,
-// the palette will still be refined (see docs/PLAN.md, section "Interface").
+// Design tokens and the shared controls of the whole app (docs/ARCHITECTURE.md, "Frontend"; decisions: docs/PLAN.md,
+// "Frontend decisions (UI refresh)"). Components keep only their layout: a component selector outranks these element
+// rules, so a local button base would undo them.
 :root {
-  --bg: #141518;
-  --surface: #18191d;
-  --surface-2: #16171a;
-  --border: #26282e;
-  --border-strong: #2c2e35;
+  --bg: #141518; // the editor, inputs, the active editor tab, the login page
+  --surface: #18191d; // top bar, tab bars, explorer, console, bottom panel, terminal, status bar, dialogs, menu
+  --border: #26282e; // one step lighter than --surface
+  --border-strong: #2c2e35; // inputs, dialogs
   --text: #d6d6d0;
   --text-strong: #f0eee6;
   --text-muted: #8e9098;
   --text-faint: #6c6f78;
-  --accent: #e0a458;
+  --accent: #e0a458; // focus, the primary action, the active tab, the cursor
+  --accent-hover: #ca944f; // --accent darkened 10 %
+  --accent-fg: #141518; // text on --accent
+  --focus: var(--accent);
+  --hover: #1f2126;
+  --selection: #262830;
+  --scrim: rgb(0 0 0 / 55%);
+  --error: #f48771;
+  --warning: #cca700;
+  --git-added: #81b88b;
+  --git-modified: #e2c08d;
+  --git-deleted: #c74e39;
+  --git-untracked: #73c991;
+  --git-renamed: #73c991;
+  --git-conflict: #e4676b;
 
   --font-ui: 'IBM Plex Sans', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;
@@ -30,6 +44,128 @@ body {
 }
 
 button {
-  font: inherit;
+  font: 13px/18px var(--font-ui);
+  padding: 3px 10px;
+  min-height: 26px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text);
   cursor: pointer;
+}
+
+button:has(> .codicon) {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+button:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--text-strong);
+}
+
+button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+button.primary {
+  background: var(--accent);
+  color: var(--accent-fg);
+}
+
+button.primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+  color: var(--accent-fg);
+}
+
+button.danger {
+  color: var(--error);
+}
+
+button.icon {
+  width: 26px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+}
+
+button.link {
+  min-height: 0;
+  padding: 2px 4px;
+  color: var(--text-muted);
+}
+
+button:active:not(:disabled),
+button.is-on,
+button[aria-pressed='true'] {
+  background: var(--selection);
+  color: var(--text-strong);
+}
+
+input,
+select,
+textarea {
+  font: 13px/18px var(--font-ui);
+  padding: 4px 8px;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+}
+
+:focus-visible {
+  outline: 1px solid var(--focus);
+  outline-offset: 2px;
+}
+
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[role='tab']:focus-visible,
+.row:focus-visible {
+  outline-offset: -1px;
+}
+
+// Monaco and xterm show their own cursor; their hidden input fields get no ring.
+.monaco-editor :focus-visible,
+.xterm :focus-visible {
+  outline: none;
+}
+
+[role='tab'] {
+  border-radius: 0;
+  padding: 0 12px;
+  color: var(--text-muted);
+}
+
+[role='tab'][aria-selected='true'] {
+  color: var(--text-strong);
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.section-title {
+  font: 600 11px/1 var(--font-ui);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+@media (pointer: coarse) {
+  button {
+    min-height: 36px;
+  }
+
+  button.link {
+    min-height: 32px;
+  }
+
+  button.icon,
+  [role='tab'] {
+    min-height: 40px;
+    min-width: 40px;
+  }
 }

@@ -1,5 +1,8 @@
 import type * as MonacoApi from 'monaco-editor';
 
+import { monoFontReady, onFontsLoaded } from '../../core/browser/fonts';
+import { cssToken } from '../../core/browser/theme';
+
 /**
  * Lazy loading of Monaco (a few MB) only when the editor is first opened,
  * so that the login screen and the rest of the app load quickly.
@@ -38,9 +41,12 @@ export function loadMonaco(): Promise<Monaco> {
     };
     const [monaco] = await Promise.all([
       import('monaco-editor') as unknown as Promise<Monaco>,
-      loadStylesheet(MONACO_STYLESHEET)
+      loadStylesheet(MONACO_STYLESHEET),
+      monoFontReady()
     ]);
     defineTheme(monaco);
+    // A font that arrives after the editor measured its cells (e.g. the bold face) needs a new measurement.
+    onFontsLoaded(() => monaco.editor.remeasureFonts());
     return monaco;
   })();
   // A failed load (e.g. a dropped connection) does not block the next attempt.
@@ -77,7 +83,7 @@ function loadStylesheet(href: string): Promise<void> {
 
 export const MONACO_THEME = 'claushh-dark';
 
-/** Theme matching the mockup and the tokens from `web/src/styles.scss`. */
+/** Theme from the tokens of `web/src/styles.scss`; only the syntax colors and the selection are fixed here. */
 function defineTheme(monaco: Monaco): void {
   monaco.editor.defineTheme(MONACO_THEME, {
     base: 'vs-dark',
@@ -91,15 +97,16 @@ function defineTheme(monaco: Monaco): void {
       { token: 'delimiter', foreground: 'a9abb3' }
     ],
     colors: {
-      'editor.background': '#141518',
-      'editor.foreground': '#d6d6d0',
-      'editor.lineHighlightBackground': '#1e2026',
-      'editorLineNumber.foreground': '#6c6f78',
-      'editorLineNumber.activeForeground': '#d6d6d0',
-      'editorCursor.foreground': '#e0a458',
+      'editor.background': cssToken('--bg'),
+      'editor.foreground': cssToken('--text'),
+      'editor.lineHighlightBackground': cssToken('--hover'),
+      'editorLineNumber.foreground': cssToken('--text-faint'),
+      'editorLineNumber.activeForeground': cssToken('--text'),
+      'editorCursor.foreground': cssToken('--accent'),
       'editor.selectionBackground': '#2c3a52',
-      'editorWidget.background': '#18191d',
-      'editorWidget.border': '#2c2e35'
+      'editorWidget.background': cssToken('--surface'),
+      'editorWidget.border': cssToken('--border-strong'),
+      focusBorder: cssToken('--accent')
     }
   });
 }
