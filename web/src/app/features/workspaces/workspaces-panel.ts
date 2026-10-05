@@ -7,8 +7,9 @@ import { countLabel, timeAgo } from '../../core/text/format';
 import { WorkspacesStore } from './workspaces-store';
 
 /**
- * The "Workspace" tab in the bottom panel: workspaces on the left, on the right a table of repositories of the selected
- * workspace (branch, state, last commit, remotes) with Open / Pull / Push actions, cloning below.
+ * The "Workspace" tab in the bottom panel (on a phone, the Workspace sheet with repository cards): workspaces on the
+ * left, on the right a table of repositories of the selected workspace (branch, state, last commit, remotes) with
+ * Open / Pull / Push actions, cloning below.
  * State and operations: WorkspacesStore.
  */
 @Component({

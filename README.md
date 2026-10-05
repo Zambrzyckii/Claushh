@@ -405,5 +405,6 @@ The console tests run a fake `claude` built with the solution (`tests/Claushh.Fa
 
 ## Third-party assets
 
-Icons: [Codicons](https://github.com/microsoft/vscode-codicons) by Microsoft, CC BY 4.0. Fonts: IBM Plex Sans and
-JetBrains Mono, SIL Open Font License 1.1, through Fontsource.
+Icons: [Codicons](https://github.com/microsoft/vscode-codicons) by Microsoft,
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Fonts: IBM Plex Sans and JetBrains Mono, SIL Open Font
+License 1.1, through Fontsource.

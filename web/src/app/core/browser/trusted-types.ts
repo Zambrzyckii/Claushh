@@ -30,7 +30,7 @@ export function installTrustedTypesPolicy(): void {
       if (url.origin === location.origin && /^\/[\w.-]+\.js$/.test(url.pathname) && query && !url.hash) {
         return url.href;
       }
-      throw new TypeError(`Trusted Types: zablokowany adres skryptu ${value}`);
+      throw new TypeError(`Trusted Types: blocked script URL ${value}`);
     }
   });
 }

@@ -27,10 +27,13 @@ const tab = (page: Page, name: 'Editor' | 'Terminal' | 'Console') => page.getByR
 const noSidewaysScroll = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
 
 test('a phone gets the phone layout, the login fits, and no tab scrolls sideways', async ({ page }) => {
+  const phone = page.viewportSize()!;
+  await page.setViewportSize({ width: 375, height: 667 });
   await page.goto('/login');
   expect(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(true);
   await expect(page.locator('#userName')).toBeVisible();
   expect(await noSidewaysScroll(page)).toBe(true);
+  await page.setViewportSize(phone);
 
   await login(page);
   await expect(tab(page, 'Editor')).toHaveAttribute('aria-selected', 'true');
@@ -76,7 +79,11 @@ test('switching tabs keeps the editor and its unsaved text, and the terminal mou
   await tab(page, 'Terminal').click();
   await typeInTerminal(page, 'echo telefon');
   await expect.poll(() => terminalText(page)).toMatch(/^telefon\s*$/m);
+  await activeTerminal(page).locator('.xterm').evaluate((node) => node.setAttribute('data-probe', 'kept'));
   await tab(page, 'Console').click();
+  await expect(page.locator('#phone-pane-editor')).toHaveAttribute('inert', '');
+  await expect(page.locator('#phone-pane-terminal')).toHaveAttribute('inert', '');
+  expect(await page.locator('#phone-pane-console').getAttribute('inert')).toBeNull();
   await tab(page, 'Editor').click();
 
   await expect(page.locator('.monaco-editor[data-probe="kept"]')).toHaveCount(1);
@@ -84,6 +91,7 @@ test('switching tabs keeps the editor and its unsaved text, and the terminal mou
   await expect(page.locator('.tab__dirty')).toBeVisible();
   await tab(page, 'Terminal').click();
   await expect(activeTerminal(page).locator('.xterm-rows')).toBeVisible();
+  await expect(activeTerminal(page).locator('.xterm[data-probe="kept"]')).toHaveCount(1);
   expect((await mockState(request)).terminals).toHaveLength(1);
 });
 
@@ -189,4 +197,27 @@ test('the Paste key pastes through the same check as a paste', async ({ page, co
   await question.getByRole('button', { name: 'Paste' }).click();
   await expect.poll(() => terminalText(page)).toMatch(/^jeden\s*$/m);
   await expect.poll(() => terminalText(page)).toMatch(/^dwa\s*$/m);
+});
+
+test('a long paste keeps the decision above the keys, and the keys wait for it', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await login(page);
+  await tab(page, 'Terminal').click();
+  const terminal = activeTerminal(page);
+  await terminal.locator('.xterm-screen').click();
+  await page.evaluate(() =>
+    navigator.clipboard.writeText(Array.from({ length: 20 }, (_, i) => `echo ${i} ${'x'.repeat(150)}`).join('\n'))
+  );
+  const keys = terminal.getByRole('toolbar', { name: 'Terminal keys' });
+  await keys.getByRole('button', { name: 'Paste' }).tap();
+  const question = terminal.getByRole('alertdialog');
+  const paste = question.getByRole('button', { name: 'Paste' });
+  await paste.scrollIntoViewIfNeeded();
+  const button = (await paste.boundingBox())!;
+  const row = (await keys.boundingBox())!;
+  expect(button.y + button.height).toBeLessThanOrEqual(row.y);
+  await expect(keys.getByRole('button', { name: 'Esc' })).toBeDisabled();
+  await question.getByRole('button', { name: 'Cancel' }).click();
+  await expect(question).toHaveCount(0);
+  await expect(keys.getByRole('button', { name: 'Esc' })).toBeEnabled();
 });

@@ -97,7 +97,8 @@ const PASTE_MARGIN = 16;
     @if (layout.phone()) {
       <div class="keys" role="toolbar" aria-label="Terminal keys">
         @for (key of keys; track key.id) {
-          <button type="button" [attr.aria-label]="key.label" [attr.aria-pressed]="key.id === 'ctrl' ? ctrl() : null"
+          <button type="button" [disabled]="!!pasteRequest()" [attr.aria-label]="key.label"
+                  [attr.aria-pressed]="key.id === 'ctrl' ? ctrl() : null"
                   (pointerdown)="$event.preventDefault()" (mousedown)="$event.preventDefault()" (click)="press(key.id)">
             @if (key.icon) {
               <span [class]="'codicon codicon-' + key.icon" aria-hidden="true"></span>
@@ -137,6 +138,7 @@ const PASTE_MARGIN = 16;
       font-size: 12px;
     }
     .decision {
+      box-sizing: border-box;
       position: absolute;
       right: 12px;
       bottom: 8px;
@@ -199,6 +201,9 @@ const PASTE_MARGIN = 16;
     :host(.phone) .notice,
     :host(.phone) .decision:not(.decision--top) {
       bottom: 48px;
+    }
+    :host(.phone) .decision {
+      max-height: calc(100% - 56px);
     }
   `
 })

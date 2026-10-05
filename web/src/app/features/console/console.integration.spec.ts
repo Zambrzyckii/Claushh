@@ -140,7 +140,7 @@ describe('Console (integration)', () => {
       { conversationId: 'c-new', text: 'napisz testy', model: 'haiku', effort: 'medium', mode: 'plan' }
     ]);
     expect(textarea.value).toBe('');
-    expect(text(root)).toContain('session · started');
+    expect(text(root)).toMatch(/session · started \d{2}:\d{2}/);
     expect(text(root)).toContain('working…');
   });
 

@@ -73,12 +73,12 @@ Frontend decisions (UI refresh):
 - The two layouts are two template branches, so crossing the breakpoint recreates the views: Monaco's undo history
   is lost, the text is kept and terminals attach again. Rejected: one DOM tree placed by CSS (every pane would have
   to work in both layouts).
-- Inside the phone layout nothing is destroyed: inactive tabs are hidden with `visibility`, the terminal mounts on
-  its first visit (opening it starts a tmux session), and the explorer drawer stays mounted and slides with a CSS
-  transition, so it keeps its expanded folders. The sheets are native `<dialog>`s opened with `showModal()` (Esc, a
-  focus trap and an inert page come with it) that slide with `@starting-style`; browsers without `overlay`
-  transitions close them without the slide. Rejected: `@if` with `animate.leave` for the drawer (each close would
-  lose the tree) and for the sheets (Esc, the focus trap and the inert page by hand).
+- Inside the phone layout nothing is destroyed: inactive tabs are hidden with `visibility` and made `inert` (they cannot
+  hold the focus), the terminal mounts on its first visit (opening it starts a tmux session), and the explorer drawer
+  stays mounted and slides with a CSS transition, so it keeps its expanded folders. The sheets are native `<dialog>`s
+  opened with `showModal()` (Esc, a focus trap and an inert page come with it) that slide with `@starting-style`;
+  browsers without `overlay` transitions close them without the slide. Rejected: `@if` with `animate.leave` for the
+  drawer (each close would lose the tree) and for the sheets (Esc, the focus trap and the inert page by hand).
 - Touch is separate from the phone layout: with a coarse pointer, Enter in the console makes a new line and a Send
   button sends, and the editor and the terminal never take the focus on their own (the soft keyboard would open).
   Rejected: tying this to the phone layout (a tablet in the desktop layout could not send without Shift+Enter).

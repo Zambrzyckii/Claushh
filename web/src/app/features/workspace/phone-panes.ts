@@ -13,9 +13,9 @@ export type PhoneTab = 'editor' | 'terminal' | 'console';
 
 /**
  * The phone layout's middle (docs/ARCHITECTURE.md, "Frontend" → "Phone layout"): the tabs Editor, Terminal and Console
- * and their panes. Inactive panes are hidden, never destroyed, so Monaco and xterm keep their state and size; the
- * terminal mounts on its first visit, because opening it starts a tmux session. The explorer is a drawer in the Editor
- * tab and stays mounted, so it keeps its expanded folders.
+ * and their panes. Inactive panes are hidden and inert (they cannot hold the focus), never destroyed, so Monaco and
+ * xterm keep their state and size; the terminal mounts on its first visit, because opening it starts a tmux session.
+ * The explorer is a drawer in the Editor tab and stays mounted, so it keeps its expanded folders.
  */
 @Component({
   selector: 'app-phone-panes',

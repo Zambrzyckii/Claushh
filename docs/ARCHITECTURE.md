@@ -113,7 +113,7 @@ On the server (decisions: `PLAN.md`, "Deployment decisions"):
 | `web/src/app/features/console/console-store.ts` | conversation state built from hub events, sending, permissions, interrupt, new conversation |
 | `web/src/app/features/console/console-panel.*` | the Console panel: the conversation as plain text, prompt field, model / effort / mode |
 | `web/src/app/features/workspaces/workspaces-store.ts` | state of the Workspace panel: workspaces, repositories, pull / push, create, clone |
-| `web/src/app/features/workspaces/workspaces-panel.*` | the "Workspace" tab in the bottom panel (workspace list, repository table) |
+| `web/src/app/features/workspaces/workspaces-panel.*` | the "Workspace" tab in the bottom panel and the Workspace sheet on a phone (workspace list, repository table or cards) |
 | `web/src/app/features/workspaces/validation.ts` | validation of the workspace name and the clone URL |
 | `web/src/app/features/terminal/terminal-store.ts` | terminal list, active terminal, opening in the repo directory, closing, queues of typed characters (one per terminal) |
 | `web/src/app/features/terminal/terminal-panel.*` | the "Terminal" tab: the terminal bar and their views |
@@ -523,7 +523,7 @@ Backend rules the tables do not show:
 - Commits are made via the console or the terminal. The panel has only Open / Pull / Push (as in the mockup).
 - Cloning only from `https://` URLs in strict form: `https://host[:port]/path`, where host is
   `[a-z0-9.-]`, and path segments are `[A-Za-z0-9._~-]` (the `CLONE_URL` expression in `validation.ts`), and in
-  canonical form (`new URL(adres).href` equal to the URL, so no `..`, no port 443, no uppercase letters in the host).
+  canonical form (`new URL(url).href` equal to the URL, so no `..`, no port 443, no uppercase letters in the host).
   No username and password (the token would end up in `.git/config`) and no `@`, `\`, `%`, `?`, `#`, spaces: different parsers
   read them differently, e.g. in `https://github.com\@evil.com/r` the browser and .NET see the host `github.com`,
   while git and curl see `evil.com`. The frontend checks this before sending and sends exactly the checked string,
@@ -619,6 +619,7 @@ Security requirements for the backend:
   application cursor mode (`ESC O A` instead of `ESC [ A`). Ctrl is sticky (`aria-pressed`): the next typed
   character becomes its control code (`@`, `A-Z`, `[`, `\`, `]`, `^`, `_` and space; `?` gives DEL), anything else
   passes unchanged, and Ctrl turns off; the other keys turn it off too.
+  While a paste waits for its decision the keys are disabled, and the decision panels end above the row.
 - **The Paste key** reads `navigator.clipboard.readText()` and pastes through the same code as a paste (`pasteText`:
   the cleaning, the length limit, the decision panel for line endings); a refused read shows "Could not read the
   clipboard.".
@@ -1178,7 +1179,7 @@ Conventions:
 - Standalone components, local state in `signal()`.
 - Things shared by the whole app (auth, browser access, API clients, SignalR, the open project,
   shared text helpers) go in `web/src/app/core/`.
-- Each app feature in a separate folder `web/src/app/features/<nazwa>/`, lazy-loaded from the routes.
+- Each app feature in a separate folder `web/src/app/features/<name>/`, lazy-loaded from the routes.
 - Colors and fonts only through the tokens of `styles.scss`, no hard-coded colors in components; the Monaco and
   xterm themes read them through `theme.ts` (only the syntax colors, the selection and the 16 terminal colors are
   fixed there). Buttons, inputs, focus and tabs come from the shared controls in `styles.scss`: `.primary`,
@@ -1211,9 +1212,10 @@ Decisions: `PLAN.md`, "Frontend decisions (UI refresh)".
   `PhonePanes` (`features/workspace/phone-panes.*`: the tabs Editor, Terminal and Console) and a one-line status bar
   (cursor and language only in the Editor tab). Crossing the breakpoint recreates the editor, terminal and console
   views: Monaco's undo history is lost, `EditorStore` keeps the text, terminals attach again.
-- Panes are hidden with `visibility`, never destroyed, so Monaco and xterm keep their size and state; the terminal
-  mounts on its first visit and then stays. The explorer is a drawer in the Editor tab that stays mounted, closed by
-  opening a file or tapping the scrim; the Editor tab also has Save.
+- Panes are hidden with `visibility` and made `inert`, so an inactive pane cannot hold the focus; they are never
+  destroyed, so Monaco and xterm keep their size and state. The terminal mounts on its first visit and then stays.
+  The explorer is a drawer in the Editor tab that stays mounted, closed by opening a file or tapping the scrim; the
+  Editor tab also has Save.
 - The Workspace panel and the Security window are full-screen `<dialog class="sheet">`s opened with `showModal()`;
   the Workspace sheet closes when a repository opens. Their tables become cards (`td[data-label]`); the repository
   cards keep the Refresh button.

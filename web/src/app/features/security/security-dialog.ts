@@ -8,8 +8,8 @@ import { Dialogs } from '../../core/browser/dialogs';
 import { formatDateTime } from '../../core/text/format';
 
 /**
- * The Security window (opened by the user name in the top bar): time until the session ends, active sessions that can be
- * ended, login history, "Log out other sessions" and "Log out everywhere".
+ * The Security window (opened by the user name in the top bar, on a phone from the menu): time until the session
+ * ends, active sessions that can be ended, login history, "Log out other sessions" and "Log out everywhere".
  * Native `<dialog>` with `showModal()`: focus stays in the window, Esc closes it. On a phone it is a full-screen sheet.
  */
 @Component({

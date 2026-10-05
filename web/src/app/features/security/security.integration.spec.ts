@@ -240,6 +240,7 @@ describe('Session and security (integration)', () => {
     expect(root.querySelectorAll('tr.session')).toHaveLength(2);
     expect(text(root, 'tr.session--current')).toContain('this session');
     expect(root.querySelectorAll('tr.login--failed')).toHaveLength(1);
+    expect(text(root, 'tr.login--failed')).toMatch(/\d{2}\/\d{2}\/\d{4}, \d{2}:\d{2}/);
 
     root.querySelector<HTMLButtonElement>('tr.session:not(.session--current) button')!.click();
     const revoke = http.expectOne('/api/auth/sessions/b');

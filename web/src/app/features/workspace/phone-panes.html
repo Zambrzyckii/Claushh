@@ -18,7 +18,7 @@
 
 <div class="panes">
   <section role="tabpanel" class="pane" id="phone-pane-editor" aria-labelledby="phone-tab-editor"
-           [class.pane--active]="tab() === 'editor'">
+           [class.pane--active]="tab() === 'editor'" [attr.inert]="tab() === 'editor' ? null : ''">
     <app-editor-pane />
     <div class="scrim" [class.scrim--on]="drawerOpen()" (click)="drawerOpen.set(false)"></div>
     <nav class="drawer" [class.drawer--open]="drawerOpen()" aria-label="File explorer">
@@ -27,13 +27,13 @@
     </nav>
   </section>
   <section role="tabpanel" class="pane" id="phone-pane-terminal" aria-labelledby="phone-tab-terminal"
-           [class.pane--active]="tab() === 'terminal'">
+           [class.pane--active]="tab() === 'terminal'" [attr.inert]="tab() === 'terminal' ? null : ''">
     @if (terminalVisited()) {
       <app-terminal-panel />
     }
   </section>
   <section role="tabpanel" class="pane" id="phone-pane-console" aria-labelledby="phone-tab-console"
-           [class.pane--active]="tab() === 'console'">
+           [class.pane--active]="tab() === 'console'" [attr.inert]="tab() === 'console' ? null : ''">
     <app-console-panel />
   </section>
 </div>
