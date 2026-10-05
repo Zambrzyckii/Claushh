@@ -28,6 +28,9 @@
 
   --font-ui: 'IBM Plex Sans', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  --motion-in: 200ms cubic-bezier(0.2, 0, 0, 1); // panels sliding in
+  --motion-out: 150ms cubic-bezier(0.4, 0, 1, 1); // panels sliding out
 }
 
 html,
@@ -167,5 +170,57 @@ textarea:focus-visible,
   [role='tab'] {
     min-height: 40px;
     min-width: 40px;
+  }
+}
+
+// Panels slide with transform only (docs/ARCHITECTURE.md, "Frontend"): the classes that animate.enter and
+// animate.leave add. Global, so Angular never renames the keyframes.
+.slide-in-right {
+  animation: slide-in-right var(--motion-in);
+}
+
+.slide-out-right {
+  animation: slide-out-right var(--motion-out) forwards;
+}
+
+.slide-in-up {
+  animation: slide-in-up var(--motion-in);
+}
+
+.slide-out-down {
+  animation: slide-out-down var(--motion-out) forwards;
+}
+
+@keyframes slide-in-right {
+  from {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes slide-out-right {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes slide-in-up {
+  from {
+    transform: translateY(100%);
+  }
+}
+
+@keyframes slide-out-down {
+  to {
+    transform: translateY(100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after,
+  ::backdrop {
+    animation: none !important;
+    transition: none !important;
   }
 }

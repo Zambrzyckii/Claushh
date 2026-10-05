@@ -68,6 +68,7 @@
   flex-grow: 1;
   min-height: 0;
   display: flex;
+  position: relative;
 }
 
 .explorer {
@@ -98,6 +99,15 @@
   background: var(--surface);
   border-left: 1px solid var(--border);
   font-family: var(--font-mono);
+}
+
+// While the column slides out, the collapsed strip is already there: the leaving column leaves the flow, so the
+// editor widens once instead of jumping.
+.console.slide-out-right {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
 }
 
 .console-collapsed {
@@ -155,6 +165,8 @@
 .statusbar {
   height: 26px;
   flex-shrink: 0;
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: space-between;

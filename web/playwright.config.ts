@@ -21,6 +21,7 @@ export default defineConfig({
     baseURL: BASE_URL,
     viewport: { width: 1440, height: 900 },
     trace: 'retain-on-failure',
+    reducedMotion: 'reduce',
     launchOptions: process.env['CHROMIUM_PATH'] ? { executablePath: process.env['CHROMIUM_PATH'] } : {}
   },
   webServer: {

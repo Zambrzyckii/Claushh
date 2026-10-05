@@ -61,6 +61,10 @@ Frontend decisions (UI refresh):
   inline SVGs (markup per icon) and text glyphs.
 - The Monaco and xterm themes read the tokens when they are created (`theme.ts`), so the palette lives in
   `styles.scss` only. Rejected: hex values repeated in TypeScript.
+- Panels slide in and out instead of appearing: `transform` only, 200 ms in and 150 ms out, nothing with reduced
+  motion. The console column and the bottom panel use Angular's `animate.enter`/`animate.leave`, without a package.
+  Rejected: animating width or height (xterm would refit and resize tmux on every frame) and `@angular/animations`
+  (deprecated, and a package).
 
 ## Tech stack
 

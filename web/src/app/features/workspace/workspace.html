@@ -47,7 +47,7 @@
   </main>
 
   @if (consoleOpen()) {
-    <aside class="console" aria-label="Console">
+    <aside class="console" aria-label="Console" animate.enter="slide-in-right" animate.leave="slide-out-right">
       <app-console-panel (collapse)="toggleConsole()" />
     </aside>
   } @else {
@@ -58,7 +58,7 @@
 </div>
 
 @if (bottomOpen()) {
-  <section class="bottom" aria-label="Panel">
+  <section class="bottom" aria-label="Panel" animate.enter="slide-in-up" animate.leave="slide-out-down">
     <div class="bottom__bar">
       <div class="bottom__tabs" role="tablist">
         <button type="button" role="tab" [attr.aria-selected]="bottomTab() === 'workspace'"
