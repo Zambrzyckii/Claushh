@@ -233,8 +233,9 @@ public sealed class CreateUserTests(ApiFactory api) : ApiTest(api)
     }
 
     [Fact]
-    public async Task Reset_password_refuses_when_the_account_changed_while_typing()
+    public async Task Reset_password_reads_the_new_password_before_the_account()
     {
+        // The account changes while the owner types: the reset reads the account only afterwards, so it still works.
         var terminal = new ScriptedTerminal(Api,
             _ =>
             {
@@ -246,9 +247,30 @@ public sealed class CreateUserTests(ApiFactory api) : ApiTest(api)
             },
             _ => NewPassword);
 
-        Assert.Equal(1, await ResetPasswordAsync(terminal));
+        Assert.Equal(0, await ResetPasswordAsync(terminal));
 
-        Assert.Contains(terminal.Output, line => line.Contains("changed while you typed", StringComparison.Ordinal));
+        var fresh = new ApiClient(Api);
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await fresh.LoginAsync(ApiFactory.UserName, NewPassword, Api.NextTotp())).StatusCode);
+    }
+
+    [Fact(Timeout = 60_000)]
+    public async Task Reset_password_refuses_when_the_account_changes_before_the_new_password_is_saved()
+    {
+        // As for --reset-totp: another writer changes the account and holds its row. The command reads the old row,
+        // then its first write waits for the lock and, once the change is committed, finds a different ConcurrencyStamp.
+        await using var scope = Api.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ClaushhDbContext>();
+        await using var change = await db.Database.BeginTransactionAsync();
+        await db.Database.ExecuteSqlRawAsync("""UPDATE "AspNetUsers" SET "ConcurrencyStamp" = 'changed meanwhile'""");
+        var terminal = new ScriptedTerminal(Api, _ => NewPassword, _ => NewPassword);
+
+        var command = ResetPasswordAsync(terminal); // not awaited yet: its first write waits for the row lock
+        await Api.WaitForALockWaitAsync();
+        await change.CommitAsync();
+
+        Assert.Equal(1, await command.WaitAsync(TestContext.Current.CancellationToken));
+        Assert.Contains(terminal.Output, line => line.Contains("changed while the command ran", StringComparison.Ordinal));
         var fresh = new ApiClient(Api);
         Assert.Equal(HttpStatusCode.NoContent,
             (await fresh.LoginAsync(ApiFactory.UserName, ApiFactory.Password, Api.NextTotp())).StatusCode);

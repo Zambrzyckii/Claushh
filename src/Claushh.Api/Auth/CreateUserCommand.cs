@@ -64,12 +64,11 @@ public sealed class CreateUserCommand(ClaushhDbContext db, UserManager<IdentityU
     }
 
     // `create-user --reset-password`: a leaked password. Shell access on the server proves more than the old password,
-    // so only the new one is asked for. One transaction, like RunAsync.
+    // so only the new one is asked for. It is read before the transaction starts, so a change of the account while the
+    // owner types does not refuse the reset. One transaction, like RunAsync.
     public async Task<int> ResetPasswordAsync(ITerminal terminal, CancellationToken ct)
     {
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
-        var user = await users.Users.FirstOrDefaultAsync(ct);
-        if (user is null)
+        if (!await users.Users.AnyAsync(ct))
         {
             return Fail(terminal, "There is no account yet. Run create-user without --reset-password.");
         }
@@ -80,6 +79,8 @@ public sealed class CreateUserCommand(ClaushhDbContext db, UserManager<IdentityU
         {
             return Fail(terminal, "Empty password, or the passwords differ. Nothing was changed.");
         }
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        var user = await users.Users.FirstAsync(ct);
         if (await users.CheckPasswordAsync(user, password))
         {
             return Fail(terminal, "The new password is the same as the old one. Nothing was changed.");
@@ -90,9 +91,7 @@ public sealed class CreateUserCommand(ClaushhDbContext db, UserManager<IdentityU
         var result = removed.Succeeded ? await users.AddPasswordAsync(user, password) : removed;
         if (!result.Succeeded)
         {
-            return Fail(terminal, result.Errors.Any(e => e.Code == nameof(IdentityErrorDescriber.ConcurrencyFailure))
-                ? "The account changed while you typed. Nothing was changed; run the command again."
-                : $"{string.Join(" ", result.Errors.Select(e => e.Description))} Nothing was changed.");
+            return Fail(terminal, SaveFailure(result));
         }
         await guard.UnlockAsync(user);
         await sessions.RevokeAllAsync(user.Id, ct);
