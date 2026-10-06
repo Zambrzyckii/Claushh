@@ -24,7 +24,7 @@ export interface MockState {
     cwd?: string;
     id?: string;
   }[];
-  prompts: { conversationId: string; text: string; model: string; effort: string; mode: string }[];
+  prompts: { conversationId: string; text: string; model: string; effort: string; mode: string; file?: { path: string; startLine?: number; endLine?: number } }[];
   terminals: { id: string; title: string; cwd: string; exited: boolean; inputs: string[]; sizes: [number, number][] }[];
   passkeyCount: number;
   registrationCount: number;

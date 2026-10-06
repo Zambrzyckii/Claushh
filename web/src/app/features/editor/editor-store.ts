@@ -70,6 +70,13 @@ export interface RevealRequest extends RevealTarget {
   seq: number;
 }
 
+/** A non-empty selection in the shown file, by lines (the console's file chip). */
+export interface LineSelection {
+  path: string;
+  startLine: number;
+  endLine: number;
+}
+
 @Injectable()
 export class EditorStore {
   private readonly files = inject(FilesApi);
@@ -91,6 +98,8 @@ export class EditorStore {
   /** Set by `open(path, at)`; CodeEditor selects and centres it once the file is shown. */
   readonly reveal = signal<RevealRequest | null>(null);
   private revealSeq = 0;
+  /** Set by CodeEditor; null without a selection. */
+  readonly selection = signal<LineSelection | null>(null);
 
   private readonly project = inject(ProjectContext, { optional: true });
 
@@ -240,6 +249,7 @@ export class EditorStore {
         this.language.set(null);
         this.indentation.set(null);
         this.eol.set(null);
+        this.selection.set(null);
       }
     }
     return true;

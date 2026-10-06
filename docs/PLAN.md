@@ -26,7 +26,7 @@ Layout modeled on VS Code:
 | Title bar | the command centre (workspace / repository / branch; a click shows Source Control), the toggles of the side bar, the panel and the console, the account menu with the user name, "Security…" and "Log out" |
 | Left | the activity bar with Explorer (OPEN EDITORS, the tree with file icons and git marks), Search (a query with case, whole word and regular expressions, the files to include and exclude, the results by file) and Source Control (workspaces and repositories with Open / Pull / Push, the open repository's changes) |
 | Center | the editor (Monaco) with tabs, editor actions (the changes view), breadcrumbs and the minimap; the Terminal panel below |
-| Right | **"Console"** as VS Code's secondary side bar: the conversation with Claude as monospace text without icons, images or the name "Claude" (step verbs, counts and notes in color); a composer card with chips for **model**, **effort** and **mode** (ask before edits / accept edits / plan) and Send; permission requests (yes / yes, always / no) |
+| Right | **"Console"** as VS Code's secondary side bar: the conversation with Claude as monospace text without icons, images or the name "Claude" (step verbs, counts and notes in color); a composer card with the open file's chip, chips for **model**, **effort** and **mode** (ask before edits / accept edits / plan) and Send; permission requests (yes / yes, always / no) |
 | Status bar | branch, number of changes, console status, unsaved files, cursor position, indentation, encoding, line endings, language, session countdown |
 
 The mockup also shows a tunnel status in the status bar. It was dropped as it would add nothing: through the tunnel
@@ -141,6 +141,12 @@ Frontend decisions (VS Code layout):
   the toggles and another repository at once; a new search cancels the request of the one before. The view stays
   mounted with the others, so its results survive a switch of view; on the phone the Editor tab's Search button opens
   the drawer on it.
+- The composer names the open file, as VS Code's chip does: the editor's active file when it lies in the open
+  repository, with the lines of a selection; × leaves it out until another file becomes active. The CLI gets a note
+  with the path only, which the model could read in its working directory anyway. When the server refuses the file
+  (the console moved or deleted it), the console leaves it out and keeps the prompt, so the next Send goes without it.
+  Rejected: `@path` in the text (its expansion is unverified, it is off for prompts starting with `/`, and paths with
+  spaces need quoting) and the file's contents (up to 5 MB of tokens, more than VS Code sends).
 
 ## Tech stack
 
@@ -509,6 +515,13 @@ Backend decisions (stage 3):
   commands by their first word.
 - A step's output keeps its last 32,000 characters. Conversations are deleted 90 days after their last event, like login
   attempts; the rules stay.
+- A prompt's open file (`SendPrompt.file`) becomes a second text block of the user line: "The user opened the file
+  src/main.c in the editor. This may or may not be related to the current task.", or with a selection "The user
+  selected lines 5 to 10 of src/main.c …". The path is relative to the conversation's directory as the user named it,
+  never resolved, and the file's content never goes with it. The file must be a regular file whose real path lies in
+  the conversation's directory, and its path has no control characters or line separators, so the sentence cannot be
+  broken out of; otherwise "Invalid file". Rejected: text appended to the prompt by the frontend (it changes the stored
+  prompt, and no server checks it).
 
 Backend decisions (stage 4):
 - Git access: LibGit2Sharp in-process for everything local (finding repositories, status, branch, upstream, ahead and
@@ -882,4 +895,4 @@ The order is chosen so that only already secured things reach the internet.
   - [x] Backend: passkeys.
   - [x] Frontend: passkeys (Security dialog, login button).
   - [x] Colors (the owner will refine them in later iterations), a possible phone view (low priority).
-  - [x] Frontend: the VS Code layout (title bar, side bars, search, open editors, file icons, the console composer).
+  - [x] Frontend: the VS Code layout (title bar, side bars, search, open editors, file icons, the console composer and its file chip).

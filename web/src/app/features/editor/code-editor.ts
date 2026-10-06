@@ -45,6 +45,7 @@ const EDITOR_OPTIONS: MonacoApi.editor.IEditorOptions & MonacoApi.editor.IGlobal
  * The minimap is on in the desktop layout only (crossing the breakpoint recreates the editor anyway). The status bar's
  * values of the shown file go to the store: cursor, indentation, line endings and the language's display name.
  * A search result (`EditorStore.reveal`) is selected and centred once its file is shown.
+ * The selection's lines go to the store for the console's file chip.
  */
 @Component({
   selector: 'app-code-editor',
@@ -152,13 +153,14 @@ export class CodeEditor {
     return { enabled: !this.layout.phone() };
   }
 
-  /** Ctrl+S and cursor position for the editor (the regular one or the right side of the diff view). */
+  /** Ctrl+S, the cursor position and the selection for the editor (the regular one or the right side of the diff view). */
   private wire(editor: MonacoApi.editor.IStandaloneCodeEditor): void {
     const monaco = this.monaco!;
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => void this.store.save());
     editor.onDidChangeCursorPosition((e) =>
       this.store.cursor.set({ line: e.position.lineNumber, column: e.position.column })
     );
+    editor.onDidChangeCursorSelection((e) => this.reportSelection(e.selection));
   }
 
   private sync(docs: readonly OpenDocument[], active: OpenDocument | null): void {
@@ -211,6 +213,7 @@ export class CodeEditor {
       this.store.language.set(null);
       this.store.indentation.set(null);
       this.store.eol.set(null);
+      this.store.selection.set(null);
     }
   }
 
@@ -315,6 +318,7 @@ export class CodeEditor {
   private reportPosition(editor: MonacoApi.editor.ICodeEditor, model: MonacoApi.editor.ITextModel): void {
     const position = editor.getPosition();
     this.store.cursor.set(position ? { line: position.lineNumber, column: position.column } : null);
+    this.reportSelection(editor.getSelection());
     this.reportModel(model);
   }
 
@@ -322,6 +326,17 @@ export class CodeEditor {
     if (this.shownPath === path) {
       this.reportModel(model);
     }
+  }
+
+  /** A non-empty selection in the shown file, by lines. One that ends at the start of a line (Shift+Down) leaves that line out. */
+  private reportSelection(selection: MonacoApi.Selection | null): void {
+    if (!selection || selection.isEmpty() || !this.shownPath) {
+      this.store.selection.set(null);
+      return;
+    }
+    const endLine =
+      selection.endColumn === 1 && selection.endLineNumber > selection.startLineNumber ? selection.endLineNumber - 1 : selection.endLineNumber;
+    this.store.selection.set({ path: this.shownPath, startLine: selection.startLineNumber, endLine });
   }
 
   /** Indentation (spaces of the indent size, or the tab size), line endings and the language's display name ("C"). */

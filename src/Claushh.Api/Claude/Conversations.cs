@@ -23,6 +23,7 @@ public sealed class Conversations(ClaudeCli cli, ConversationLog store, ProjectP
     IHubContext<ConsoleHub> hub, TimeProvider clock, ILogger<Conversations> log) : IHostedService
 {
     public const string InvalidPath = "Invalid path";
+    public const string InvalidFile = "Invalid file";
     public const string UnknownConversation = "Unknown conversation";
     public const string BusyConversation = "Conversation is busy";
     public const string TooMany = "Too many active conversations";
@@ -154,11 +155,13 @@ public sealed class Conversations(ClaudeCli cli, ConversationLog store, ProjectP
         return state.Key;
     }
 
-    // Launches or reuses the process, applies the options, stores and sends prompt and working, and writes the prompt;
-    // the turn's events follow from the reader. The conversation is busy from here to the end of its turn.
-    public async Task SendPromptAsync(string? conversationId, string text, PromptOptions options)
+    // Launches or reuses the process, applies the options, stores and sends prompt and working, and writes the prompt
+    // with the note of its open file; the turn's events follow from the reader. The conversation is busy from here to
+    // the end of its turn. The file's place is checked after the busy check and before anything starts.
+    public async Task SendPromptAsync(string? conversationId, string text, PromptOptions options, PromptFile? file)
     {
         ConversationState state;
+        FileNote? note;
         while (true)
         {
             state = await FindAsync(conversationId) ?? throw new HubException(UnknownConversation);
@@ -174,6 +177,7 @@ public sealed class Conversations(ClaudeCli cli, ConversationLog store, ProjectP
                 {
                     throw new HubException(BusyConversation);
                 }
+                note = file is null ? null : NoteOf(state, file);
                 state.Busy = true;
                 state.LastUsed = clock.GetUtcNow();
                 break;
@@ -200,7 +204,7 @@ public sealed class Conversations(ClaudeCli cli, ConversationLog store, ProjectP
                 }
                 state.Turn = new Turn(state.WorkingDirectory) { Before = before };
                 opened = true;
-                await EmitAsync(state, ConsoleEvents.Prompt(state.Key, text));
+                await EmitAsync(state, ConsoleEvents.Prompt(state.Key, text, note?.File));
                 await EmitAsync(state, ConsoleEvents.Status(state.Key, "working"));
             }
             finally
@@ -209,7 +213,7 @@ public sealed class Conversations(ClaudeCli cli, ConversationLog store, ProjectP
             }
             try
             {
-                await process.SendPromptAsync(text);
+                await process.SendPromptAsync(text, note?.Text);
             }
             catch (HubException)
             {
@@ -914,6 +918,27 @@ public sealed class Conversations(ClaudeCli cli, ConversationLog store, ProjectP
         projectPath is not null && paths.Resolve(projectPath) is { Kind: PathKind.Directory } directory
             ? directory.FullPath
             : throw new HubException(InvalidPath);
+
+    // The note of a prompt's open file: a regular file whose real path lies under the real path of the conversation's
+    // directory (a link that leads out is refused), named by its path relative to that directory as written, never
+    // resolved. The directory is resolved now, as a launch does: before the first launch no process has one.
+    private FileNote NoteOf(ConversationState state, PromptFile file)
+    {
+        var path = file.Path!;
+        var prefix = state.ProjectPath.Length == 0 ? "" : state.ProjectPath + "/";
+        if (!path.StartsWith(prefix, StringComparison.Ordinal)
+            || paths.Resolve(state.ProjectPath) is not { Kind: PathKind.Directory } directory
+            || paths.Resolve(path) is not { Kind: PathKind.File } resolved
+            || !resolved.FullPath.StartsWith(directory.FullPath + "/", StringComparison.Ordinal))
+        {
+            throw new HubException(InvalidFile);
+        }
+        var named = file with { Path = path[prefix.Length..] };
+        return new FileNote(named, named.Note());
+    }
+
+    // A prompt's open file as the prompt event names it, and the note's text for the CLI.
+    private sealed record FileNote(PromptFile File, string Text);
 
     // Stores an event and sends it to every console connection; the caller holds the conversation's lock. Text deltas
     // are sent at once but stored as one row per messageId, written before the next other event.

@@ -22,7 +22,7 @@ export interface ConsoleOptions {
 /** Events sent by the server via the `ConsoleEvent` method. */
 export type ConsoleEvent =
   | { type: 'conversation'; conversationId: string; projectPath: string; startedAt: string }
-  | { type: 'prompt'; conversationId: string; text: string }
+  | { type: 'prompt'; conversationId: string; text: string; file?: PromptFile }
   | { type: 'step'; conversationId: string; stepId: string; kind: StepKind; target: string; added?: number; removed?: number }
   | { type: 'step-output'; conversationId: string; stepId: string; text: string; isError: boolean }
   | { type: 'text'; conversationId: string; messageId: string; delta: string }
@@ -58,7 +58,18 @@ export const CONSOLE_HUB = {
   interrupt: 'Interrupt'
 } as const;
 
+/**
+ * The open file a prompt names, and a selection's lines. In `SendPrompt` the path is relative to the projects directory;
+ * in the `prompt` event it is relative to the conversation's directory. The CLI gets the path only, never the content.
+ */
+export interface PromptFile {
+  path: string;
+  startLine?: number;
+  endLine?: number;
+}
+
 export interface SendPromptRequest extends ConsoleOptions {
   conversationId: string;
   text: string;
+  file?: PromptFile;
 }

@@ -19,7 +19,14 @@ internal static class ConsoleEvents
         startedAt = startedAt.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture),
     });
 
-    public static JsonElement Prompt(string id, string text) => Of(new { type = "prompt", conversationId = id, text });
+    // file: the open file the prompt named, its path relative to the conversation's directory; absent without one.
+    public static JsonElement Prompt(string id, string text, PromptFile? file = null) => Of(new
+    {
+        type = "prompt",
+        conversationId = id,
+        text,
+        file = file is null ? null : new { path = file.Path, startLine = file.StartLine, endLine = file.EndLine },
+    });
 
     public static JsonElement Step(string id, string stepId, string kind, string target, int? added = null, int? removed = null) =>
         Of(new { type = "step", conversationId = id, stepId, kind, target, added, removed });

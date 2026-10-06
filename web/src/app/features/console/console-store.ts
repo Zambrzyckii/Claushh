@@ -1,6 +1,7 @@
-import { DestroyRef, Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
+import { DestroyRef, Injectable, computed, effect, inject, linkedSignal, signal, untracked } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 
+import { baseName } from '../../core/api/project-path';
 import { ProjectContext } from '../../core/project/project-context';
 import { ConsoleConnection } from '../../core/realtime/console-connection';
 import {
@@ -8,11 +9,14 @@ import {
   ConsoleOptions,
   ConsoleState,
   PermissionDecision,
+  PromptFile,
   StepKind
 } from '../../core/realtime/console-protocol';
+import { EditorStore } from '../editor/editor-store';
 
 /**
- * State of the Console panel: conversation entries built from hub events, work state, pending permission request.
+ * State of the Console panel: conversation entries built from hub events, work state, pending permission request, and the
+ * open file a prompt names (VS Code's chip: the editor's active file of the open repository, with its selected lines).
  *
  * Every event (live and replayed by `GetConversation`) goes through the same `apply` function,
  * so the view after a page reload looks the same as live. The conversation belongs to the project
@@ -30,7 +34,7 @@ export interface ConsoleStep {
 
 export type ConsoleEntry =
   | { kind: 'session'; startedAt: string }
-  | { kind: 'prompt'; text: string }
+  | { kind: 'prompt'; text: string; file: PromptFile | null }
   | { kind: 'steps'; steps: ConsoleStep[] }
   | { kind: 'text'; messageId: string; text: string }
   | { kind: 'permission'; requestId: string; description: string; alwaysRule: string | null; decision: PermissionDecision | null }
@@ -40,6 +44,7 @@ export type ConsoleEntry =
 export class ConsoleStore {
   private readonly connection = inject(ConsoleConnection);
   private readonly project = inject(ProjectContext);
+  private readonly editor = inject(EditorStore);
 
   private readonly conversationId = signal<string | null>(null);
   private readonly entriesSignal = signal<readonly ConsoleEntry[]>([]);
@@ -80,6 +85,25 @@ export class ConsoleStore {
       this.stateSignal() !== 'waiting'
   );
 
+  /** × leaves the open file out until another file becomes active, as VS Code's chip. */
+  private readonly detached = linkedSignal<string | null, boolean>({ source: this.editor.activePath, computation: () => false });
+
+  /**
+   * The open file the composer offers: the editor's active, loaded file when it lies in the open repository (any file for
+   * the projects directory) and its name has no control character, with a selection's lines. The server checks the same
+   * ("Invalid file").
+   */
+  readonly openFile = computed<PromptFile | null>(() => {
+    const doc = this.editor.active();
+    const root = this.project.path();
+    if (!doc || doc.status !== 'ready' || (root !== '' && !doc.path.startsWith(root + '/')) || CONTROL.test(doc.path)) {
+      return null;
+    }
+    const selection = this.editor.selection();
+    return selection?.path === doc.path ? { path: doc.path, startLine: selection.startLine, endLine: selection.endLine } : { path: doc.path };
+  });
+  readonly fileAttached = computed(() => this.openFile() !== null && !this.detached());
+
   constructor() {
     this.connection.events.pipe(takeUntilDestroyed(inject(DestroyRef))).subscribe((event) => this.onEvent(event));
     this.connection.reconnected.pipe(takeUntilDestroyed(inject(DestroyRef))).subscribe(() => void this.loadConversation());
@@ -103,12 +127,13 @@ export class ConsoleStore {
     });
   }
 
-  /** Sends a prompt. The prompt text appears in the conversation only as an event from the server. */
+  /** Sends a prompt with the attached file. The prompt text appears in the conversation only as an event from the server. */
   async send(text: string): Promise<boolean> {
     const trimmed = text.trim();
     if (!trimmed || !this.canSend()) {
       return false;
     }
+    const file = this.fileAttached() ? this.openFile() : null;
     // Lock right away, before the first await: otherwise a second Enter during `StartConversation` would create a second
     // conversation and send the same prompt again.
     this.sending.set(true);
@@ -121,15 +146,31 @@ export class ConsoleStore {
       }
       // The "working" state right away, so that it cannot be sent a second time before the server responds.
       this.stateSignal.set('working');
-      await this.connection.sendPrompt({ conversationId, text: trimmed, ...this.options() });
+      await this.connection.sendPrompt({ conversationId, text: trimmed, ...this.options(), ...(file ? { file } : {}) });
       return true;
-    } catch {
+    } catch (error) {
       this.stateSignal.set('idle');
-      this.failure.set('Could not send the prompt.');
+      if (file && isInvalidFile(error)) {
+        // The file went away (e.g. the console moved or deleted it): left out, so the next Send goes without it.
+        if (this.openFile()?.path === file.path) {
+          this.detached.set(true);
+        }
+        this.failure.set(`Could not attach ${baseName(file.path)}: it is no longer a file here. Send again to send the prompt without it.`);
+      } else {
+        this.failure.set('Could not send the prompt.');
+      }
       return false;
     } finally {
       this.sending.set(false);
     }
+  }
+
+  detachFile(): void {
+    this.detached.set(true);
+  }
+
+  attachFile(): void {
+    this.detached.set(false);
   }
 
   async answer(requestId: string, decision: PermissionDecision): Promise<void> {
@@ -234,7 +275,7 @@ export class ConsoleStore {
         this.push({ kind: 'session', startedAt: event.startedAt });
         break;
       case 'prompt':
-        this.push({ kind: 'prompt', text: event.text });
+        this.push({ kind: 'prompt', text: event.text, file: event.file ?? null });
         break;
       case 'step': {
         const step: ConsoleStep = {
@@ -309,4 +350,12 @@ export class ConsoleStore {
   private push(entry: ConsoleEntry): void {
     this.entriesSignal.update((entries) => [...entries, entry]);
   }
+}
+
+/** Control characters and line separators: the server refuses such a path ("Invalid file"). */
+const CONTROL = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/;
+
+/** The hub's refusal of the file: the server's message ends with its text (SignalR wraps it). */
+function isInvalidFile(error: unknown): boolean {
+  return error instanceof Error && error.message.endsWith('Invalid file');
 }

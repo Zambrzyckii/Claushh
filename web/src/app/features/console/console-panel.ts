@@ -13,10 +13,12 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
+import { baseName } from '../../core/api/project-path';
 import { DeviceLayout } from '../../core/browser/device-layout';
 import { Dialogs } from '../../core/browser/dialogs';
+import { fileIconUrl } from '../../core/icons/file-icons';
 import { ProjectContext } from '../../core/project/project-context';
-import { ConsoleEffort, ConsoleMode, ConsoleModel, PermissionDecision, StepKind } from '../../core/realtime/console-protocol';
+import { ConsoleEffort, ConsoleMode, ConsoleModel, PermissionDecision, PromptFile, StepKind } from '../../core/realtime/console-protocol';
 import { countLabel, formatTime } from '../../core/text/format';
 import { revealHidden } from '../../core/text/visible-text';
 import { ConsoleStore } from './console-store';
@@ -30,7 +32,7 @@ export const PERMISSION_ARM_MS = 600;
 /**
  * The Console panel, VS Code's secondary side bar (docs/ARCHITECTURE.md, "Console"): the conversation with Claude Code
  * as monospace text without icons or images (the step verbs, counts and notes in color), its chrome with codicons, and
- * the composer card: the prompt, the mode chip, Send or Stop, and the model and effort chip. A chip is a native
+ * the composer card: the prompt, the open file's chip, the mode chip, Send or Stop, and the model and effort chip. A chip is a native
  * <select> laid over its label, so a tap opens the platform's own picker. State and communication: ConsoleStore.
  *
  * Permission requests: the command with hidden characters made visible (`revealHidden`), permission buttons active only after
@@ -132,6 +134,24 @@ export class ConsolePanel {
   /** Puts the focus in the prompt: Workspace calls it when Ctrl+Alt+B opens the console. */
   focusPrompt(): void {
     this.input().nativeElement.focus();
+  }
+
+  /** The file chip: the name and a selection's lines ("main.c:5-10"). */
+  protected fileLabel(file: PromptFile): string {
+    return baseName(file.path) + linesOf(file);
+  }
+
+  protected fileName(file: PromptFile): string {
+    return baseName(file.path);
+  }
+
+  protected fileIcon(file: PromptFile): string {
+    return fileIconUrl(baseName(file.path));
+  }
+
+  /** The line under a prompt that named a file: its path in the conversation's directory and the lines. */
+  protected fileNote(file: PromptFile): string {
+    return `⧉ ${file.path}${linesOf(file)}`;
   }
 
   protected onScroll(): void {
@@ -268,4 +288,12 @@ const MODE_ICONS: Record<ConsoleMode, string> = {
 
 function labelOf<T>(options: readonly { value: T; label: string }[], value: T): string {
   return options.find((option) => option.value === value)?.label ?? String(value);
+}
+
+/** ":5-10" for lines 5 to 10, ":5" for one line, "" without a selection. */
+function linesOf(file: PromptFile): string {
+  if (file.startLine === undefined || file.endLine === undefined) {
+    return '';
+  }
+  return file.startLine === file.endLine ? `:${file.startLine}` : `:${file.startLine}-${file.endLine}`;
 }

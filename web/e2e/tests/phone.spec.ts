@@ -154,6 +154,20 @@ test('in the console Enter makes a new line and Send sends', async ({ page, requ
   await expect(panel.getByRole('button', { name: 'Hide' })).toHaveCount(0);
 });
 
+test('the Console tab names the file open in the Editor tab and sends it', async ({ page, request }) => {
+  await login(page);
+  await page.getByRole('button', { name: 'Explorer' }).click();
+  await openFile(page, MAIN);
+  await expectEditorToContain(page, 'int main');
+  await tab(page, 'Console').click();
+  const panel = page.locator('app-console-panel');
+  await expect(panel.locator('.file-chip')).toHaveText('main.c');
+  await page.getByRole('textbox', { name: 'Prompt' }).fill('dodaj komentarz');
+  await panel.getByRole('button', { name: 'Send', exact: true }).click();
+  await expect(panel.locator('.prompt__file')).toHaveText(`⧉ ${MAIN}`);
+  expect((await mockState(request)).prompts[0].file).toEqual({ path: MAIN });
+});
+
 test('on a touch screen the fields have 16 px text, so iOS does not zoom, and keep their heights', async ({ page }) => {
   const fontSize = (field: Locator) => field.evaluate((element) => getComputedStyle(element).fontSize);
   await page.goto('/login');

@@ -47,11 +47,15 @@ internal sealed class ClaudeProcess
         await RequestAsync(new { subtype = "apply_flag_settings", settings = new { effortLevel = options.Effort } }, ReplyTimeout);
     }
 
-    // The user line of a prompt, attributed to a person. A prompt starting with "/" is marked client_composed, so the CLI
-    // gives it to the model as text instead of running it as one of its own commands.
-    public Task SendPromptAsync(string text)
+    // The user line of a prompt, attributed to a person, with the note of its open file as a second text block. A prompt
+    // starting with "/" is marked client_composed, so the CLI gives it to the model as text instead of running it as one
+    // of its own commands.
+    public Task SendPromptAsync(string text, string? note)
     {
-        var message = new { role = "user", content = new[] { new { type = "text", text } } };
+        var content = note is null
+            ? new[] { new { type = "text", text } }
+            : new[] { new { type = "text", text }, new { type = "text", text = note } };
+        var message = new { role = "user", content };
         var uuid = Guid.NewGuid().ToString("D");
         var origin = new { kind = "human" };
         object line = text.TrimStart().StartsWith('/')

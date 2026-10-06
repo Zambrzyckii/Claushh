@@ -976,6 +976,17 @@ const CONSOLE_MODES = ['default', 'acceptEdits', 'plan'];
 /** A console `projectPath`, checked like the files API's `path` (no leading "/", no ".."). */
 const consolePathOk = (p) => typeof p === 'string' && !p.startsWith('/') && !p.split('/').includes('..');
 
+/** `SendPrompt.file`'s shape as the backend checks it: a path without control characters or line separators, both lines or neither. */
+function promptFileOk(file) {
+  if (typeof file !== 'object' || typeof file.path !== 'string' || /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/.test(file.path)) return false;
+  const [start, end] = [file.startLine, file.endLine];
+  if ((start === undefined || start === null) && (end === undefined || end === null)) return true;
+  return Number.isInteger(start) && Number.isInteger(end) && start >= 1 && start <= end && end <= 10_000_000;
+}
+
+/** The file must be one of the conversation's project (any for the projects directory); the mock has no symlinks. */
+const promptFileInside = (p, projectPath) => (projectPath === '' || p.startsWith(projectPath + '/')) && state.files.has(p);
+
 async function invoke(target, args) {
   switch (target) {
     case 'GetConversation': {
@@ -997,11 +1008,13 @@ async function invoke(target, args) {
       if (!CONSOLE_MODELS.includes(request.model) || !CONSOLE_EFFORTS.includes(request.effort) || !CONSOLE_MODES.includes(request.mode)) {
         throw new Error('Invalid options');
       }
+      if (request.file !== undefined && request.file !== null && !promptFileOk(request.file)) throw new Error('Invalid file');
       const conversation = state.conversations.get(request.conversationId);
       if (!conversation) throw new Error('Unknown conversation');
       if (conversation.running) throw new Error('Conversation is busy');
+      if (request.file && !promptFileInside(request.file.path, conversation.projectPath)) throw new Error('Invalid file');
       state.prompts.push(request);
-      void runScript(request.conversationId, conversation, request.text);
+      void runScript(request.conversationId, conversation, request.text, request.file ?? null);
       return null;
     }
     case 'AnswerPermission': {
@@ -1180,7 +1193,7 @@ async function invokeTerminal(target, args, ws) {
 }
 
 /** "Claude reply" script that depends on the prompt text. */
-async function runScript(conversationId, conversation, text) {
+async function runScript(conversationId, conversation, text, file) {
   let cancelled = false;
   const running = {
     cancel: () => {
@@ -1200,7 +1213,8 @@ async function runScript(conversationId, conversation, text) {
   const display = (p) => (root && p.startsWith(root) ? p.slice(root.length) : p);
 
   try {
-    emit({ type: 'prompt', text });
+    const named = file && { path: display(file.path), ...(file.startLine ? { startLine: file.startLine, endLine: file.endLine } : {}) };
+    emit({ type: 'prompt', text, ...(named ? { file: named } : {}) });
     emit({ type: 'status', state: 'working' });
 
     if (text.includes('długo')) {

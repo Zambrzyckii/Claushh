@@ -1,5 +1,5 @@
 import { expect, test } from './fixtures';
-import { MAIN, expectEditorToContain, killSessions, login, mockState, openFile, resetMock, treeRow } from './helpers';
+import { MAIN, expectEditorToContain, killSessions, login, mockState, openFile, openRepo, resetMock, treeRow } from './helpers';
 
 test.beforeEach(async ({ page, request }) => {
   await resetMock(request);
@@ -196,4 +196,42 @@ test('the composer is a card: its chips show and set the options, Send sends and
   await expect(note).toBeVisible();
   await expect(note).toHaveCSS('color', 'rgb(79, 193, 255)');
   expect((await mockState(request)).prompts[0]).toMatchObject({ text: 'pracuj długo', mode: 'plan' });
+});
+
+test('the composer names the open file, the prompt carries it, and × leaves it out until it is attached again', async ({ page, request }) => {
+  await openRepo(page, 'lab-3-sieci');
+  await openFile(page, 'src/main.c');
+  await expectEditorToContain(page, 'int main');
+  const panel = consolePanel(page);
+  const chip = panel.locator('.file-chip');
+  await expect(chip).toHaveText('main.c');
+  await prompt(page).fill('dodaj komentarz');
+  await prompt(page).press('Enter');
+  await expect(panel.locator('.prompt__file')).toHaveText('⧉ src/main.c');
+  await expect(page.locator('.statusbar')).toContainText('Console: idle');
+  expect((await mockState(request)).prompts[0].file).toEqual({ path: MAIN });
+
+  await panel.getByRole('button', { name: 'Detach main.c' }).click();
+  await expect(chip).toHaveCount(0);
+  await prompt(page).fill('bez pliku');
+  await prompt(page).press('Enter');
+  await expect.poll(async () => (await mockState(request)).prompts.length).toBe(2);
+  expect((await mockState(request)).prompts[1].file).toBeUndefined();
+  await panel.getByRole('button', { name: 'Attach main.c' }).click();
+  await expect(chip).toHaveText('main.c');
+});
+
+test('a selection in the editor sends its lines with the open file', async ({ page, request }) => {
+  await openFile(page, MAIN);
+  await expectEditorToContain(page, 'int main');
+  await page.locator('.monaco-editor .view-lines').click();
+  await page.keyboard.press('Control+Home');
+  await page.keyboard.press('Shift+ArrowDown');
+  await page.keyboard.press('Shift+ArrowDown');
+  const panel = consolePanel(page);
+  await expect(panel.locator('.file-chip')).toHaveText('main.c:1-2');
+  await prompt(page).fill('wyjaśnij');
+  await prompt(page).press('Enter');
+  await expect(panel.locator('.prompt__file')).toHaveText(`⧉ ${MAIN}:1-2`);
+  expect((await mockState(request)).prompts[0].file).toEqual({ path: MAIN, startLine: 1, endLine: 2 });
 });

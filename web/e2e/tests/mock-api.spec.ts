@@ -216,6 +216,48 @@ test('the mock searches like the backend: its 400s, the 404 for a file and the X
   expect((await post({ path: '', query: 'main' }, 'stale')).status()).toBe(400);
 });
 
+test('the mock refuses a malformed file before the conversation and a file outside its project after it, like the backend', async ({ page, request }) => {
+  await login(page);
+  const errors = await page.evaluate(async (main) => {
+    const RS = '\x1e';
+    const socket = new WebSocket(location.origin.replace(/^http/, 'ws') + '/hubs/console');
+    const pending = new Map<string, (reply: { result?: unknown; error?: string }) => void>();
+    let handshake!: () => void;
+    const ready = new Promise<void>((resolve) => (handshake = resolve));
+    socket.onmessage = (event) => {
+      for (const part of String(event.data).split(RS).filter(Boolean)) {
+        const message = JSON.parse(part);
+        if (message.type === undefined) handshake();
+        else if (message.type === 3) pending.get(message.invocationId)?.(message);
+      }
+    };
+    await new Promise((resolve) => (socket.onopen = resolve));
+    socket.send(JSON.stringify({ protocol: 'json', version: 1 }) + RS);
+    await ready;
+    let next = 0;
+    const invoke = (target: string, ...args: unknown[]) =>
+      new Promise<{ result?: unknown; error?: string }>((resolve) => {
+        const invocationId = String(++next);
+        pending.set(invocationId, resolve);
+        socket.send(JSON.stringify({ type: 1, invocationId, target, arguments: args }) + RS);
+      });
+    const conversationId = (await invoke('StartConversation', 'studia/lab-3-sieci')).result;
+    const prompt = (id: unknown, file: object) => invoke('SendPrompt', { conversationId: id, text: 'x', model: 'haiku', effort: 'low', mode: 'default', file });
+    const replies = [
+      await prompt('nie-ma', { path: main, startLine: 3 }),
+      await prompt('nie-ma', { path: 'studia/lab-3-sieci/a\nb.c' }),
+      await prompt('nie-ma', { path: main }),
+      await prompt(conversationId, { path: 'studia/so-projekt-shell/src/shell.c' }),
+      await prompt(conversationId, { path: 'studia/lab-3-sieci/src' }),
+      await prompt(conversationId, { path: main, startLine: 4, endLine: 2 })
+    ];
+    socket.close();
+    return replies.map((reply) => reply.error);
+  }, MAIN);
+  expect(errors).toEqual(['Invalid file', 'Invalid file', 'Unknown conversation', 'Invalid file', 'Invalid file', 'Invalid file']);
+  expect((await mockState(request)).prompts).toHaveLength(0);
+});
+
 test('the mock follows the passkey management contract like the backend', async ({ request }) => {
   const xsrf = await apiLogin(request);
   const post = (path: string, data?: object) => request.post(path, { headers: { 'X-XSRF-TOKEN': xsrf }, data });

@@ -12,7 +12,7 @@ public sealed class ConsoleHub(Conversations conversations) : Hub
     public const int MaxPrompt = 100_000;
     public const long MaxMessage = 1024 * 1024;
 
-    public sealed record PromptRequest(string? ConversationId, string? Text, string? Model, string? Effort, string? Mode);
+    public sealed record PromptRequest(string? ConversationId, string? Text, string? Model, string? Effort, string? Mode, PromptFile? File);
     public sealed record InterruptRequest(string? ConversationId);
     public sealed record AnswerRequest(string? ConversationId, string? RequestId, string? Decision);
 
@@ -21,7 +21,7 @@ public sealed class ConsoleHub(Conversations conversations) : Hub
     public Task<string> StartConversation(string? projectPath) => conversations.StartConversationAsync(projectPath);
 
     // Returns once the prompt is written to the CLI; the turn's events follow on ConsoleEvent. Without its argument it is
-    // an empty prompt.
+    // an empty prompt. A malformed file is refused before the conversation is looked up; its place is checked after.
     public async Task SendPrompt(PromptRequest? request)
     {
         if (request is null || request.Text is not { Length: >= 1 and <= MaxPrompt } text)
@@ -32,7 +32,12 @@ public sealed class ConsoleHub(Conversations conversations) : Hub
         {
             throw new HubException("Invalid options");
         }
-        await conversations.SendPromptAsync(request.ConversationId, text, new PromptOptions(request.Model!, request.Effort!, request.Mode!));
+        if (request.File is { } file && !file.IsValid())
+        {
+            throw new HubException(Conversations.InvalidFile);
+        }
+        await conversations.SendPromptAsync(request.ConversationId, text,
+            new PromptOptions(request.Model!, request.Effort!, request.Mode!), request.File);
     }
 
     // The decision is checked first (also a missing argument has none); an unknown conversation or request, or one

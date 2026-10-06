@@ -2,7 +2,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { Component, inject, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { Router, provideRouter } from '@angular/router';
 import { Subject } from 'rxjs';
 import { vi } from 'vitest';
 
@@ -387,5 +387,120 @@ describe('Console (integration)', () => {
     stop.click();
     await settle();
     expect(host.connection.interrupts).toEqual(['c-new']);
+  });
+
+  /** Opens a file as the explorer would, its content answered. */
+  async function openFile(host: Host, http: HttpTestingController, path: string) {
+    const opening = host.editor.open(path);
+    http.expectOne((r) => r.url === '/api/files/content').flush({ path, content: 'x', version: 'v1' });
+    await opening;
+  }
+  const chip = (root: HTMLElement) => root.querySelector('.file-chip')?.textContent!.trim() ?? null;
+  function typePrompt(root: HTMLElement, value: string) {
+    const textarea = root.querySelector('textarea')!;
+    textarea.value = value;
+    textarea.dispatchEvent(new Event('input'));
+    return textarea;
+  }
+  const send = (root: HTMLElement) => root.querySelector<HTMLButtonElement>('.composer__send')!.click();
+
+  it('the file chip names the active file of the open repository with its selected lines, and Send sends it', async () => {
+    const { host, root, settle, http } = await setup();
+    await TestBed.inject(Router).navigateByUrl('/?repo=studia%2Flab');
+    await settle();
+    await openFile(host, http, 'studia/lab/src/main.c');
+    await settle();
+    expect(chip(root)).toBe('main.c');
+    expect(root.querySelector('.file-chip img.file-icon')!.getAttribute('src')).toBe('file-icons/c.svg');
+
+    host.editor.selection.set({ path: 'studia/lab/src/main.c', startLine: 5, endLine: 10 });
+    await settle();
+    expect(chip(root)).toBe('main.c:5-10');
+    typePrompt(root, 'wyjaśnij');
+    send(root);
+    await settle();
+    expect(host.connection.sent).toEqual([
+      {
+        conversationId: 'c-new',
+        text: 'wyjaśnij',
+        model: 'opus',
+        effort: 'medium',
+        mode: 'default',
+        file: { path: 'studia/lab/src/main.c', startLine: 5, endLine: 10 }
+      }
+    ]);
+  });
+
+  it('× leaves the file out until another file becomes active, and the dimmed button attaches it again', async () => {
+    const { host, root, settle, http } = await setup({ conversationId: 'c1', events: [] });
+    await openFile(host, http, 'src/a.c');
+    await openFile(host, http, 'src/b.c');
+    await settle();
+    root.querySelector<HTMLButtonElement>('button[aria-label="Detach b.c"]')!.click();
+    await settle();
+    expect(chip(root)).toBeNull();
+    const attach = () => root.querySelector<HTMLButtonElement>('button[aria-label="Attach b.c"]');
+    expect(attach()!.textContent!.trim()).toBe('+ b.c');
+    typePrompt(root, 'bez pliku');
+    send(root);
+    await settle();
+    expect(host.connection.sent.at(-1)).not.toHaveProperty('file');
+
+    host.editor.activate('src/a.c');
+    await settle();
+    expect(chip(root)).toBe('a.c');
+    host.editor.activate('src/b.c');
+    await settle();
+    expect(chip(root)).toBe('b.c');
+    root.querySelector<HTMLButtonElement>('button[aria-label="Detach b.c"]')!.click();
+    await settle();
+    attach()!.click();
+    await settle();
+    expect(chip(root)).toBe('b.c');
+  });
+
+  it('never offers a file of another repository or one whose name has a control character, and the log shows the named file', async () => {
+    const { host, root, settle, http } = await setup({
+      conversationId: 'c1',
+      events: [
+        { type: 'prompt', conversationId: 'c1', text: 'popraw', file: { path: 'src/main.c', startLine: 5, endLine: 10 } },
+        { type: 'prompt', conversationId: 'c1', text: 'a to?', file: { path: 'Makefile', startLine: 2, endLine: 2 } }
+      ]
+    });
+    await TestBed.inject(Router).navigateByUrl('/?repo=studia%2Flab');
+    await settle();
+    expect(text(root)).toContain('> popraw⧉ src/main.c:5-10');
+    expect(text(root)).toContain('⧉ Makefile:2');
+
+    await openFile(host, http, 'studia/other/x.c');
+    await settle();
+    expect(root.querySelector('.file-chip, button[aria-label^="Attach"]')).toBeNull();
+    await openFile(host, http, 'studia/lab/a\u2028b.c');
+    await settle();
+    expect(root.querySelector('.file-chip, button[aria-label^="Attach"]')).toBeNull();
+  });
+
+  it('a file the server refuses is detached, the prompt stays in the field, and the next Send goes without it', async () => {
+    const { host, root, settle, http } = await setup({ conversationId: 'c1', events: [] });
+    await openFile(host, http, 'src/a.c');
+    await settle();
+    host.connection.sendPrompt = async (request: SendPromptRequest) => {
+      host.connection.sent.push(request);
+      if (request.file) {
+        throw new Error("An unexpected error occurred invoking 'SendPrompt' on the server. HubException: Invalid file");
+      }
+    };
+    const textarea = typePrompt(root, 'popraw');
+    send(root);
+    await settle();
+    expect(text(root)).toContain('Could not attach a.c');
+    expect(textarea.value).toBe('popraw');
+    expect(chip(root)).toBeNull();
+    expect(root.querySelector('button[aria-label="Attach a.c"]')).not.toBeNull();
+
+    send(root);
+    await settle();
+    expect(host.connection.sent.map((sent) => sent.file?.path ?? null)).toEqual(['src/a.c', null]);
+    expect(textarea.value).toBe('');
   });
 });

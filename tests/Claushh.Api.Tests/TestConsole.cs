@@ -43,6 +43,10 @@ public sealed class TestConsole : IAsyncDisposable
     public Task SendAsync(string conversationId, string text, string model = "haiku", string effort = "low", string mode = "default") =>
         Hub.InvokeAsync("SendPrompt", new { conversationId, text, model, effort, mode }).WaitAsync(Deadline);
 
+    // A prompt that names an open file (ConsolePromptFileTests): `file` as the browser sends it.
+    public Task SendWithFileAsync(string conversationId, string text, object? file) =>
+        Hub.InvokeAsync("SendPrompt", new { conversationId, text, model = "haiku", effort = "low", mode = "default", file }).WaitAsync(Deadline);
+
     public Task AnswerAsync(string conversationId, string requestId, string decision) =>
         Hub.InvokeAsync("AnswerPermission", new { conversationId, requestId, decision }).WaitAsync(Deadline);
 
