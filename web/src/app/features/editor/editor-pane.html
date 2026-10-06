@@ -3,6 +3,7 @@
     <div class="tab" [class.tab--active]="doc.path === store.activePath()" (auxclick)="closeWithMiddleClick(doc, $event)">
       <button type="button" role="tab" class="tab__name" [attr.aria-selected]="doc.path === store.activePath()"
               [title]="doc.path" (click)="store.activate(doc.path)">
+        <img class="file-icon" [src]="icon(doc.name)" alt="" width="16" height="16" draggable="false">
         {{ doc.name }}
         @if (dirty(doc)) {
           <span class="tab__dirty codicon codicon-circle-filled" aria-label="unsaved changes"></span>
@@ -16,6 +17,9 @@
 @if (store.active(); as doc) {
   <div class="breadcrumb">
     @for (part of breadcrumb(); track $index; let last = $last) {
+      @if (last) {
+        <img class="file-icon" [src]="icon(part)" alt="" width="16" height="16" draggable="false">
+      }
       <span [class.breadcrumb__current]="last">{{ part }}</span>
       @if (!last) {
         <span class="breadcrumb__sep codicon codicon-chevron-right" aria-hidden="true"></span>

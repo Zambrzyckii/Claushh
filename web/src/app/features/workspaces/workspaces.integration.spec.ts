@@ -210,4 +210,38 @@ describe('Workspaces (integration)', () => {
       'Remote'
     ]);
   });
+
+  it('explorer rows show the file and folder icons of the theme and carry their git mark', async () => {
+    const { root, settle } = await loaded();
+    root.querySelector<HTMLButtonElement>('tr.repo button')!.click();
+    await settle();
+    http.expectOne((r) => r.url === '/api/files/list' && r.params.get('path') === 'studia/lab').flush([
+      { name: 'src', path: 'studia/lab/src', kind: 'directory' },
+      { name: 'main.c', path: 'studia/lab/main.c', kind: 'file' },
+      { name: 'Makefile', path: 'studia/lab/Makefile', kind: 'file' },
+      { name: 'README.md', path: 'studia/lab/README.md', kind: 'file' }
+    ]);
+    http.expectOne((r) => r.url === '/api/git/status').flush({
+      branch: 'main',
+      ahead: 0,
+      behind: 0,
+      files: [{ path: 'studia/lab/main.c', status: 'modified' }]
+    });
+    await settle();
+
+    const rows = () => Array.from(root.querySelectorAll<HTMLElement>('app-explorer .row'));
+    expect(rows().map((row) => row.querySelector('img.file-icon')!.getAttribute('src'))).toEqual([
+      'file-icons/folder-src.svg',
+      'file-icons/c.svg',
+      'file-icons/makefile.svg',
+      'file-icons/readme.svg'
+    ]);
+    expect(rows().map((row) => row.getAttribute('data-mark'))).toEqual([null, 'M', null, null]);
+
+    rows()[0].click();
+    await settle();
+    http.expectOne((r) => r.url === '/api/files/list' && r.params.get('path') === 'studia/lab/src').flush([]);
+    await settle();
+    expect(rows()[0].querySelector('img.file-icon')!.getAttribute('src')).toBe('file-icons/folder-src-open.svg');
+  });
 });

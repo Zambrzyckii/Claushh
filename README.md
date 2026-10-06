@@ -408,5 +408,13 @@ The console tests run a fake `claude` built with the solution (`tests/Claushh.Fa
 ## Third-party assets
 
 Icons: [Codicons](https://github.com/microsoft/vscode-codicons) by Microsoft,
-[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Fonts: IBM Plex Sans and JetBrains Mono, SIL Open Font
-License 1.1, through Fontsource.
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). File and folder icons: a selection from
+[Material Icon Theme](https://github.com/material-extensions/vscode-material-icon-theme) 5.39.0 by Material Extensions,
+MIT (license in `web/public/file-icons/LICENSE`). Fonts: IBM Plex Sans and JetBrains Mono, SIL Open Font License 1.1,
+through Fontsource.
+
+### Updating the file icons
+
+The icons in `web/public/file-icons/` and their name map `web/src/app/core/icons/file-icon-map.ts` are copies, so
+builds and tests never need the package. After changing the selection (`ALLOWED` in `web/scripts/file-icons.mjs`) or
+updating `material-icon-theme` (a devDependency), run `cd web && node scripts/file-icons.mjs` and commit both.

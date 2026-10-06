@@ -49,3 +49,24 @@ test('the app icons keep their glyphs after Monaco has loaded its own icon font'
 
   expect(await glyphs()).toEqual(before);
 });
+
+test('the file icons of the tree load and are served as SVG images', async ({ page }) => {
+  const types = new Map<string, string>();
+  page.on('response', (response) => {
+    if (new URL(response.url()).pathname.startsWith('/file-icons/')) {
+      types.set(response.url(), response.headers()['content-type'] ?? '');
+    }
+  });
+  await login(page);
+  await openFile(page, MAIN);
+  await expectEditorToContain(page, 'int main');
+  const icons = page.locator('app-explorer img.file-icon');
+  await expect(icons.first()).toBeVisible();
+  const decoded = await icons.evaluateAll((images) =>
+    Promise.all(images.map((image) => (image as HTMLImageElement).decode().then(() => true, () => false)))
+  );
+  expect(decoded.length).toBeGreaterThan(5);
+  expect(decoded.every(Boolean)).toBe(true);
+  expect(types.size).toBeGreaterThan(0);
+  expect([...new Set(types.values())]).toEqual(['image/svg+xml']);
+});

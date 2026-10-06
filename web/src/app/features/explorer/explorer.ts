@@ -3,6 +3,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { firstValueFrom } from 'rxjs';
 
 import { DirectoryEntry, FileApiError, FilesApi, fileErrorMessage } from '../../core/api/files-api';
+import { fileIconUrl, folderIconUrl } from '../../core/icons/file-icons';
 import { ProjectContext } from '../../core/project/project-context';
 
 type DirectoryState =
@@ -81,6 +82,11 @@ export class Explorer {
 
   protected markLabel(mark: string): string {
     return MARK_LABELS[mark] ?? mark;
+  }
+
+  /** The theme's icon of a row; an expanded folder has its open variant. */
+  protected icon(row: Extract<ExplorerRow, { kind: 'entry' }>): string {
+    return row.entry.kind === 'directory' ? folderIconUrl(row.entry.name, row.expanded) : fileIconUrl(row.entry.name);
   }
 
   /** Reloads the root and all expanded directories (e.g. after changes made by the console). */

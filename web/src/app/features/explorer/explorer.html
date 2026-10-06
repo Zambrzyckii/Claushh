@@ -7,7 +7,8 @@
   @for (row of rows(); track $index) {
     @if (row.kind === 'entry') {
       <button type="button" class="row" [class.row--active]="row.entry.path === activePath()"
-              [style.padding-left.px]="16 + row.depth * 14" [title]="row.entry.path"
+              [attr.data-mark]="decorations().get(row.entry.path) ?? null"
+              [style.padding-left.px]="4 + row.depth * 8" [title]="row.entry.path"
               [attr.aria-expanded]="row.entry.kind === 'directory' ? row.expanded : null"
               (click)="select(row)">
         @if (row.entry.kind === 'directory') {
@@ -15,14 +16,15 @@
         } @else {
           <span class="row__chevron" aria-hidden="true"></span>
         }
+        <img class="file-icon" [src]="icon(row)" alt="" width="16" height="16" draggable="false">
         <span class="row__name">{{ row.entry.name }}</span>
         @if (decorations().get(row.entry.path); as mark) {
-          <span class="row__mark" [attr.data-mark]="mark" [class.row__mark--dir]="row.entry.kind === 'directory'"
+          <span class="row__mark" [class.row__mark--dir]="row.entry.kind === 'directory'"
                 [attr.aria-label]="markLabel(mark)" [title]="markLabel(mark)">{{ mark }}</span>
         }
       </button>
     } @else {
-      <p class="status" [class.status--error]="row.error" [style.padding-left.px]="16 + row.depth * 14">{{ row.text }}</p>
+      <p class="status" [class.status--error]="row.error" [style.padding-left.px]="24 + row.depth * 8">{{ row.text }}</p>
     }
   }
 </div>

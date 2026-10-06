@@ -39,7 +39,7 @@ active tab; blue for info notes, green for success and git additions, purple for
 modified mark in VS Code's colors.
 Fonts: IBM Plex Sans (interface) and JetBrains Mono (code, console, terminal), self-hosted through Fontsource; in the
 terminal the Nerd Font version comes first when the device has it, so that the icons from the dotfiles prompt work.
-Icons: codicons.
+Icons: codicons; file and folder icons from Material Icon Theme (MIT), a selection.
 
 Devices: laptop and PC, and a phone with every function in three tabs (Editor, Terminal, Console).
 
@@ -108,6 +108,12 @@ Frontend decisions (VS Code layout):
 - With a coarse pointer every input, select and textarea outside Monaco and xterm has 16 px text, so iOS Safari never
   zooms into a focused field; the line heights are fixed in px, so the fields keep their heights. Rejected: a size per
   field (component rules outrank a global rule, so a new field would slip through).
+- File and folder icons are a selection (about a hundred icons) of Material Icon Theme 5.39.0 (MIT), the theme of the
+  owner's VS Code, kept as committed copies: `web/scripts/file-icons.mjs` copies the allowed SVGs and the license into
+  `public/file-icons/` and writes the name map, so builds and tests never need the package (an exact-version
+  devDependency). They are `<img>`s, so no SVG markup reaches the DOM. The logos of AI tools are left out. Rejected: an
+  asset glob from `node_modules` (the allowlist in two places), the whole set (about 1 MB and a 215 KB map), and
+  vscode-icons (share-alike art), Iconify (no file-name manifest) and Seti (a single-color font).
 
 ## Tech stack
 

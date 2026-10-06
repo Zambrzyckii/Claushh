@@ -211,6 +211,13 @@ textarea:focus-visible,
   }
 }
 
+// File and folder icons (Material Icon Theme, public/file-icons/): images, so they keep their theme's own colors.
+img.file-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
 // Phone sheets (docs/ARCHITECTURE.md, "Frontend" → "Phone layout"): full-screen <dialog>s opened with showModal() that
 // slide up; browsers without overlay transitions close them without the slide.
 dialog.sheet {

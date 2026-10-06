@@ -23,6 +23,13 @@ test('the test server listens only on the loopback interface', async ({ request 
   await expect(request.get(`http://${external!.address}:4400/__test/state`, { timeout: 3000 })).rejects.toThrow();
 });
 
+test('the mock serves the file icons as SVG images, like the backend', async ({ request }) => {
+  const response = await request.get('/file-icons/file.svg');
+  expect(response.status()).toBe(200);
+  expect(response.headers()['content-type']).toBe('image/svg+xml');
+  expect(await response.text()).toContain('<svg');
+});
+
 test('the mock refuses clone addresses that the contract forbids, also when the frontend is bypassed', async ({ request }) => {
   const login = await request.get('/api/auth/me');
   expect(login.status()).toBe(401); // issues an XSRF token
