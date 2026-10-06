@@ -1,7 +1,8 @@
 <div class="header">
   <span class="section-title">Console</span>
   @if (!layout.phone()) {
-    <button type="button" class="icon" aria-label="Hide console" title="Hide console" (click)="collapse.emit()">
+    <button type="button" class="icon" aria-label="Hide console" title="Hide console (Ctrl+Alt+B)"
+            aria-keyshortcuts="Control+Alt+B Meta+Alt+B" (click)="collapse.emit()">
       <span class="codicon codicon-close" aria-hidden="true"></span>
     </button>
   }

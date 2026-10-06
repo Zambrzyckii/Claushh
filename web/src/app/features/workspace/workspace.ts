@@ -1,4 +1,4 @@
-import { Component, HostListener, inject, signal, viewChild } from '@angular/core';
+import { Component, DOCUMENT, DestroyRef, HostListener, Injector, afterNextRender, inject, signal, viewChild } from '@angular/core';
 
 import { AuthService } from '../../core/auth/auth.service';
 import { SessionTimer } from '../../core/auth/session-timer';
@@ -61,15 +61,25 @@ export class Workspace {
   protected readonly layout = inject(DeviceLayout);
   protected readonly editor = inject(EditorStore);
   protected readonly state = inject(WorkbenchState);
+  private readonly document = inject(DOCUMENT);
+  private readonly injector = inject(Injector);
   private readonly securityDialog = viewChild.required(SecurityDialog);
+  private readonly consolePanel = viewChild(ConsolePanel);
 
   protected readonly loggingOut = signal(false);
   /** The phone's active tab, in memory only: a reload starts on Editor. */
   protected readonly phoneTab = signal<PhoneTab>('editor');
+  /** Where the focus was when Ctrl+Alt+B last opened the console; closing it with the key brings the focus back. */
+  private focusBeforeConsole: HTMLElement | null = null;
 
   constructor() {
     // Started with the logged-in view; it acts only in the phone layout.
     inject(KeyboardInset);
+
+    // The capture phase runs before Monaco and xterm see the key (toggleConsoleByKey).
+    const listener = (event: KeyboardEvent) => this.toggleConsoleByKey(event);
+    this.document.addEventListener('keydown', listener, { capture: true });
+    inject(DestroyRef).onDestroy(() => this.document.removeEventListener('keydown', listener, { capture: true }));
   }
 
   protected openSecurity(): void {
@@ -99,7 +109,7 @@ export class Workspace {
   /**
    * Ctrl+S / Cmd+S saves the active file, also when focus is outside the editor, instead of opening "Save Page As".
    * Exception: in a terminal the shortcut belongs to the program in the terminal (e.g. nano). Esc closes the menu in
-   * TitleBar.
+   * TitleBar; Ctrl+Alt+B (the console) is `toggleConsoleByKey`.
    */
   @HostListener('document:keydown', ['$event'])
   protected onKeydown(event: KeyboardEvent): void {
@@ -109,6 +119,44 @@ export class Workspace {
     if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 's') {
       event.preventDefault();
       void this.editor.save();
+    }
+  }
+
+  /**
+   * Ctrl+Alt+B / Cmd+Option+B shows and hides the console, VS Code's key for the secondary side bar. Unlike Ctrl+S it
+   * also works in a terminal: this listener runs in the capture phase on the document and stops the event there, so
+   * neither Monaco nor xterm (which would send the key to the shell) receives it. `stopPropagation` only: SessionTimer's
+   * capture listener on the document still sees the key. A held key toggles once. Not in the phone layout (the console
+   * is a tab there) and not while a dialog is open.
+   */
+  private toggleConsoleByKey(event: KeyboardEvent): void {
+    if (!(event.ctrlKey || event.metaKey) || !event.altKey || event.shiftKey || event.code !== 'KeyB') {
+      return;
+    }
+    if (this.layout.phone() || this.document.querySelector('dialog[open]')) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.repeat) {
+      return;
+    }
+    const focused = this.document.activeElement instanceof HTMLElement ? this.document.activeElement : null;
+    if (this.state.consoleOpen()) {
+      // The focus leaves a console that slides out: back to where it was before the key opened it, or nowhere.
+      const inConsole = focused?.closest('app-console-panel') ? focused : null;
+      const back = this.focusBeforeConsole;
+      this.focusBeforeConsole = null;
+      this.state.consoleOpen.set(false);
+      if (inConsole && back?.isConnected) {
+        back.focus();
+      } else {
+        inConsole?.blur();
+      }
+    } else {
+      this.focusBeforeConsole = focused;
+      this.state.consoleOpen.set(true);
+      afterNextRender(() => this.consolePanel()?.focusPrompt(), { injector: this.injector });
     }
   }
 }

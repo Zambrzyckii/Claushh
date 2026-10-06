@@ -46,8 +46,8 @@
         <span class="codicon" [class.codicon-layout-panel]="state.panelOpen()"
               [class.codicon-layout-panel-off]="!state.panelOpen()" aria-hidden="true"></span>
       </button>
-      <button type="button" class="icon" aria-label="Console" title="Console" [attr.aria-pressed]="state.consoleOpen()"
-              (click)="state.consoleOpen.set(!state.consoleOpen())">
+      <button type="button" class="icon" aria-label="Console" title="Console (Ctrl+Alt+B)" aria-keyshortcuts="Control+Alt+B Meta+Alt+B"
+              [attr.aria-pressed]="state.consoleOpen()" (click)="state.consoleOpen.set(!state.consoleOpen())">
         <span class="codicon" [class.codicon-layout-sidebar-right]="state.consoleOpen()"
               [class.codicon-layout-sidebar-right-off]="!state.consoleOpen()" aria-hidden="true"></span>
       </button>

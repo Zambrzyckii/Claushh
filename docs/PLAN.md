@@ -116,6 +116,10 @@ Frontend decisions (VS Code layout):
 - The title bar holds the command centre (the open repository and branch; a click shows Source Control), the toggles
   of the side bar, the panel and the console, and an account menu (the user name, "Security…", "Log out"), the same
   menu as the phone's. Rejected: the Popover API (jsdom lacks it).
+- Ctrl+Alt+B (Cmd+Option+B on macOS), VS Code's key for the secondary side bar, shows and hides the console wherever
+  the focus is, the terminal included, unlike Ctrl+S, which belongs to the program in the terminal. Opening puts the
+  focus in the prompt. Rejected: VS Code's Ctrl+B and Ctrl+J (the side bar and the panel): browsers use them
+  (Firefox's bookmarks, Chrome's downloads), and a shell reads them as "back one character" and Enter.
 - The primary side bar has an activity bar on top with Explorer and Source Control, whose badges count the unsaved
   files and the changes. Every view stays mounted and the inactive one is hidden; closing the side bar takes it out of
   the flow at once and slides it out, as the phone's drawer. Rejected: `@if` with `animate.leave` (each close would

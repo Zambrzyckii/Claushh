@@ -1,6 +1,7 @@
 import { expect, test } from './fixtures';
 import {
   MAIN,
+  activeTerminal,
   expectEditorToContain,
   login,
   mockState,
@@ -9,6 +10,7 @@ import {
   openTerminalTab,
   resetMock,
   showView,
+  terminalInputs,
   treeRow
 } from './helpers';
 
@@ -133,4 +135,42 @@ test('the editor shows a minimap on a desktop, and the changes are an editor act
   await action.click();
   await expect(page.locator('.monaco-diff-editor')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Hide changes' })).toHaveAttribute('aria-pressed', 'true');
+});
+
+test('Ctrl+Alt+B hides the console from the editor, shows it with the focus in the prompt, and gives the focus back', async ({ page }) => {
+  await openFile(page, MAIN);
+  await expectEditorToContain(page, 'int main');
+  await page.locator('.monaco-editor .view-lines').click();
+  const toggle = page.getByRole('button', { name: 'Console', exact: true });
+  await expect(toggle).toHaveAttribute('title', 'Console (Ctrl+Alt+B)');
+
+  await page.keyboard.press('Control+Alt+b');
+  await expect(page.locator('aside.console')).toHaveCount(0);
+  await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.locator('.tab__dirty')).toHaveCount(0);
+
+  await page.keyboard.press('Control+Alt+b');
+  await expect(page.getByRole('textbox', { name: 'Prompt' })).toBeFocused();
+  await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('button', { name: 'Hide console' })).toHaveAttribute('title', 'Hide console (Ctrl+Alt+B)');
+
+  await page.keyboard.press('Control+Alt+b');
+  await expect(page.locator('aside.console')).toHaveCount(0);
+  await page.keyboard.type('Z');
+  await expect(page.locator('.tab__dirty')).toHaveCount(1);
+});
+
+test('Ctrl+Alt+B works in the terminal, never reaches the shell, and gives the focus back to the terminal', async ({ page, request }) => {
+  await openTerminalTab(page);
+  await activeTerminal(page).locator('.xterm-screen').click();
+
+  await page.keyboard.press('Control+Alt+b');
+  await expect(page.locator('aside.console')).toHaveCount(0);
+  await page.keyboard.press('Control+Alt+b');
+  await expect(page.getByRole('textbox', { name: 'Prompt' })).toBeFocused();
+  await page.keyboard.press('Control+Alt+b');
+  await expect(page.locator('aside.console')).toHaveCount(0);
+
+  await page.keyboard.type('ls');
+  await expect.poll(() => terminalInputs(request)).toBe('ls');
 });

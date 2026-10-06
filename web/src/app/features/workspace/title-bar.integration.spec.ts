@@ -89,6 +89,8 @@ describe('Title bar (integration)', () => {
     const { fixture, root, host } = await setup();
     const toggle = (name: string) => root.querySelector<HTMLButtonElement>(`button[aria-label="${name}"]`)!;
     expect(['Side bar', 'Panel', 'Console'].map((name) => toggle(name).getAttribute('aria-pressed'))).toEqual(['true', 'false', 'true']);
+    expect(toggle('Console').title).toBe('Console (Ctrl+Alt+B)');
+    expect(toggle('Console').getAttribute('aria-keyshortcuts')).toBe('Control+Alt+B Meta+Alt+B');
 
     toggle('Side bar').click();
     toggle('Panel').click();
