@@ -13,11 +13,13 @@ public static class SearchEndpoints
         return api;
     }
 
-    private static IResult Search(SearchRequest? body, ProjectPaths paths, FileSearch search, CancellationToken ct)
+    private static IResult Search(SearchRequest? body, ProjectPaths paths, FileSearch search, SearchLimits limits,
+        CancellationToken ct)
     {
         if (body is not { Path: { } path, Query: { Length: >= 1 and <= FileSearch.MaxText } query }
             || body.Include is { Length: > FileSearch.MaxText } || body.Exclude is { Length: > FileSearch.MaxText }
-            || FileSearch.Pattern(query, body.MatchCase ?? false, body.WholeWord ?? false, body.Regex ?? false) is not { } pattern
+            || FileSearch.Pattern(query, body.MatchCase ?? false, body.WholeWord ?? false, body.Regex ?? false,
+                limits.Time) is not { } pattern
             || FileSearch.Globs(body.Include) is not (var include, true)
             || FileSearch.Globs(body.Exclude) is not (var exclude, true)
             || paths.Resolve(path) is not { } root)

@@ -2,6 +2,8 @@ import {
   Component,
   DestroyRef,
   ElementRef,
+  Injector,
+  afterNextRender,
   afterRenderEffect,
   computed,
   effect,
@@ -49,6 +51,7 @@ export class ConsolePanel {
   protected readonly project = inject(ProjectContext);
   protected readonly layout = inject(DeviceLayout);
   private readonly dialogs = inject(Dialogs);
+  private readonly injector = inject(Injector);
   readonly collapse = output<void>();
 
   /** Permission requests that can already be answered "yes" (`PERMISSION_ARM_MS` has passed). */
@@ -62,6 +65,8 @@ export class ConsolePanel {
   private readonly log = viewChild.required<ElementRef<HTMLElement>>('log');
   /** We read and clear the prompt field directly: sending right after pasting text clears it too. */
   private readonly input = viewChild.required<ElementRef<HTMLTextAreaElement>>('input');
+  private readonly detachButton = viewChild<ElementRef<HTMLButtonElement>>('detachButton');
+  private readonly attachButton = viewChild<ElementRef<HTMLButtonElement>>('attachButton');
   private stickToBottom = true;
 
   protected readonly models: { value: ConsoleModel; label: string }[] = [
@@ -152,6 +157,17 @@ export class ConsolePanel {
   /** The line under a prompt that named a file: its path in the conversation's directory and the lines. */
   protected fileNote(file: PromptFile): string {
     return `⧉ ${file.path}${linesOf(file)}`;
+  }
+
+  /** × and "+ main.c" take each other's place, so the focus moves to the button that replaced the clicked one. */
+  protected detachFile(): void {
+    this.store.detachFile();
+    afterNextRender(() => this.attachButton()?.nativeElement.focus(), { injector: this.injector });
+  }
+
+  protected attachFile(): void {
+    this.store.attachFile();
+    afterNextRender(() => this.detachButton()?.nativeElement.focus(), { injector: this.injector });
   }
 
   protected onScroll(): void {

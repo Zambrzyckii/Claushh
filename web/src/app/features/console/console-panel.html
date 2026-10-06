@@ -102,14 +102,14 @@
         <span class="chip file-chip" [title]="file.path">
           <img class="file-icon" [src]="fileIcon(file)" alt="" width="16" height="16" draggable="false">
           <span class="file-chip__name">{{ fileLabel(file) }}</span>
-          <button type="button" class="icon file-chip__detach" [attr.aria-label]="'Detach ' + fileName(file)"
-                  title="Leave the file out" (click)="store.detachFile()">
+          <button #detachButton type="button" class="icon file-chip__detach" [attr.aria-label]="'Detach ' + fileName(file)"
+                  title="Leave the file out" (click)="detachFile()">
             <span class="codicon codicon-close" aria-hidden="true"></span>
           </button>
         </span>
       } @else {
-        <button type="button" class="chip file-chip--off" [attr.aria-label]="'Attach ' + fileName(file)"
-                [title]="'Attach ' + file.path" (click)="store.attachFile()">+ {{ fileName(file) }}</button>
+        <button #attachButton type="button" class="chip file-chip--off" [attr.aria-label]="'Attach ' + fileName(file)"
+                [title]="'Attach ' + file.path" (click)="attachFile()"><span class="file-chip__name">+ {{ fileName(file) }}</span></button>
       }
     }
     <span class="composer__spacer"></span>

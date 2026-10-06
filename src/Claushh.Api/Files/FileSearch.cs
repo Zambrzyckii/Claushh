@@ -2,8 +2,8 @@
 // "Files"; decisions: docs/PLAN.md, "Backend decisions (stage 2)"). In-process: the walk goes through ProjectPaths, never
 // enters a directory link, skips node_modules and what git ignores in a repository, reads text as the files API does,
 // and matches each line with a regular expression that runs in linear time. Synchronous, so a LibGit2Sharp repository
-// stays on one thread. The query is never logged: a pattern or glob .NET refuses is dropped with its exception, whose
-// message would quote it.
+// stays on one thread. The query is never logged: a pattern or glob .NET refuses is dropped with its exception (a
+// pattern's parse error quotes the pattern).
 using System.Diagnostics;
 using System.Text.RegularExpressions;
 using Claushh.Api.Git;
@@ -28,17 +28,20 @@ public sealed class FileSearch(ProjectPaths paths, Repositories repositories, Se
     private const string GlobRoot = "/search";
 
     // The query as a regular expression without backtracking, or null for one .NET refuses: a syntax error, or a
-    // construct that needs backtracking (lookarounds, backreferences, atomic groups, conditionals, \G).
-    public static Regex? Pattern(string query, bool matchCase, bool wholeWord, bool regex)
+    // construct that needs backtracking (lookarounds, backreferences, atomic groups, conditionals, \G). The match timeout
+    // (the search's time limit) also stops one long line: NonBacktracking checks it as it scans.
+    public static Regex? Pattern(string query, bool matchCase, bool wholeWord, bool regex, TimeSpan matchTimeout)
     {
         var options = RegexOptions.NonBacktracking | RegexOptions.CultureInvariant
             | (matchCase ? RegexOptions.None : RegexOptions.IgnoreCase);
         var source = regex ? query : Regex.Escape(query);
+        // A limit of zero (tests) stops the search before its first line, so no match needs a timeout then.
+        var timeout = matchTimeout > TimeSpan.Zero ? matchTimeout : Regex.InfiniteMatchTimeout;
         try
         {
             // The pattern must be valid on its own, not only inside the whole-word group.
-            var pattern = new Regex(source, options);
-            return wholeWord ? new Regex($@"\b(?:{source})\b", options) : pattern;
+            var pattern = new Regex(source, options, timeout);
+            return wholeWord ? new Regex($@"\b(?:{source})\b", options, timeout) : pattern;
         }
         catch (Exception e) when (e is ArgumentException or NotSupportedException)
         {
@@ -170,21 +173,24 @@ public sealed class FileSearch(ProjectPaths paths, Repositories repositories, Se
                 && (exclude is null || !exclude.Match(GlobRoot, relative).HasMatches);
         }
 
-        // Measured first (over the limit: skipped), read whole, decoded as the files API does (binary: skipped), then
-        // matched line by line; "\r" before a line's "\n" is not part of the line.
+        // Measured first (over the limit: skipped), read up to one byte past that size (grown since: skipped), decoded as
+        // the files API does (binary: skipped), then matched line by line; "\r" before a line's "\n" is not part of the
+        // line.
         private void SearchIn(ProjectPath file)
         {
             string? text;
             try
             {
-                if (new FileInfo(file.FullPath).Length > SearchLimits.MaxFileBytes)
+                var length = new FileInfo(file.FullPath).Length;
+                if (length > SearchLimits.MaxFileBytes)
                 {
                     return;
                 }
-                var bytes = File.ReadAllBytes(file.FullPath);
+                using var stream = File.OpenRead(file.FullPath);
+                var buffer = new byte[length + 1];
+                var read = stream.ReadAtLeast(buffer, buffer.Length, throwOnEndOfStream: false);
                 FilesRead++;
-                // It may have grown since it was measured.
-                text = bytes.Length > SearchLimits.MaxFileBytes ? null : FileStore.DecodeText(bytes);
+                text = read == buffer.Length ? null : FileStore.DecodeText(buffer.AsSpan(0, read));
             }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException)
             {
@@ -226,19 +232,26 @@ public sealed class FileSearch(ProjectPaths paths, Repositories repositories, Se
         private SearchMatch? MatchLine(ReadOnlySpan<char> line, int number)
         {
             List<(int Index, int Length)> found = [];
-            foreach (var match in pattern.EnumerateMatches(line))
+            try
             {
-                if (match.Length == 0)
+                foreach (var match in pattern.EnumerateMatches(line))
                 {
-                    continue;
+                    if (match.Length == 0)
+                    {
+                        continue;
+                    }
+                    if (MatchCount == SearchLimits.MaxMatches)
+                    {
+                        Limit = "results";
+                        break;
+                    }
+                    found.Add((match.Index, match.Length));
+                    MatchCount++;
                 }
-                if (MatchCount == SearchLimits.MaxMatches)
-                {
-                    Limit = "results";
-                    break;
-                }
-                found.Add((match.Index, match.Length));
-                MatchCount++;
+            }
+            catch (RegexMatchTimeoutException)
+            {
+                Limit ??= "time"; // one line took the whole time limit; the matches found in it so far stay
             }
             if (found.Count == 0)
             {

@@ -448,9 +448,9 @@ Implemented in the backend (section "Backend" → "Files"). Requires a session (
   verbs (purple), the "+N" (green) and "−N" (error) counts, the notes (blue) and the "reconnect" link (blue) have the
   token colors. An e2e test checks that the panel and the title bar never show the product name and that the log has no
   images. The chrome follows the shared controls and has codicons: a header with "Hide console", a conversation row
-  with the repository and "New conversation", an empty state, and the composer card (the prompt; the mode chip and
-  Send, or Stop while the console works; one chip for the model and the effort). A chip is a native `<select>` laid
-  over its value. Steps are aligned with spaces as in a terminal.
+  with the repository and "New conversation", an empty state, and the composer card (the prompt; the open file's
+  chip, the mode chip and Send, or Stop while the console works; one chip for the model and the effort). An option
+  chip is a native `<select>` laid over its value. Steps are aligned with spaces as in a terminal.
 - **All content (prompts, responses, command output, paths) is displayed only as text.** We do not
   render Markdown or HTML, so content from the model or from files cannot inject code into the page.
 - The conversation lives on the server. A page reload, another tab or another device replays it via
@@ -967,13 +967,15 @@ Files (`Files/`; the rules the frontend can see are in "Files API contract"):
   path is not `<directory>/<name>` (a link) is never entered, so the walk cannot loop. `node_modules` is skipped at any
   depth. In a repository (the first two segments, as `Repositories.Find` accepts them) every directory, asked with a
   trailing `/`, and every file goes through LibGit2Sharp's `Ignore.IsPathIgnored`. A file is measured first (over 1 MiB:
-  skipped), read whole and decoded with `FileStore.DecodeText`. Globs are `Microsoft.Extensions.FileSystemGlobbing`
-  matchers (from the ASP.NET Core shared framework), matched in memory, case-sensitive.
+  skipped), read up to one byte past that size (one that grew since is skipped) and decoded with
+  `FileStore.DecodeText`. Globs are `Microsoft.Extensions.FileSystemGlobbing` matchers (from the ASP.NET Core shared
+  framework), matched in memory, case-sensitive.
 - The query becomes a `Regex` with `NonBacktracking` and `CultureInvariant` (`IgnoreCase` unless `matchCase`; a literal
   through `Regex.Escape`; `wholeWord` as `\b(?:…)\b`, the pattern valid on its own). A pattern or glob .NET refuses is
-  `400` with an empty body: its exception would quote it, so it is dropped, never logged or returned. The deadline (10 s
-  of real time from the search's start, `SearchLimits`) and the client's abort are checked between files and between
-  lines. The search runs synchronously, so a repository object stays on one thread.
+  `400` with an empty body, and its exception is dropped, never logged or returned (a pattern's parse error quotes the
+  pattern). The deadline (10 s of real time from the search's start, `SearchLimits`) and the client's abort are checked
+  between files and between lines, and the same limit is the pattern's match timeout, which stops one long line. The
+  search runs synchronously, so a repository object stays on one thread.
 - The query is never logged: the search logs only the number of files read, the duration and the limit (at Debug), and
   the API has no HTTP or body logging.
 

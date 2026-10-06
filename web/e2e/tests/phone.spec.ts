@@ -162,6 +162,11 @@ test('the Console tab names the file open in the Editor tab and sends it', async
   await tab(page, 'Console').click();
   const panel = page.locator('app-console-panel');
   await expect(panel.locator('.file-chip')).toHaveText('main.c');
+  await panel.getByRole('button', { name: 'Detach main.c' }).click();
+  const attach = panel.getByRole('button', { name: 'Attach main.c' });
+  expect((await attach.boundingBox())!.height).toBeGreaterThanOrEqual(32);
+  await attach.click();
+  await expect(panel.locator('.file-chip')).toHaveText('main.c');
   await page.getByRole('textbox', { name: 'Prompt' }).fill('dodaj komentarz');
   await panel.getByRole('button', { name: 'Send', exact: true }).click();
   await expect(panel.locator('.prompt__file')).toHaveText(`⧉ ${MAIN}`);

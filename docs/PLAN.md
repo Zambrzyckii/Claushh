@@ -444,8 +444,9 @@ Backend decisions (stage 2):
   entered, `node_modules` and what a repository's `.gitignore` ignores skipped (LibGit2Sharp, tracked files too, as
   ripgrep does), text read as the files API reads it, and each line matched by .NET's `NonBacktracking` engine, which
   runs in time linear in the input. Limits are constants: 2,000 matches, files up to 1 MiB, 10 s per request, checked
-  between lines. A POST keeps the searched text out of URLs and so out of access logs, and the API never logs it: a
-  pattern .NET refuses is a `400`, and its exception, whose message quotes the pattern, is dropped. Rejected: `git grep`
+  between lines and, inside a long line, as the pattern's match timeout. A POST keeps the searched text out of URLs and
+  so out of access logs, and the API never logs it: a pattern .NET refuses is a `400`, and its exception, whose message
+  quotes the pattern, is dropped. Rejected: `git grep`
   through `GitRunner` (it keeps only the last 64 KB of output, its columns count bytes, the projects directory and
   workspaces are not repositories, and its regular expressions are POSIX or PCRE), ripgrep (a new system package for
   the server) and GET (the query in URLs).

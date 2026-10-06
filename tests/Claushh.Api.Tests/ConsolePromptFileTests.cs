@@ -101,6 +101,7 @@ public sealed class ConsolePromptFileTests(ApiFactory api) : ApiTest(api)
     [InlineData("studia/lab/a\u007fb.c", null, null)]
     [InlineData("studia/lab/a\u0085b.c", null, null)]
     [InlineData("studia/lab/a\u2028b.c", null, null)]
+    [InlineData("studia/lab/a\u2029b.c", null, null)]
     public async Task A_malformed_file_is_refused_before_the_conversation_is_looked_up(string? path, int? startLine, int? endLine)
     {
         await using var tab = await TestConsole.ConnectAsync(Api, Client);

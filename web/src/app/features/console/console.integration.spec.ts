@@ -416,6 +416,12 @@ describe('Console (integration)', () => {
     host.editor.selection.set({ path: 'studia/lab/src/main.c', startLine: 5, endLine: 10 });
     await settle();
     expect(chip(root)).toBe('main.c:5-10');
+    // Lines of another file are never paired with the active one.
+    host.editor.selection.set({ path: 'studia/lab/src/other.c', startLine: 1, endLine: 2 });
+    await settle();
+    expect(chip(root)).toBe('main.c');
+    host.editor.selection.set({ path: 'studia/lab/src/main.c', startLine: 5, endLine: 10 });
+    await settle();
     typePrompt(root, 'wyjaśnij');
     send(root);
     await settle();
@@ -441,6 +447,7 @@ describe('Console (integration)', () => {
     expect(chip(root)).toBeNull();
     const attach = () => root.querySelector<HTMLButtonElement>('button[aria-label="Attach b.c"]');
     expect(attach()!.textContent!.trim()).toBe('+ b.c');
+    expect(document.activeElement).toBe(attach());
     typePrompt(root, 'bez pliku');
     send(root);
     await settle();
@@ -457,6 +464,7 @@ describe('Console (integration)', () => {
     attach()!.click();
     await settle();
     expect(chip(root)).toBe('b.c');
+    expect(document.activeElement?.getAttribute('aria-label')).toBe('Detach b.c');
   });
 
   it('never offers a file of another repository or one whose name has a control character, and the log shows the named file', async () => {

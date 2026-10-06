@@ -175,9 +175,8 @@ export class EditorStore {
 
   /** Opens a file and makes it active; `at` also selects a place in it once it is shown (a search result). */
   async open(path: string, at?: RevealTarget): Promise<void> {
-    if (at) {
-      this.reveal.set({ path, ...at, seq: ++this.revealSeq });
-    }
+    // Without `at` an older result's place is dropped, so it never selects anything later.
+    this.reveal.set(at ? { path, ...at, seq: ++this.revealSeq } : null);
     this.activePathSignal.set(path);
     const existing = this.find(path);
     if (existing && existing.status !== 'error') {
@@ -216,6 +215,9 @@ export class EditorStore {
 
   activate(path: string): void {
     if (this.find(path)) {
+      if (this.reveal()?.path !== path) {
+        this.reveal.set(null);
+      }
       this.activePathSignal.set(path);
     }
   }

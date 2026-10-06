@@ -129,6 +129,12 @@ describe('Search (integration)', () => {
     root.querySelector<HTMLButtonElement>('.search-file')!.click();
     await render();
     expect(texts(root, '.search-match')).toEqual(['cc -o app src/main.c']);
+
+    // Opening a file without a place drops the result's place, so it never selects anything later.
+    const other = host.editor.open('studia/lab/Makefile');
+    expect(host.editor.reveal()).toBeNull();
+    http.expectOne((r) => r.url === '/api/files/content').flush({ path: 'studia/lab/Makefile', content: 'y', version: 'v2' });
+    await other;
   });
 
   it('names an invalid regular expression, a failure, no results and the limits', async () => {

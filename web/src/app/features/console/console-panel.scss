@@ -216,6 +216,7 @@
   }
 
   &--off {
+    min-width: 0;
     min-height: 0;
     opacity: 0.6;
   }
@@ -224,6 +225,10 @@
 @media (pointer: coarse) {
   .file-chip__detach {
     width: 32px;
+    min-height: 32px;
+  }
+
+  .file-chip--off {
     min-height: 32px;
   }
 }
