@@ -198,6 +198,10 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     // uses it; ResetAsync puts back none.
     public void SetApiKeyFile(string? path) => Services.GetRequiredService<IOptions<ConsoleOptions>>().Value.ApiKeyFile = path;
 
+    // Terminal:ThemeFile for the API (null: none). The theme endpoint reads its options on every request; ResetAsync
+    // puts back none.
+    public void SetThemeFile(string? path) => Services.GetRequiredService<IOptions<TerminalOptions>>().Value.ThemeFile = path;
+
     // SearchLimits.Time for the API (a DI singleton, as Console:ApiKeyFile above); ResetAsync puts back the default.
     public void SetSearchTime(TimeSpan time) => Services.GetRequiredService<SearchLimits>().Time = time;
 
@@ -260,6 +264,7 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         await Services.GetRequiredService<Conversations>().CloseAllAsync();
         Claude.Reset();
         SetApiKeyFile(null);
+        SetThemeFile(null);
         var cli = Services.GetRequiredService<ClaudeCli>();
         if (!cli.Available)
         {

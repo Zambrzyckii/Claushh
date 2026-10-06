@@ -1,8 +1,11 @@
 // libc calls that System.IO does not offer: resolving every symlink of a path (realpath(3)), the type of a file without
-// following a final symlink (statx(2)), so FIFOs and devices are never opened, whether the process may use a directory
-// (access(2)), making the process non-dumpable (prctl(2)) and asking a process to end (kill(2) with SIGTERM, for git's
-// process tree). Linux only, like the deployment (docs/PLAN.md, "Backend decisions (stage 2)").
+// following a final symlink (statx(2)), so the files API never opens a FIFO or a device, opening a regular file for
+// reading without waiting on a named pipe (open(2) with O_NONBLOCK, the type then read from the open file with
+// statx(2)), whether the process may use a directory (access(2)), making the process non-dumpable (prctl(2)) and
+// asking a process to end (kill(2) with SIGTERM, for git's process tree). Linux only, like the deployment
+// (docs/PLAN.md, "Backend decisions (stage 2)").
 using System.Runtime.InteropServices;
+using Microsoft.Win32.SafeHandles;
 
 namespace Claushh.Api.Files;
 
@@ -26,6 +29,10 @@ internal static class Libc
     private const int StatxModeOffset = 28;
     // The access(2) mode R_OK | W_OK | X_OK.
     private const int AccessReadWriteSearch = 4 | 2 | 1;
+    // The open(2) flags O_RDONLY | O_NOCTTY | O_NONBLOCK | O_CLOEXEC of <asm-generic/fcntl.h> (x86-64 and arm64).
+    private const int OpenReadNonBlocking = 0 | 0x100 | 0x800 | 0x80000;
+    // AT_EMPTY_PATH of <linux/fcntl.h>: statx on the descriptor itself.
+    private const int AtEmptyPath = 0x1000;
     // PR_SET_DUMPABLE of <linux/prctl.h>.
     private const int PrSetDumpable = 4;
     // SIGTERM of <signal.h>.
@@ -61,6 +68,28 @@ internal static class Libc
             : null;
     }
 
+    // A regular file opened for reading, a final symlink followed; null when open fails (nothing there, no permission, a
+    // link loop) or the opened file is not a regular file (a directory, a named pipe, a device). Opening a named pipe never
+    // waits for a writer (O_NONBLOCK, which a regular file's reads ignore), and a terminal device never becomes the
+    // process's controlling terminal (O_NOCTTY). The type comes from the opened file, so the file checked is the file read.
+    public static SafeFileHandle? OpenRegularFile(string path)
+    {
+        var descriptor = OpenNative(path, OpenReadNonBlocking, 0);
+        if (descriptor < 0)
+        {
+            return null;
+        }
+        var file = new SafeFileHandle(descriptor, ownsHandle: true);
+        var buffer = new byte[StatxSize];
+        if (StatxNative(descriptor, "", AtEmptyPath, StatxType, buffer) == 0
+            && (BitConverter.ToUInt16(buffer, StatxModeOffset) & S_IFMT) == S_IFREG)
+        {
+            return file;
+        }
+        file.Dispose();
+        return null;
+    }
+
     // Whether this process may read, write and search the directory; a symlink is followed.
     public static bool CanReadWriteAndSearch(string path) => AccessNative(path, AccessReadWriteSearch) == 0;
 
@@ -84,6 +113,10 @@ internal static class Libc
 
     [DllImport("libc", EntryPoint = "statx", SetLastError = true)]
     private static extern int StatxNative(int directory, [MarshalAs(UnmanagedType.LPUTF8Str)] string path, int flags, uint mask, byte[] buffer);
+
+    // open(2) is variadic: the mode goes as a plain int, unused without O_CREAT.
+    [DllImport("libc", EntryPoint = "open")]
+    private static extern int OpenNative([MarshalAs(UnmanagedType.LPUTF8Str)] string path, int flags, int mode);
 
     [DllImport("libc", EntryPoint = "access", SetLastError = true)]
     private static extern int AccessNative([MarshalAs(UnmanagedType.LPUTF8Str)] string path, int mode);
