@@ -218,6 +218,19 @@ img.file-icon {
   flex-shrink: 0;
 }
 
+// A count on an icon or a section (the activity bar, CHANGES), as VS Code's badges.
+.badge {
+  box-sizing: border-box;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 7px;
+  background: var(--purple);
+  color: var(--accent-fg);
+  font: 600 9px/14px var(--font-ui);
+  text-align: center;
+}
+
 // Phone sheets (docs/ARCHITECTURE.md, "Frontend" → "Phone layout"): full-screen <dialog>s opened with showModal() that
 // slide up; browsers without overlay transitions close them without the slide.
 dialog.sheet {

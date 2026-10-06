@@ -1,0 +1,23 @@
+<app-workspaces-panel />
+
+@if (repoStatus.status(); as status) {
+  <section class="changes" aria-label="Changes">
+    <h3 class="changes__head section-title">
+      Changes
+      @if (status.files.length > 0) {
+        <span class="badge">{{ status.files.length }}</span>
+      }
+    </h3>
+    @for (file of status.files; track file.path) {
+      <button type="button" class="scm-change" [attr.data-mark]="letters[file.status]" [disabled]="file.status === 'deleted'"
+              [title]="file.path" (click)="open(file.path)">
+        <img class="file-icon" [src]="icon(file.path)" alt="" width="16" height="16" draggable="false">
+        <span class="scm-change__name">{{ name(file.path) }}</span>
+        <span class="scm-change__dir">{{ directory(file.path) }}</span>
+        <span class="scm-change__mark">{{ letters[file.status] }}</span>
+      </button>
+    } @empty {
+      <p class="changes__empty">No changes.</p>
+    }
+  </section>
+}

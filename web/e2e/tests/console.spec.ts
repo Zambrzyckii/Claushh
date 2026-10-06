@@ -171,7 +171,7 @@ test('the conversation keeps running while the panel is collapsed', async ({ pag
   await prompt(page).press('Enter');
   await consolePanel(page).getByRole('button', { name: 'Hide console' }).click();
   await expect(page.locator('.statusbar')).toContainText('Console: waiting for permission');
-  await page.getByRole('button', { name: 'Show console' }).click();
+  await page.getByRole('button', { name: 'Console', exact: true }).click();
   await expect(consolePanel(page).getByRole('group', { name: /Allow:/ })).toBeVisible();
 });
 

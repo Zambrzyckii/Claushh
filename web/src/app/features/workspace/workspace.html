@@ -1,148 +1,41 @@
-<header class="topbar" [class.topbar--phone]="layout.phone()">
-  @if (layout.phone()) {
-    <button type="button" class="topbar__repo-button" aria-haspopup="dialog" (click)="openWorkspaceSheet()">
-      <span class="topbar__repo">{{ project.label() }}</span>
-      @if (repoStatus.status(); as status) {
-        <span class="topbar__branch">{{ status.branch ?? '(detached HEAD)' }}</span>
-      }
-    </button>
-  } @else {
-    <div class="topbar__path">
-      <strong>Workspace</strong>
-      @if (project.path() !== '') {
-        <span class="topbar__sep">/</span>
-        <span class="topbar__muted">{{ workspaces.openWorkspace()?.name ?? project.path().split('/')[0] }}</span>
-        <span class="topbar__sep">/</span>
-        <span class="topbar__repo">{{ project.label() }}</span>
-        @if (repoStatus.status(); as status) {
-          <span class="topbar__branch">{{ status.branch ?? '(detached HEAD)' }}</span>
-        }
-      }
-    </div>
-  }
-  <div class="topbar__actions">
-    @if (sessionTimer.label(); as remaining) {
-      <span class="topbar__session" [class.topbar__session--warning]="sessionTimer.warning()" role="timer" aria-live="off"
-            [attr.aria-label]="layout.phone() ? 'Session expires in ' + remaining : null">
-        {{ layout.phone() ? remaining : 'Session expires in ' + remaining }}
-      </span>
-      @if (sessionTimer.warning()) {
-        <button type="button" (click)="sessionTimer.extend()">Extend</button>
-      }
-    }
-    @if (layout.phone()) {
-      <button type="button" class="icon" aria-label="Menu" aria-haspopup="menu" [attr.aria-expanded]="menuOpen()"
-              (click)="menuOpen.set(!menuOpen())">
-        <span class="codicon codicon-kebab-vertical" aria-hidden="true"></span>
-      </button>
-      @if (menuOpen()) {
-        <div class="menu-backdrop" (click)="menuOpen.set(false)"></div>
-        <div class="menu" role="menu" aria-label="Menu">
-          <button type="button" role="menuitem" (click)="openSecurity()">Security</button>
-          <button type="button" role="menuitem" [disabled]="loggingOut()" (click)="logout()">
-            {{ loggingOut() ? 'Logging out…' : 'Log out' }}
-          </button>
-        </div>
-      }
-    } @else {
-      @if (user(); as u) {
-        <button type="button" class="topbar__user" aria-haspopup="dialog" [attr.aria-label]="'Security and sessions (' + u.userName + ')'"
-                (click)="openSecurity()"><span class="codicon codicon-account" aria-hidden="true"></span>{{ u.userName }}</button>
-      }
-      <button type="button" class="icon" aria-label="Panel" [attr.aria-pressed]="bottomOpen()" (click)="toggleBottom()">
-        <span class="codicon" [class.codicon-layout-panel]="bottomOpen()" [class.codicon-layout-panel-off]="!bottomOpen()" aria-hidden="true"></span>
-      </button>
-      <button type="button" class="icon" aria-label="Console" [attr.aria-pressed]="consoleOpen()" (click)="toggleConsole()">
-        <span class="codicon" [class.codicon-layout-sidebar-right]="consoleOpen()" [class.codicon-layout-sidebar-right-off]="!consoleOpen()" aria-hidden="true"></span>
-      </button>
-      <button type="button" [disabled]="loggingOut()" (click)="logout()">
-        {{ loggingOut() ? 'Logging out…' : 'Log out' }}
-      </button>
-    }
-  </div>
-</header>
+<app-title-bar [loggingOut]="loggingOut()" (security)="openSecurity()" (logout)="logout()" (repository)="showRepository()" />
 
 @if (layout.phone()) {
   <app-phone-panes [(tab)]="phoneTab" />
 } @else {
   <div class="main">
-    <nav class="explorer" aria-label="File explorer">
-      <app-explorer [root]="project.path()" [activePath]="editor.activePath()" [decorations]="repoStatus.decorations()"
-                    (openFile)="editor.open($event)" (refreshed)="explorerRefreshed()" />
-    </nav>
+    <app-side-bar class="sidebar" [class.sidebar--closed]="!state.sideBarOpen()" />
 
-    <main class="editor">
-      <app-editor-pane />
-    </main>
+    <div class="center">
+      <main class="editor">
+        <app-editor-pane />
+      </main>
 
-    @if (consoleOpen()) {
+      @if (state.panelOpen()) {
+        <section class="bottom" aria-label="Panel" animate.enter="slide-in-up" animate.leave="slide-out-down">
+          <div class="bottom__bar">
+            <div class="bottom__tabs" role="tablist" aria-label="Panel views">
+              <button type="button" role="tab" id="panel-tab-terminal" aria-selected="true" aria-controls="panel-terminal">TERMINAL</button>
+            </div>
+            <button type="button" class="bottom__collapse icon" aria-label="Hide panel" title="Hide panel" (click)="state.panelOpen.set(false)">
+              <span class="codicon codicon-close" aria-hidden="true"></span>
+            </button>
+          </div>
+          <div class="bottom__content" id="panel-terminal" role="tabpanel" aria-labelledby="panel-tab-terminal">
+            <app-terminal-panel />
+          </div>
+        </section>
+      }
+    </div>
+
+    @if (state.consoleOpen()) {
       <aside class="console" aria-label="Console" animate.enter="slide-in-right" animate.leave="slide-out-right">
-        <app-console-panel (collapse)="toggleConsole()" />
+        <app-console-panel (collapse)="state.consoleOpen.set(false)" />
       </aside>
-    } @else {
-      <button type="button" class="console-collapsed" aria-label="Show console" (click)="toggleConsole()">
-        CONSOLE
-      </button>
     }
   </div>
-
-  @if (bottomOpen()) {
-    <section class="bottom" aria-label="Panel" animate.enter="slide-in-up" animate.leave="slide-out-down">
-      <div class="bottom__bar">
-        <div class="bottom__tabs" role="tablist">
-          <button type="button" role="tab" [attr.aria-selected]="bottomTab() === 'workspace'"
-                  (click)="bottomTab.set('workspace')">WORKSPACE</button>
-          <button type="button" role="tab" [attr.aria-selected]="bottomTab() === 'terminal'"
-                  (click)="bottomTab.set('terminal')">TERMINAL</button>
-        </div>
-        <button type="button" class="bottom__collapse icon" aria-label="Hide panel" (click)="toggleBottom()">
-          <span class="codicon codicon-close" aria-hidden="true"></span>
-        </button>
-      </div>
-      <div class="bottom__content" role="tabpanel">
-        @if (bottomTab() === 'workspace') {
-          <app-workspaces-panel />
-        } @else {
-          <app-terminal-panel />
-        }
-      </div>
-    </section>
-  }
 }
 
-<footer class="statusbar" [class.statusbar--phone]="layout.phone()">
-  <div class="statusbar__group">
-    @if (repoStatus.status(); as status) {
-      <span class="statusbar__branch">{{ status.branch ?? '(detached HEAD)' }}</span>
-      <span class="statusbar__changes" [class.statusbar__changes--dirty]="repoStatus.changeCount() > 0">{{ changesLabel() }}</span>
-    }
-    <span>{{ consoleStatus() }}</span>
-    @if (editor.unsavedCount() > 0) {
-      <span class="statusbar__unsaved">Unsaved: {{ editor.unsavedCount() }}</span>
-    }
-  </div>
-  @if (!layout.phone() || phoneTab() === 'editor') {
-    <div class="statusbar__group">
-      @if (editor.cursor(); as c) {
-        <span>Ln {{ c.line }}, Col {{ c.column }}</span>
-      }
-      @if (editor.language(); as lang) {
-        <span class="statusbar__language">{{ lang }}</span>
-      }
-    </div>
-  }
-</footer>
-
-@if (layout.phone()) {
-  <dialog #workspaceSheet class="sheet" aria-labelledby="workspace-sheet-title">
-    <div class="sheet__head">
-      <h2 id="workspace-sheet-title" class="section-title">Workspace</h2>
-      <button type="button" class="icon" aria-label="Close" (click)="workspaceSheet.close()">
-        <span class="codicon codicon-close" aria-hidden="true"></span>
-      </button>
-    </div>
-    <app-workspaces-panel />
-  </dialog>
-}
+<app-status-bar [editorShown]="!layout.phone() || phoneTab() === 'editor'" />
 
 <app-security-dialog [unsavedCount]="editor.unsavedCount()" (logoutEverywhere)="logout(true)" />

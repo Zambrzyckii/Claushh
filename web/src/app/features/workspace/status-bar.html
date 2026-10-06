@@ -1,0 +1,31 @@
+<footer class="statusbar" [class.statusbar--phone]="layout.phone()">
+  <div class="statusbar__group">
+    @if (repoStatus.status(); as status) {
+      <span class="statusbar__branch"><span class="codicon codicon-git-branch" aria-hidden="true"></span>{{ status.branch ?? '(detached HEAD)' }}</span>
+      <span class="statusbar__changes" [class.statusbar__changes--dirty]="repoStatus.changeCount() > 0"><span class="codicon codicon-source-control" aria-hidden="true"></span>{{ changesLabel() }}</span>
+    }
+    <span><span class="codicon codicon-comment-discussion" aria-hidden="true"></span>{{ consoleStatus() }}</span>
+    @if (editor.unsavedCount() > 0) {
+      <span class="statusbar__unsaved">Unsaved: {{ editor.unsavedCount() }}</span>
+    }
+  </div>
+  <div class="statusbar__group">
+    @if (editorShown()) {
+      @if (editor.cursor(); as c) {
+        <span>Ln {{ c.line }}, Col {{ c.column }}</span>
+      }
+      @if (editor.language(); as lang) {
+        <span class="statusbar__language">{{ lang }}</span>
+      }
+    }
+    @if (!layout.phone()) {
+      @if (sessionTimer.label(); as remaining) {
+        <span class="statusbar__session" [class.statusbar__session--warning]="sessionTimer.warning()" role="timer" aria-live="off"
+              [attr.aria-label]="'Session expires in ' + remaining" [title]="'Session expires in ' + remaining"><span class="codicon codicon-clock" aria-hidden="true"></span>{{ remaining }}</span>
+        @if (sessionTimer.warning()) {
+          <button type="button" class="statusbar__extend" (click)="sessionTimer.extend()">Extend</button>
+        }
+      }
+    }
+  </div>
+</footer>

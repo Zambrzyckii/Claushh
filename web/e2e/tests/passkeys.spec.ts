@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { Locator, Page } from '@playwright/test';
+import { Locator } from '@playwright/test';
 
 import { expect, test } from './fixtures';
 import {
@@ -10,7 +10,9 @@ import {
   addPasskey,
   addVirtualAuthenticator,
   login,
+  logOut,
   mockState,
+  openSecurity,
   resetMock
 } from './helpers';
 
@@ -22,13 +24,6 @@ import {
 
 test.use({ baseURL: PASSKEY_ORIGIN });
 test.beforeEach(async ({ request }) => resetMock(request));
-
-async function openSecurity(page: Page): Promise<Locator> {
-  await page.getByRole('button', { name: /Security and sessions/ }).click();
-  const security = page.getByRole('dialog', { name: 'Security' });
-  await expect(security).toBeVisible();
-  return security;
-}
 
 async function confirmPassword(security: Locator): Promise<void> {
   await security.getByLabel('Password', { exact: true }).fill(USER.password);
@@ -95,7 +90,7 @@ test('removing a passkey in a new session asks for the password and code again',
   await addVirtualAuthenticator(page);
   await addPasskey(await openSecurity(page), 'Laptop');
   await page.keyboard.press('Escape');
-  await page.getByRole('button', { name: 'Log out', exact: true }).click();
+  await logOut(page);
   await expect(page).toHaveURL('/login?logout=ok');
   await login(page);
 
@@ -142,7 +137,7 @@ test('a passkey logs in without a user name, and the history shows it', async ({
   await addVirtualAuthenticator(page);
   await addPasskey(await openSecurity(page), 'Laptop');
   await page.keyboard.press('Escape');
-  await page.getByRole('button', { name: 'Log out', exact: true }).click();
+  await logOut(page);
   await expect(page).toHaveURL('/login?logout=ok');
 
   await page.getByRole('button', { name: 'Log in with a passkey' }).click();
@@ -176,7 +171,7 @@ test('an open passkey prompt does not hold the login lock: another tab logs in w
 
   const other = await context.newPage();
   await login(other);
-  await expect(other.locator('.topbar__user')).toHaveText('owner');
+  await expect(other.locator('.topbar__user')).toHaveAttribute('aria-label', 'Account: owner');
   await expect(passkey).toBeDisabled(); // the prompt is still open
   expect((await mockState(request)).log.map((entry) => entry.path)).not.toContain('/api/auth/passkeys/login');
 });

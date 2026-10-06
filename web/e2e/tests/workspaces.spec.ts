@@ -15,12 +15,14 @@ import {
   repoRow,
   resetMock,
   setRepoState,
+  showView,
   treeRow
 } from './helpers';
 
 test.beforeEach(async ({ page, request }) => {
   await resetMock(request);
   await login(page);
+  await showView(page, 'Source Control');
 });
 
 const panel = (page: Page) => page.locator('app-workspaces-panel');
@@ -45,7 +47,7 @@ test('lists workspaces and the repositories of the selected one', async ({ page 
 test('opening a repository scopes the explorer, top bar, status bar and console', async ({ page }) => {
   await openRepo(page, 'lab-3-sieci');
   await expect(page).toHaveURL(`/?repo=${encodeURIComponent(LAB)}`);
-  await expect(page.locator('.topbar__path')).toHaveText(/Workspace\s*\/\s*Studia\s*\/\s*lab-3-sieci\s*main/);
+  await expect(page.locator('.topbar__path')).toHaveText(/Studia\s*\/\s*lab-3-sieci\s*main/);
   await expect(page.locator('.row__name')).toHaveText(['src', 'logo.png', 'Makefile']);
   await expect(page.locator('.statusbar__branch')).toHaveText('main');
   await expect(page.locator('.statusbar__changes')).toHaveText('no changes');
@@ -112,6 +114,7 @@ test('pull updates files, including a clean file open in the editor', async ({ p
   await openFile(page, 'zadanie4.sql');
   await expectEditorToContain(page, 'SELECT 1');
 
+  await showView(page, 'Source Control');
   await repoRow(page, 'bazy-danych-lab').getByRole('button', { name: 'Pull bazy-danych-lab' }).click();
   await expect(panel(page).getByRole('status')).toHaveText('Pulled 2 commits.');
   await expectEditorToContain(page, 'SELECT 2');
@@ -131,6 +134,7 @@ test('pull is refused when it would overwrite local changes', async ({ page, req
   await page.keyboard.press('Control+s');
   await expect(page.locator('.statusbar__changes')).toHaveText('1 change');
 
+  await showView(page, 'Source Control');
   await repoRow(page, 'bazy-danych-lab').getByRole('button', { name: 'Pull bazy-danych-lab' }).click();
   await expect(panel(page).getByRole('alert')).toContainText('Pull refused');
   await expect(panel(page).getByRole('alert')).toContainText('would be overwritten');
@@ -150,7 +154,7 @@ test('creates a workspace, validating the name first', async ({ page, request })
   await expect(panel(page).locator('.workspace')).toHaveText([/Studia/, /Prywatne/, /Projekty zespołowe\s*0 repos/]);
   await expect(panel(page).locator('.workspace--active')).toContainText('Projekty zespołowe');
   await expect(panel(page)).toContainText('No repositories in this workspace.');
-  await expect(treeRow(page, 'projekty-zespolowe')).toBeVisible();
+  await expect(treeRow(page, 'projekty-zespolowe')).toHaveCount(1);
 
   await panel(page).getByRole('button', { name: 'New workspace' }).click();
   await name.fill('projekty zespołowe');

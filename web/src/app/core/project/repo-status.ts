@@ -7,7 +7,7 @@ import { GitApi, GitFileStatus, GitStatus } from '../api/git-api';
 import { ProjectContext } from './project-context';
 
 /** Letters as in VS Code: M modified, A added, D deleted, R renamed, U untracked, ! conflict. */
-const LETTERS: Record<GitFileStatus, string> = {
+export const STATUS_LETTERS: Record<GitFileStatus, string> = {
   modified: 'M',
   added: 'A',
   deleted: 'D',
@@ -48,7 +48,7 @@ export class RepoStatusStore {
       return marks;
     }
     for (const file of status.files) {
-      marks.set(file.path, LETTERS[file.status]);
+      marks.set(file.path, STATUS_LETTERS[file.status]);
     }
     for (const file of status.files) {
       let slash = file.path.lastIndexOf('/');

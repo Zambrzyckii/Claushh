@@ -1,4 +1,5 @@
 <nav class="workspaces" aria-label="Workspaces">
+  <h3 class="section-title">Workspaces</h3>
   @if (store.listError(); as error) {
     <p class="error" role="alert">{{ error }}</p>
     <button type="button" (click)="store.load()">Try again</button>
@@ -29,6 +30,7 @@
 </nav>
 
 <section class="repos" [attr.aria-label]="'Repositories: ' + (store.selectedWorkspace()?.name ?? '')">
+  <h3 class="section-title">Repositories</h3>
   @if (store.selectedWorkspace(); as ws) {
     <table>
       <thead>
@@ -106,6 +108,6 @@
       }
     </div>
   } @else if (store.workspaces()?.length === 0) {
-    <p class="faint padded">There is no workspace yet. Create the first one on the left.</p>
+    <p class="faint padded">There is no workspace yet. Create the first one above.</p>
   }
 </section>

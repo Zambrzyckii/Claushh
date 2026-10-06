@@ -1,5 +1,5 @@
 import { expect, test } from './fixtures';
-import { MAIN, editorText, expectEditorToContain, login, mockState, openFile, resetMock, setFile, treeRow } from './helpers';
+import { MAIN, editorText, expectEditorToContain, logOut, login, mockState, openFile, resetMock, setFile, treeRow } from './helpers';
 
 test.beforeEach(async ({ page, request }) => {
   await resetMock(request);
@@ -113,11 +113,11 @@ test('closing a dirty tab and logging out ask for confirmation', async ({ page, 
   await expect(page.locator('.tab')).toHaveCount(1);
 
   page.once('dialog', (d) => d.dismiss());
-  await page.getByRole('button', { name: 'Log out' }).click();
+  await logOut(page);
   await expect(page).toHaveURL('/');
 
   page.once('dialog', (d) => d.accept());
-  await page.getByRole('button', { name: 'Log out' }).click();
+  await logOut(page);
   await expect(page).toHaveURL('/login?logout=ok');
   await expect(page.locator('.monaco-editor')).toHaveCount(0);
   expect((await mockState(request)).files[MAIN]).not.toContain('unsaved');

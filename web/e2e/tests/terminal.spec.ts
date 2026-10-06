@@ -38,7 +38,7 @@ test('the first terminal opens in the open repository and runs commands', async 
   const [terminal] = (await mockState(request)).terminals;
   expect(terminal.cwd).toBe('studia/lab-3-sieci');
   const [cols, rows] = terminal.sizes.at(-1)!;
-  expect(cols).toBeGreaterThan(100);
+  expect(cols).toBeGreaterThan(80); // sized from the panel's width, not xterm's default of 80
   expect(rows).toBeGreaterThanOrEqual(5);
 });
 
@@ -65,7 +65,8 @@ test('a terminal survives a page reload without duplicated output', async ({ pag
   await expect.poll(async () => (await terminalText(page)).match(/zachowane/g)?.length).toBe(2);
   expect((await mockState(request)).terminals).toHaveLength(1);
 
-  await page.getByRole('tab', { name: 'WORKSPACE' }).click();
+  await page.getByRole('button', { name: 'Hide panel' }).click();
+  await expect(page.locator('section.bottom')).toHaveCount(0); // gone after its slide, so openTerminalTab sees it closed
   await openTerminalTab(page);
   await expect.poll(async () => (await terminalText(page)).match(/zachowane/g)?.length).toBe(2);
 });
@@ -290,7 +291,7 @@ test('a batch whose confirmation was lost is not typed twice', async ({ page, re
 
 test('the terminal does not take the focus from the console while it connects', async ({ page, request }) => {
   await setFault(request, { attachDelayMs: 1500 });
-  await page.getByRole('tab', { name: 'TERMINAL' }).click();
+  await page.getByRole('button', { name: 'Panel', exact: true }).click();
   const prompt = page.getByRole('textbox', { name: 'Prompt' });
   await prompt.click();
   await page.keyboard.type('pierwsza część ');
@@ -339,7 +340,8 @@ test('keys typed during an outage survive closing and reopening the terminal tab
   await page.keyboard.press('Enter');
 
   // The terminal view disappears together with the tab, but the character queue belongs to TerminalStore.
-  await page.getByRole('tab', { name: 'WORKSPACE' }).click();
+  await page.getByRole('button', { name: 'Hide panel' }).click();
+  await expect(page.locator('section.bottom')).toHaveCount(0); // gone after its slide, so openTerminalTab sees it closed
   await openTerminalTab(page);
   await expect.poll(() => terminalText(page), { timeout: 10_000 }).toMatch(/^po-panelu\s*$/m);
   expect((await terminalInputs(request)).match(/echo po-panelu\r/g)).toHaveLength(1);
@@ -392,7 +394,7 @@ test('when automatic reconnection gives up, "reconnect" brings the terminal back
   // must not push out old characters without asking.
   await setFault(request, { hubDownMs: 0, listDelayMs: 1500 });
   await panel.getByRole('button', { name: 'reconnect' }).click();
-  await activeTerminal(page).locator('.xterm-screen').click();
+  await activeTerminal(page).locator('.xterm-screen').click({ position: { x: 4, y: 4 } }); // the question sits bottom right
   await page.keyboard.type('x');
   const question = activeTerminal(page).getByRole('alertdialog');
   await expect(question).toContainText('echo wrocilem');

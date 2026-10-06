@@ -1,0 +1,25 @@
+<div class="activity" role="tablist" aria-label="Side bar views">
+  @for (v of views; track v.id) {
+    <button type="button" role="tab" class="activity__item" [id]="'view-tab-' + v.id" [attr.aria-controls]="'view-' + v.id"
+            [attr.aria-selected]="state.view() === v.id" [attr.aria-label]="v.label" [title]="v.label"
+            (click)="state.view.set(v.id)">
+      <span [class]="'codicon codicon-' + v.icon" aria-hidden="true"></span>
+      @if (badge(v.id); as count) {
+        <span class="badge" aria-hidden="true">{{ count }}</span>
+      }
+    </button>
+  }
+</div>
+
+<section class="view" id="view-explorer" role="tabpanel" aria-labelledby="view-tab-explorer" [hidden]="state.view() !== 'explorer'">
+  <div class="view__head"><h2 class="section-title">Explorer</h2></div>
+  <nav class="view__body" aria-label="File explorer">
+    <app-explorer [root]="project.path()" [label]="project.label()" [activePath]="editor.activePath()"
+                  [decorations]="repoStatus.decorations()" (openFile)="openFile($event)" (refreshed)="explorerRefreshed()" />
+  </nav>
+</section>
+
+<section class="view" id="view-scm" role="tabpanel" aria-labelledby="view-tab-scm" [hidden]="state.view() !== 'scm'">
+  <div class="view__head"><h2 class="section-title">Source Control</h2></div>
+  <app-source-control-view class="view__body" />
+</section>

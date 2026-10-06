@@ -1,0 +1,74 @@
+<header class="topbar" [class.topbar--phone]="layout.phone()">
+  @if (layout.phone()) {
+    <button type="button" class="topbar__repo-button" [attr.aria-expanded]="state.drawerOpen() && state.view() === 'scm'"
+            (click)="repository.emit()">
+      <span class="topbar__repo">{{ project.label() }}</span>
+      @if (repoStatus.status(); as status) {
+        <span class="topbar__branch">{{ status.branch ?? '(detached HEAD)' }}</span>
+      }
+    </button>
+  } @else {
+    <span></span>
+    <button type="button" class="topbar__path" title="Source Control" (click)="state.show('scm')">
+      @if (project.path() === '') {
+        <span class="topbar__muted">projects directory</span>
+      } @else {
+        <span class="topbar__muted">{{ workspaceName() }}</span>
+        <span class="topbar__sep">/</span>
+        <span class="topbar__repo">{{ project.label() }}</span>
+        @if (repoStatus.status(); as status) {
+          <span class="topbar__branch">{{ status.branch ?? '(detached HEAD)' }}</span>
+        }
+      }
+    </button>
+  }
+  <div class="topbar__actions">
+    @if (layout.phone()) {
+      @if (sessionTimer.label(); as remaining) {
+        <span class="topbar__session" [class.topbar__session--warning]="sessionTimer.warning()" role="timer" aria-live="off"
+              [attr.aria-label]="'Session expires in ' + remaining">{{ remaining }}</span>
+        @if (sessionTimer.warning()) {
+          <button type="button" (click)="sessionTimer.extend()">Extend</button>
+        }
+      }
+      <button type="button" class="icon" aria-label="Menu" aria-haspopup="menu" [attr.aria-expanded]="menuOpen()"
+              (click)="menuOpen.set(!menuOpen())">
+        <span class="codicon codicon-kebab-vertical" aria-hidden="true"></span>
+      </button>
+    } @else {
+      <button type="button" class="icon" aria-label="Side bar" title="Side bar" [attr.aria-pressed]="state.sideBarOpen()"
+              (click)="state.sideBarOpen.set(!state.sideBarOpen())">
+        <span class="codicon" [class.codicon-layout-sidebar-left]="state.sideBarOpen()"
+              [class.codicon-layout-sidebar-left-off]="!state.sideBarOpen()" aria-hidden="true"></span>
+      </button>
+      <button type="button" class="icon" aria-label="Panel" title="Panel" [attr.aria-pressed]="state.panelOpen()"
+              (click)="state.panelOpen.set(!state.panelOpen())">
+        <span class="codicon" [class.codicon-layout-panel]="state.panelOpen()"
+              [class.codicon-layout-panel-off]="!state.panelOpen()" aria-hidden="true"></span>
+      </button>
+      <button type="button" class="icon" aria-label="Console" title="Console" [attr.aria-pressed]="state.consoleOpen()"
+              (click)="state.consoleOpen.set(!state.consoleOpen())">
+        <span class="codicon" [class.codicon-layout-sidebar-right]="state.consoleOpen()"
+              [class.codicon-layout-sidebar-right-off]="!state.consoleOpen()" aria-hidden="true"></span>
+      </button>
+      @if (user(); as u) {
+        <button type="button" class="icon topbar__user" [attr.aria-label]="'Account: ' + u.userName" [title]="'Account: ' + u.userName"
+                aria-haspopup="menu" [attr.aria-expanded]="menuOpen()" (click)="menuOpen.set(!menuOpen())">
+          <span class="codicon codicon-account" aria-hidden="true"></span>
+        </button>
+      }
+    }
+    @if (menuOpen()) {
+      <div class="menu-backdrop" (click)="menuOpen.set(false)"></div>
+      <div class="menu" role="menu" [attr.aria-label]="layout.phone() ? 'Menu' : 'Account'">
+        @if (user(); as u) {
+          <div class="menu__label" role="none">{{ u.userName }}</div>
+        }
+        <button type="button" role="menuitem" (click)="openSecurity()">Security…</button>
+        <button type="button" role="menuitem" [disabled]="loggingOut()" (click)="logOut()">
+          {{ loggingOut() ? 'Logging out…' : 'Log out' }}
+        </button>
+      </div>
+    }
+  </div>
+</header>

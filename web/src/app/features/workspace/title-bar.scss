@@ -1,0 +1,132 @@
+:host {
+  display: block;
+  flex-shrink: 0;
+}
+
+.topbar {
+  height: 35px;
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  padding: 0 4px 0 8px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+
+  &__path {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    width: min(38vw, 480px);
+    height: 22px;
+    min-height: 0;
+    padding: 0 8px;
+    overflow: hidden;
+    background: var(--bg);
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  &__sep {
+    color: var(--text-faint);
+  }
+
+  &__muted {
+    color: var(--text-muted);
+  }
+
+  &__branch {
+    padding: 1px 6px;
+    border: 1px solid var(--border-strong);
+    border-radius: 4px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  &__actions {
+    justify-self: end;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+  }
+
+  &__user {
+    margin-left: 8px;
+  }
+
+  &__session {
+    margin-right: 6px;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-muted);
+
+    &--warning {
+      color: var(--warning);
+    }
+  }
+}
+
+// Phone (docs/ARCHITECTURE.md, "Frontend" → "Phone layout").
+.topbar--phone {
+  height: 40px;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.topbar__repo-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 0 6px;
+
+  .topbar__repo {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .topbar__branch {
+    flex-shrink: 0;
+  }
+}
+
+.menu-backdrop {
+  position: fixed;
+  inset: 0;
+}
+
+.menu {
+  position: absolute;
+  top: calc(100% + 2px);
+  right: 6px;
+  min-width: 180px;
+  display: flex;
+  flex-direction: column;
+  padding: 4px 0;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  box-shadow: 0 6px 18px var(--scrim);
+
+  &__label {
+    margin-bottom: 4px;
+    padding: 4px 16px 6px;
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  [role='menuitem'] {
+    justify-content: flex-start;
+    border-radius: 0;
+    padding: 0 16px;
+    text-align: left;
+  }
+}

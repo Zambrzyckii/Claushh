@@ -199,9 +199,10 @@ describe('Workspaces (integration)', () => {
     expect(message).toContain('[rejected]');
   });
 
-  it('on a phone the panel is marked for its card layout and keeps the same rows and cells', async () => {
-    const { root } = await loaded({ phone: true });
-    expect(root.querySelector('app-workspaces-panel')!.classList.contains('phone')).toBe(true);
+  it('the panel stacks the workspaces above the repositories, whose cards keep their rows and cells', async () => {
+    const { root } = await loaded();
+    expect(root.querySelector('app-workspaces-panel')!.classList.contains('phone')).toBe(false);
+    expect(texts(root, 'app-workspaces-panel h3')).toEqual(['Workspaces', 'Repositories']);
     expect(texts(root, 'tr.repo td').slice(0, 5)).toEqual(['lab', 'main', '2 changes', 'init · 5 minutes ago', 'origin ↑1']);
     expect(Array.from(root.querySelectorAll('tr.repo td[data-label]')).map((td) => td.getAttribute('data-label'))).toEqual([
       'Branch',

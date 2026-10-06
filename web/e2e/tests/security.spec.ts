@@ -9,6 +9,7 @@ import {
   login,
   mockState,
   openFile,
+  openSecurity,
   resetMock,
   setSessionTimeout
 } from './helpers';
@@ -17,22 +18,17 @@ test.beforeEach(async ({ request }) => resetMock(request));
 
 const countdown = (page: Page) => page.getByRole('timer');
 
-async function openSecurity(page: Page): Promise<void> {
-  await page.getByRole('button', { name: /Security and sessions/ }).click();
-  await expect(page.getByRole('dialog', { name: 'Security' })).toBeVisible();
-}
-
 test('the top bar counts down the session', async ({ page }) => {
   await login(page);
-  await expect(countdown(page)).toHaveText(/Session expires in (29:5\d|30:00)/);
+  await expect(countdown(page)).toHaveAttribute('aria-label', /Session expires in (29:5\d|30:00)/);
   await expect(page.getByRole('button', { name: 'Extend' })).toHaveCount(0);
 });
 
 test('near the end the countdown warns and can be extended', async ({ page, request }) => {
   await setSessionTimeout(request, 100);
   await login(page);
-  await expect(countdown(page)).toHaveText(/Session expires in 1:(3\d|40)/);
-  await expect(countdown(page)).toHaveClass(/topbar__session--warning/);
+  await expect(countdown(page)).toHaveAttribute('aria-label', /Session expires in 1:(3\d|40)/);
+  await expect(countdown(page)).toHaveClass(/statusbar__session--warning/);
   await expect(countdown(page)).toHaveText(/1:3[0-7]/, { timeout: 8000 });
 
   await page.getByRole('button', { name: 'Extend' }).click();
@@ -115,7 +111,7 @@ test('without an answer from the server the session still ends on this screen af
   });
 
   await page.clock.fastForward('00:06');
-  await expect(countdown(page)).toHaveText('Session expires in 0:00');
+  await expect(countdown(page)).toHaveAttribute('aria-label', 'Session expires in 0:00');
   await expect.poll(() => checks).toBeGreaterThanOrEqual(1);
   await page.clock.fastForward('00:15');
   await expect.poll(() => checks).toBeGreaterThanOrEqual(2);

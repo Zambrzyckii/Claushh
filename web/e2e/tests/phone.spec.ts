@@ -52,7 +52,7 @@ test('a phone gets the phone layout, the login fits, and no tab scrolls sideways
 
 test('the explorer drawer opens a file and closes, and Save writes it', async ({ page, request }) => {
   await login(page);
-  const drawer = page.locator('nav.drawer');
+  const drawer = page.locator('.drawer');
   await page.getByRole('button', { name: 'Explorer' }).click();
   await expect(drawer).toHaveClass(/drawer--open/);
   await openFile(page, MAIN);
@@ -131,24 +131,26 @@ test('on a touch screen the fields have 16 px text, so iOS does not zoom, and ke
 
   await tab(page, 'Editor').click();
   await page.locator('.topbar__repo-button').click();
-  const sheet = page.getByRole('dialog', { name: 'Workspace' });
-  await sheet.getByRole('button', { name: 'New workspace' }).click();
-  const name = sheet.getByRole('textbox', { name: 'New workspace name' });
+  const drawer = page.locator('.drawer');
+  await drawer.getByRole('button', { name: 'New workspace' }).click();
+  const name = drawer.getByRole('textbox', { name: 'New workspace name' });
   expect(await fontSize(name)).toBe('16px');
   expect((await name.boundingBox())!.height).toBeCloseTo(28, 0);
 });
 
-test('the Workspace sheet lists repositories as cards and closes when one opens', async ({ page }) => {
+test('the repository button opens Source Control in the drawer, whose repositories are cards, and opening one closes it', async ({ page }) => {
   await login(page);
-  await page.locator('.topbar button[aria-haspopup="dialog"]').click();
-  const sheet = page.getByRole('dialog', { name: 'Workspace' });
-  await expect(sheet).toBeVisible();
-  expect((await sheet.boundingBox())!.width).toBeCloseTo(page.viewportSize()!.width, 0);
+  const repository = page.locator('.topbar__repo-button');
+  await repository.click();
+  const drawer = page.locator('.drawer');
+  await expect(drawer).toHaveClass(/drawer--open/);
+  await expect(repository).toHaveAttribute('aria-expanded', 'true');
+  await expect(drawer.getByRole('tab', { name: 'Source Control' })).toHaveAttribute('aria-selected', 'true');
   await expect(repoRow(page, 'lab-3-sieci')).toBeVisible();
   expect(await repoRow(page, 'lab-3-sieci').evaluate((row) => getComputedStyle(row).display)).toBe('block');
 
   await repoRow(page, 'lab-3-sieci').getByRole('button', { name: 'Open lab-3-sieci' }).click();
-  await expect(sheet).toBeHidden();
+  await expect(drawer).not.toHaveClass(/drawer--open/);
   await expect(page.locator('.topbar__repo')).toHaveText('lab-3-sieci');
   await expect(page.locator('.topbar__branch')).toHaveText('main');
 });

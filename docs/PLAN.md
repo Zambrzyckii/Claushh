@@ -23,12 +23,11 @@ Layout modeled on VS Code:
 
 | Area | Contents |
 |---|---|
-| Top bar | workspace / repo / branch path, session countdown, panel toggles, "Log out" |
-| Left | file tree, marking of changed files (`M`) |
-| Center | editor (Monaco) with tabs, syntax highlighting and manual editing |
+| Title bar | the command centre (workspace / repository / branch; a click shows Source Control), the toggles of the side bar, the panel and the console, the account menu with the user name, "Security…" and "Log out" |
+| Left | the activity bar with Explorer (OPEN EDITORS, the tree with file icons and git marks) and Source Control (workspaces and repositories with Open / Pull / Push, the open repository's changes) |
+| Center | the editor (Monaco) with tabs, editor actions (the changes view), breadcrumbs and the minimap; the Terminal panel below |
 | Right | **"Console"** as VS Code's secondary side bar: the conversation with Claude as monospace text without icons, images or the name "Claude" (step verbs, counts and notes in color); a composer card with chips for **model**, **effort** and **mode** (ask before edits / accept edits / plan) and Send; permission requests (yes / yes, always / no) |
-| Bottom | collapsible panel with the tabs **Workspace** (list of workspaces and their repositories: branch, status, last commit, Open / Pull / Push) and **Terminal** |
-| Status bar | branch, number of changes, console status, cursor position |
+| Status bar | branch, number of changes, console status, unsaved files, cursor position, indentation, encoding, line endings, language, session countdown |
 
 The mockup also shows a tunnel status in the status bar. It was dropped as it would add nothing: through the tunnel
 the page does not load at all while the tunnel is down, and a tunnel that fails while the page is open already shows
@@ -68,14 +67,14 @@ Frontend decisions (UI refresh):
   (deprecated, and a package).
 - Phone layout: below 768 px, or with a coarse pointer and at most 500 px of height (a phone in landscape), the page
   has the tabs Editor · Terminal · Console instead of the columns. Every desktop function stays reachable: the
-  explorer as a drawer, the Workspace panel and Security as full-screen sheets, Log out in a menu, a Save button and
+  side bar (Explorer and Source Control) as a drawer, Security as a full-screen sheet, Log out in a menu, a Save button and
   a Send button. Rejected: bottom tabs (they fight the keyboard) and a third tab named after the product (the
   console's rule).
 - The two layouts are two template branches, so crossing the breakpoint recreates the views: Monaco's undo history
   is lost, the text is kept and terminals attach again. Rejected: one DOM tree placed by CSS (every pane would have
   to work in both layouts).
 - Inside the phone layout nothing is destroyed: inactive tabs are hidden with `visibility` and made `inert` (they cannot
-  hold the focus), the terminal mounts on its first visit (opening it starts a tmux session), and the explorer drawer
+  hold the focus), the terminal mounts on its first visit (opening it starts a tmux session), and the side bar's drawer
   stays mounted and slides with a CSS transition, so it keeps its expanded folders. The sheets are native `<dialog>`s
   opened with `showModal()` (Esc, a focus trap and an inert page come with it) that slide with `@starting-style`;
   browsers without `overlay` transitions close them without the slide. Rejected: `@if` with `animate.leave` for the
@@ -114,6 +113,18 @@ Frontend decisions (VS Code layout):
   devDependency). They are `<img>`s, so no SVG markup reaches the DOM. The logos of AI tools are left out. Rejected: an
   asset glob from `node_modules` (the allowlist in two places), the whole set (about 1 MB and a 215 KB map), and
   vscode-icons (share-alike art), Iconify (no file-name manifest) and Seti (a single-color font).
+- The title bar holds the command centre (the open repository and branch; a click shows Source Control), the toggles
+  of the side bar, the panel and the console, and an account menu (the user name, "Security…", "Log out"), the same
+  menu as the phone's. Rejected: the Popover API (jsdom lacks it).
+- The primary side bar has an activity bar on top with Explorer and Source Control, whose badges count the unsaved
+  files and the changes. Every view stays mounted and the inactive one is hidden; closing the side bar takes it out of
+  the flow at once and slides it out, as the phone's drawer. Rejected: `@if` with `animate.leave` (each close would
+  lose the tree) and `display: none` with `@starting-style` (the side bar would slide in at every page load).
+- Source Control shows the Workspaces panel, always as cards, and the open repository's CHANGES; a click opens the
+  file with its changes shown. The phone has no Workspace sheet any more: its repository button opens the drawer on
+  Source Control (two copies of the panel would mean two of every row).
+- The bottom panel holds only the terminal, inside the editor's column, and starts closed, so the terminal hub
+  connects only when the terminal is first shown. The session countdown moves to the status bar on the desktop.
 
 ## Tech stack
 

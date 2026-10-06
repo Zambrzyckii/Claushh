@@ -20,6 +20,7 @@ export type ExplorerRow =
  * so large repositories (e.g. with node_modules) do not slow down the start.
  * Clicking a file emits `openFile` with its path. When the console changes files (ProjectContext.filesChanged),
  * the tree refreshes itself.
+ * Its header is the folder section of the Explorer view: the repository's name (a click folds the tree), Refresh and Collapse All.
  */
 @Component({
   selector: 'app-explorer',
@@ -31,6 +32,8 @@ export class Explorer {
 
   /** Directory shown as the tree root (relative path, '' = the whole projects directory). */
   readonly root = input('');
+  /** The folder section's title: the open repository's name or "projects directory". */
+  readonly label = input('');
   readonly activePath = input<string | null>(null);
   /** Badges from the git status: path → letter (M, U, …) or `•` for a directory with changes. */
   readonly decorations = input<ReadonlyMap<string, string>>(new Map());
@@ -40,6 +43,7 @@ export class Explorer {
 
   private readonly directories = signal<ReadonlyMap<string, DirectoryState>>(new Map());
   private readonly expanded = signal<ReadonlySet<string>>(new Set());
+  protected readonly collapsed = signal(false);
 
   protected readonly rows = computed(() => {
     const rows: ExplorerRow[] = [];
@@ -93,6 +97,11 @@ export class Explorer {
   protected refreshClicked(): void {
     this.refresh();
     this.refreshed.emit();
+  }
+
+  /** "Collapse All": every folder closes; their listings stay for the next expand. */
+  protected collapseAll(): void {
+    this.expanded.set(new Set());
   }
 
   private refresh(): void {

@@ -74,6 +74,14 @@
   bottom: 0;
   left: 0;
   width: min(85vw, 320px);
+  display: flex;
+  flex-direction: column;
+
+  > app-side-bar {
+    flex-grow: 1;
+    min-height: 0;
+  }
+
   background: var(--surface);
   border-right: 1px solid var(--border);
   transform: translateX(-100%);

@@ -1,0 +1,61 @@
+:host {
+  display: block;
+  flex-shrink: 0;
+}
+
+.statusbar {
+  height: 22px;
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 6px;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+
+  &__group {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    min-width: 0;
+    overflow: hidden;
+
+    > * {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 0 5px;
+    }
+  }
+
+  .codicon {
+    font-size: 14px;
+  }
+
+  &__unsaved,
+  &__changes--dirty {
+    color: var(--git-modified);
+  }
+
+  &__session {
+    font-variant-numeric: tabular-nums;
+
+    &--warning {
+      color: var(--warning);
+    }
+  }
+
+  &__extend {
+    height: 18px;
+    min-height: 0;
+  }
+}
+
+.statusbar--phone {
+  font-size: 11px;
+}

@@ -1,27 +1,24 @@
 import { Component, ElementRef, inject, signal, viewChild } from '@angular/core';
 
 import { RepoSummary } from '../../core/api/workspaces-api';
-import { DeviceLayout } from '../../core/browser/device-layout';
 import { ProjectContext } from '../../core/project/project-context';
 import { countLabel, timeAgo } from '../../core/text/format';
 import { WorkspacesStore } from './workspaces-store';
 
 /**
- * The "Workspace" tab in the bottom panel (on a phone, the Workspace sheet with repository cards): workspaces on the
- * left, on the right a table of repositories of the selected workspace (branch, state, last commit, remotes) with
- * Open / Pull / Push actions, cloning below.
+ * The workspaces and repositories of the Source Control view (docs/ARCHITECTURE.md, "Frontend" → "Layout"): the
+ * workspaces above, then the repositories of the selected one as cards (branch, state, last commit, remote) with Open /
+ * Pull / Push, cloning below.
  * State and operations: WorkspacesStore.
  */
 @Component({
   selector: 'app-workspaces-panel',
-  host: { '[class.phone]': 'layout.phone()' },
   templateUrl: './workspaces-panel.html',
   styleUrl: './workspaces-panel.scss'
 })
 export class WorkspacesPanel {
   protected readonly store = inject(WorkspacesStore);
   protected readonly project = inject(ProjectContext);
-  protected readonly layout = inject(DeviceLayout);
 
   protected readonly creating = signal(false);
   protected readonly createError = signal<string | null>(null);

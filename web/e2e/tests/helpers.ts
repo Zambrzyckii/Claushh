@@ -116,16 +116,20 @@ export function repoRow(page: Page, name: string): Locator {
   return page.locator('app-workspaces-panel tr.repo').filter({ has: page.locator('.repo__name', { hasText: new RegExp(`^${escape(name)}$`) }) });
 }
 
-/** Opens a repository with the "Open" button in the Workspace panel. */
+/** Opens a repository with the "Open" button in Source Control. */
 export async function openRepo(page: Page, name: string, workspace = 'Studia'): Promise<void> {
+  await showView(page, 'Source Control');
   await page.locator('app-workspaces-panel .workspace', { hasText: workspace }).click();
   await repoRow(page, name).getByRole('button', { name: `Open ${name}` }).click();
   await expect(repoRow(page, name).getByRole('button', { name: `Opened: ${name}` })).toBeVisible();
 }
 
-/** Opens the Terminal tab in the bottom panel. */
+/** Shows the bottom panel (closed at start), whose only tab is the terminal. */
 export async function openTerminalTab(page: Page): Promise<void> {
-  await page.getByRole('tab', { name: 'TERMINAL' }).click();
+  const panel = page.getByRole('button', { name: 'Panel', exact: true });
+  if ((await panel.getAttribute('aria-pressed')) !== 'true') {
+    await panel.click();
+  }
   await expect(activeTerminal(page).locator('.xterm-rows')).toBeVisible();
 }
 
@@ -158,6 +162,7 @@ export function treeRow(page: Page, name: string): Locator {
 }
 
 export async function openFile(page: Page, path: string): Promise<void> {
+  await showView(page, 'Explorer');
   const parts = path.split('/');
   for (const part of parts) {
     const row = treeRow(page, part);
@@ -165,6 +170,29 @@ export async function openFile(page: Page, path: string): Promise<void> {
       await row.click();
     }
   }
+}
+
+/** Shows a view of the side bar; on a phone the drawer must be open. */
+export async function showView(page: Page, name: 'Explorer' | 'Source Control'): Promise<void> {
+  const tab = page.locator('app-side-bar').getByRole('tab', { name, exact: true });
+  if ((await tab.getAttribute('aria-selected')) !== 'true') {
+    await tab.click();
+  }
+}
+
+/** Opens the Security window from the account menu of the title bar. */
+export async function openSecurity(page: Page): Promise<Locator> {
+  await page.locator('.topbar__user').click();
+  await page.getByRole('menuitem', { name: 'Security' }).click();
+  const security = page.getByRole('dialog', { name: 'Security' });
+  await expect(security).toBeVisible();
+  return security;
+}
+
+/** Logs out from the account menu of the title bar. */
+export async function logOut(page: Page): Promise<void> {
+  await page.locator('.topbar__user').click();
+  await page.getByRole('menuitem', { name: 'Log out' }).click();
 }
 
 /** Text visible in Monaco. Monaco shows spaces as non-breaking spaces (\u00a0), so we normalize them. */

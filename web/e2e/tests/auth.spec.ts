@@ -1,12 +1,7 @@
 import { expect, test } from './fixtures';
-import { fillLogin, killSessions, login, mockState, openRepo, resetMock } from './helpers';
+import { fillLogin, killSessions, logOut, login, mockState, openRepo, openSecurity, resetMock } from './helpers';
 
 test.beforeEach(async ({ request }) => resetMock(request));
-
-async function openSecurity(page: import('@playwright/test').Page): Promise<void> {
-  await page.getByRole('button', { name: /Security and sessions/ }).click();
-  await expect(page.getByRole('dialog', { name: 'Security' })).toBeVisible();
-}
 
 test('anonymous user is sent to login with a return address', async ({ page }) => {
   await page.goto('/');
@@ -25,7 +20,7 @@ test('wrong credentials show a generic error and clear secret fields', async ({ 
 
 test('login keeps the session out of JavaScript and web storage', async ({ page }) => {
   await login(page);
-  await expect(page.locator('.topbar__user')).toHaveText('owner');
+  await expect(page.locator('.topbar__user')).toHaveAttribute('aria-label', 'Account: owner');
   expect(await page.evaluate(() => document.cookie)).not.toContain('sid');
   expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
 
@@ -42,7 +37,7 @@ test('logout ends the server session, clears every tab and blocks the back butto
   await expect(second.locator('.topbar__user')).toBeVisible();
   await page.evaluate(() => localStorage.setItem('probe', 'x'));
 
-  await page.getByRole('button', { name: 'Log out' }).click();
+  await logOut(page);
   await expect(page).toHaveURL('/login?logout=ok');
   await expect(page.getByRole('status')).toHaveText('Logged out.');
   await expect(second).toHaveURL(/\/login/);
@@ -96,7 +91,7 @@ test('an unconfirmed logout stays on the login page and ends the session once th
     return route.fulfill({ status: 502 });
   });
 
-  await page.getByRole('button', { name: 'Log out' }).click();
+  await logOut(page);
   await expect(page).toHaveURL('/login?logout=unconfirmed');
   await expect(page.getByRole('status')).toHaveText('Logged out. The server confirmed the session ended.');
   await expect(second).toHaveURL('/login?logout=unconfirmed');
@@ -109,7 +104,7 @@ test('an unconfirmed logout stays on the login page and ends the session once th
 
 test('after logging out one can log in again right away', async ({ page }) => {
   await login(page);
-  await page.getByRole('button', { name: 'Log out' }).click();
+  await logOut(page);
   await expect(page).toHaveURL('/login?logout=ok');
   await fillLogin(page);
   await page.waitForURL('/');
@@ -121,7 +116,7 @@ test('while the logout is unconfirmed, Back and a new tab do not return to the a
   await openRepo(page, 'lab-3-sieci'); // history entry with an open repository
   // The server (tunnel) does not confirm the logout, although the session on the server stays alive.
   await context.route('**/api/auth/logout', (route) => route.fulfill({ status: 502 }));
-  await page.getByRole('button', { name: 'Log out' }).click();
+  await logOut(page);
   await expect(page).toHaveURL('/login?logout=unconfirmed');
 
   await page.goBack();
@@ -143,7 +138,7 @@ test('after an unconfirmed logout one can log in again even with an outdated XSR
     blockedChecks++;
     return route.abort('internetdisconnected');
   });
-  await page.getByRole('button', { name: 'Log out' }).click();
+  await logOut(page);
   await expect(page).toHaveURL('/login?logout=unconfirmed');
   await expect(page.getByRole('status')).toContainText('the server did not confirm');
   await expect.poll(() => blockedChecks).toBeGreaterThan(0); // the first retry from the login screen did not get through
@@ -161,7 +156,7 @@ test('after an unconfirmed logout one can log in again even with an outdated XSR
 test('logging in again ends the old session that the unconfirmed logout left alive', async ({ page, context, request }) => {
   await login(page);
   await context.route('**/api/auth/logout', (route) => route.fulfill({ status: 502 })); // logout does not get through
-  await page.getByRole('button', { name: 'Log out' }).click();
+  await logOut(page);
   await expect(page).toHaveURL('/login?logout=unconfirmed');
   const oldSession = await page.evaluate(() => localStorage.getItem('claushh-pending-logout'));
   expect(oldSession).toBeTruthy();
