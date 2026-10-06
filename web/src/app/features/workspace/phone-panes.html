@@ -9,6 +9,10 @@
               (click)="toggle('explorer')">
         <span class="codicon codicon-files" aria-hidden="true"></span>
       </button>
+      <button type="button" class="icon" aria-label="Search" [attr.aria-expanded]="state.drawerOpen() && state.view() === 'search'"
+              (click)="toggle('search')">
+        <span class="codicon codicon-search" aria-hidden="true"></span>
+      </button>
       <button type="button" [disabled]="!canSave()" (click)="save()">
         <span class="codicon codicon-save" aria-hidden="true"></span>Save
       </button>

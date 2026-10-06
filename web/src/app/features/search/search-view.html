@@ -1,0 +1,65 @@
+<div class="form">
+  <div class="query">
+    <input #field type="text" aria-label="Search" placeholder="Search" maxlength="1000" spellcheck="false"
+           autocomplete="off" autocorrect="off" autocapitalize="off"
+           [ngModel]="store.query()" (ngModelChange)="store.setQuery($event)" (keydown)="onKeydown($event)">
+    <span class="query__toggles">
+      @for (t of toggles; track t.option) {
+        <button type="button" class="icon" [attr.aria-label]="t.label" [title]="t.label" [attr.aria-pressed]="pressed(t.option)"
+                (click)="store.toggle(t.option)"><span [class]="'codicon codicon-' + t.icon" aria-hidden="true"></span></button>
+      }
+    </span>
+  </div>
+  <button type="button" class="icon" aria-label="Toggle Search Details" title="Toggle Search Details"
+          [attr.aria-expanded]="store.detailsOpen()" (click)="store.detailsOpen.set(!store.detailsOpen())">
+    <span class="codicon codicon-ellipsis" aria-hidden="true"></span>
+  </button>
+</div>
+@if (store.detailsOpen()) {
+  <label class="glob"><span>files to include</span>
+    <input type="text" maxlength="1000" spellcheck="false" autocomplete="off" placeholder="e.g. *.c, src"
+           [ngModel]="store.include()" (ngModelChange)="store.setGlob('include', $event)" (keydown)="onKeydown($event)"></label>
+  <label class="glob"><span>files to exclude</span>
+    <input type="text" maxlength="1000" spellcheck="false" autocomplete="off" placeholder="e.g. build, *.log"
+           [ngModel]="store.exclude()" (ngModelChange)="store.setGlob('exclude', $event)" (keydown)="onKeydown($event)"></label>
+}
+
+<div class="messages" aria-live="polite">
+  @switch (store.state().status) {
+    @case ('searching') {
+      <p class="message">Searching…</p>
+    }
+    @case ('error') {
+      <p class="message message--error" role="alert">{{ error() }}</p>
+    }
+  }
+  @if (store.result(); as result) {
+    <p class="message">{{ result.files.length === 0 ? 'No results found.' : summary(result) }}</p>
+    @if (result.limit === 'results') {
+      <p class="message message--info">Showing the first 2,000 results. Narrow the search to see more.</p>
+    } @else if (result.limit === 'time') {
+      <p class="message message--info">The search stopped after 10 s, so the results are incomplete.</p>
+    }
+  }
+</div>
+
+<div class="results">
+  @if (store.result(); as result) {
+    @for (file of result.files; track file.path) {
+      <button type="button" class="search-file" [attr.aria-expanded]="!store.collapsed().has(file.path)" [title]="file.path"
+              (click)="store.toggleFile(file.path)">
+        <span class="codicon" [class.codicon-chevron-down]="!store.collapsed().has(file.path)"
+              [class.codicon-chevron-right]="store.collapsed().has(file.path)" aria-hidden="true"></span>
+        <img class="file-icon" [src]="icon(file.path)" alt="" width="16" height="16" draggable="false">
+        <span class="search-file__name">{{ name(file.path) }}</span>
+        <span class="search-file__dir">{{ directory(file.path) }}</span>
+        <span class="badge">{{ count(file) }}</span>
+      </button>
+      @if (!store.collapsed().has(file.path)) {
+        @for (match of file.matches; track match.line) {
+          <button type="button" class="search-match" [title]="file.path + ':' + match.line" (click)="open(file.path, match)">@for (part of parts(match); track $index) {<span [class.hit]="part.hit">{{ part.text }}</span>}</button>
+        }
+      }
+    }
+  }
+</div>

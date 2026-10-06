@@ -50,6 +50,11 @@
     }
   }
 
+  &__actions {
+    display: flex;
+    margin-right: -8px;
+  }
+
   &__body {
     flex-grow: 1;
     min-height: 0;

@@ -57,6 +57,19 @@ export interface Indentation {
   size: number;
 }
 
+/** Where a search result points: a line and the match's columns on it (1-based UTF-16 columns, as Monaco counts). */
+export interface RevealTarget {
+  line: number;
+  column: number;
+  endColumn: number;
+}
+
+/** A place `open(path, at)` asked to show; `seq` tells two requests for the same place apart. */
+export interface RevealRequest extends RevealTarget {
+  path: string;
+  seq: number;
+}
+
 @Injectable()
 export class EditorStore {
   private readonly files = inject(FilesApi);
@@ -75,6 +88,9 @@ export class EditorStore {
   readonly language = signal<string | null>(null);
   readonly indentation = signal<Indentation | null>(null);
   readonly eol = signal<'LF' | 'CRLF' | null>(null);
+  /** Set by `open(path, at)`; CodeEditor selects and centres it once the file is shown. */
+  readonly reveal = signal<RevealRequest | null>(null);
+  private revealSeq = 0;
 
   private readonly project = inject(ProjectContext, { optional: true });
 
@@ -148,7 +164,11 @@ export class EditorStore {
     return doc ? isDirty(doc) : false;
   }
 
-  async open(path: string): Promise<void> {
+  /** Opens a file and makes it active; `at` also selects a place in it once it is shown (a search result). */
+  async open(path: string, at?: RevealTarget): Promise<void> {
+    if (at) {
+      this.reveal.set({ path, ...at, seq: ++this.revealSeq });
+    }
     this.activePathSignal.set(path);
     const existing = this.find(path);
     if (existing && existing.status !== 'error') {

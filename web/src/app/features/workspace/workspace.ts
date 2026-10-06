@@ -13,6 +13,7 @@ import { ConsolePanel } from '../console/console-panel';
 import { ConsoleStore } from '../console/console-store';
 import { EditorPane } from '../editor/editor-pane';
 import { EditorStore } from '../editor/editor-store';
+import { SearchStore } from '../search/search-store';
 import { SecurityDialog } from '../security/security-dialog';
 import { TerminalPanel } from '../terminal/terminal-panel';
 import { TerminalStore } from '../terminal/terminal-store';
@@ -25,14 +26,14 @@ import { WorkbenchState } from './workbench-state';
 
 /**
  * Main view after login, laid out as VS Code (docs/ARCHITECTURE.md, "Frontend" → "Layout"). Desktop: the title bar, the
- * primary side bar (Explorer, Source Control), the editor with the bottom panel (the terminal) under it, the console as
+ * primary side bar (Explorer, Search, Source Control), the editor with the bottom panel (the terminal) under it, the console as
  * the secondary side bar, and the status bar. Phone ("Phone layout"): a condensed top bar, the tabs Editor · Terminal ·
  * Console (PhonePanes) with the side bar as a drawer, and the status bar.
  *
  * The open repository is chosen in Source Control and is stored in the URL (`?repo=`). Without it the explorer, the
  * console and new terminals work on the whole projects directory.
  *
- * State services (project, git status, editor, console, workspaces, terminals, what the shell shows) are provided here,
+ * State services (project, git status, editor, console, workspaces, terminals, search, what the shell shows) are provided here,
  * so they live as long as this view and survive a switch of layout. The console keeps running while it is hidden,
  * terminals live on the server. Changing the repository does not close open editor tabs (their paths are full).
  */
@@ -49,6 +50,7 @@ import { WorkbenchState } from './workbench-state';
     WorkspacesStore,
     TerminalConnection,
     TerminalStore,
+    SearchStore,
     WorkbenchState
   ],
   host: { '[class.phone]': 'layout.phone()' },

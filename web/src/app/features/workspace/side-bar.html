@@ -2,7 +2,7 @@
   @for (v of views; track v.id) {
     <button type="button" role="tab" class="activity__item" [id]="'view-tab-' + v.id" [attr.aria-controls]="'view-' + v.id"
             [attr.aria-selected]="state.view() === v.id" [attr.aria-label]="v.label" [title]="v.label"
-            (click)="state.view.set(v.id)">
+            (click)="state.show(v.id)">
       <span [class]="'codicon codicon-' + v.icon" aria-hidden="true"></span>
       @if (badge(v.id); as count) {
         <span class="badge" aria-hidden="true">{{ count }}</span>
@@ -18,6 +18,24 @@
     <app-explorer [root]="project.path()" [label]="project.label()" [activePath]="editor.activePath()"
                   [decorations]="repoStatus.decorations()" (openFile)="openFile($event)" (refreshed)="explorerRefreshed()" />
   </nav>
+</section>
+
+<section class="view" id="view-search" role="tabpanel" aria-labelledby="view-tab-search" [hidden]="state.view() !== 'search'">
+  <div class="view__head">
+    <h2 class="section-title">Search</h2>
+    <span class="view__actions">
+      <button type="button" class="icon" aria-label="Refresh" title="Refresh" (click)="search.searchNow()">
+        <span class="codicon codicon-refresh" aria-hidden="true"></span>
+      </button>
+      <button type="button" class="icon" aria-label="Clear Search Results" title="Clear Search Results" (click)="search.clear()">
+        <span class="codicon codicon-clear-all" aria-hidden="true"></span>
+      </button>
+      <button type="button" class="icon" aria-label="Collapse All" title="Collapse All" (click)="search.collapseAll()">
+        <span class="codicon codicon-collapse-all" aria-hidden="true"></span>
+      </button>
+    </span>
+  </div>
+  <app-search-view class="view__body" />
 </section>
 
 <section class="view" id="view-scm" role="tabpanel" aria-labelledby="view-tab-scm" [hidden]="state.view() !== 'scm'">

@@ -173,11 +173,21 @@ export async function openFile(page: Page, path: string): Promise<void> {
 }
 
 /** Shows a view of the side bar; on a phone the drawer must be open. */
-export async function showView(page: Page, name: 'Explorer' | 'Source Control'): Promise<void> {
+export async function showView(page: Page, name: 'Explorer' | 'Search' | 'Source Control'): Promise<void> {
   const tab = page.locator('app-side-bar').getByRole('tab', { name, exact: true });
   if ((await tab.getAttribute('aria-selected')) !== 'true') {
     await tab.click();
   }
+}
+
+/** Searches in files from the Search view (shown first) with Enter; returns the view. */
+export async function searchFor(page: Page, query: string): Promise<Locator> {
+  await showView(page, 'Search');
+  const view = page.locator('app-search-view');
+  const field = view.getByRole('textbox', { name: 'Search', exact: true });
+  await field.fill(query);
+  await field.press('Enter');
+  return view;
 }
 
 /** Opens the Security window from the account menu of the title bar. */

@@ -13,7 +13,7 @@ import type * as MonacoApi from 'monaco-editor';
 
 import { DeviceLayout } from '../../core/browser/device-layout';
 import { isTypingElsewhere } from '../../core/browser/focus';
-import { EditorStore, OpenDocument } from './editor-store';
+import { EditorStore, OpenDocument, RevealRequest } from './editor-store';
 import { MONACO_THEME, Monaco, loadMonaco } from './monaco-loader';
 
 interface ModelEntry {
@@ -44,6 +44,7 @@ const EDITOR_OPTIONS: MonacoApi.editor.IEditorOptions & MonacoApi.editor.IGlobal
  *
  * The minimap is on in the desktop layout only (crossing the breakpoint recreates the editor anyway). The status bar's
  * values of the shown file go to the store: cursor, indentation, line endings and the language's display name.
+ * A search result (`EditorStore.reveal`) is selected and centred once its file is shown.
  */
 @Component({
   selector: 'app-code-editor',
@@ -91,6 +92,8 @@ export class CodeEditor {
   private shownKey: string | null = null;
   private shownPath: string | null = null;
   private destroyed = false;
+  /** The last reveal request applied. */
+  private revealed = 0;
 
   private readonly ready = signal(false);
   protected readonly showDiff = signal(false);
@@ -105,7 +108,11 @@ export class CodeEditor {
       }
       const docs = this.store.documents();
       const active = this.store.active();
-      untracked(() => this.sync(docs, active));
+      const reveal = this.store.reveal();
+      untracked(() => {
+        this.sync(docs, active);
+        this.revealIfShown(reveal);
+      });
     });
 
     inject(DestroyRef).onDestroy(() => {
@@ -287,6 +294,22 @@ export class CodeEditor {
     if (!this.layout.touch() && !isTypingElsewhere(this.element)) {
       editor.focus();
     }
+  }
+
+  /** Selects and centres a search result once its file is shown (the right side in a diff view), each request once. */
+  private revealIfShown(reveal: RevealRequest | null): void {
+    if (!reveal || reveal.seq === this.revealed || reveal.path !== this.shownPath) {
+      return;
+    }
+    const editor = this.showDiff() ? this.diffEditor?.getModifiedEditor() : this.editor;
+    if (!editor) {
+      return;
+    }
+    this.revealed = reveal.seq;
+    const range = { startLineNumber: reveal.line, startColumn: reveal.column, endLineNumber: reveal.line, endColumn: reveal.endColumn };
+    editor.setSelection(range);
+    editor.revealRangeInCenter(range);
+    this.focus(editor);
   }
 
   private reportPosition(editor: MonacoApi.editor.ICodeEditor, model: MonacoApi.editor.ITextModel): void {

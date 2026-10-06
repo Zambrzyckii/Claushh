@@ -1,7 +1,7 @@
 // Repositories and their state, read in-process with LibGit2Sharp (docs/ARCHITECTURE.md, "Workspaces and git";
 // decisions: docs/PLAN.md, "Backend decisions (stage 4)"). A repository is a real directory directly in a workspace,
 // whose .git is a real directory and which libgit2 opens; anything else is not listed and is a 404. Repositories are
-// opened for one call and disposed, never shared between threads.
+// opened for one call (for IgnoreRules, one search's walk) and disposed, never shared between threads.
 using Claushh.Api.Files;
 using LibGit2Sharp;
 
@@ -29,6 +29,19 @@ public sealed record HeadState(string? Branch, string? Upstream, string? Remote,
 public enum ShowStatus { Ok, NotFound, TooLarge, NotText }
 
 public sealed record ShowResult(ShowStatus Status, string Content = "");
+
+// The .gitignore rules of one repository, for search (docs/ARCHITECTURE.md, "Backend" → "Files"): from
+// Repositories.Ignores, disposed by the caller and used from one thread.
+public sealed class IgnoreRules(Repository repository, string repo) : IDisposable
+{
+    // Whether git ignores `path` (relative to the projects directory, inside the repository): the .gitignore files on the
+    // way and the configured excludes, also for a tracked file. A directory is asked with a trailing "/", which libgit2
+    // takes as a directory.
+    public bool IsIgnored(string path, bool directory) =>
+        repository.Ignore.IsPathIgnored(path[(repo.Length + 1)..] + (directory ? "/" : ""));
+
+    public void Dispose() => repository.Dispose();
+}
 
 public sealed class Repositories(ProjectPaths paths, ILogger<Repositories> log)
 {
@@ -71,6 +84,9 @@ public sealed class Repositories(ProjectPaths paths, ILogger<Repositories> log)
         using var repository = new Repository(repo.FullPath);
         return HeadOf(repository);
     }
+
+    // The .gitignore rules of a repository that Find accepted, for search.
+    public IgnoreRules Ignores(ProjectPath repo) => new(new Repository(repo.FullPath), repo.Relative);
 
     // The number of commits in HEAD's history: for push's message when Ahead is unknown (no common history with the
     // upstream, e.g. a freshly cloned empty remote), every local commit is one that push sends.

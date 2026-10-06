@@ -7,17 +7,18 @@ import { Router, provideRouter } from '@angular/router';
 import { ProjectContext } from '../../core/project/project-context';
 import { RepoStatusStore } from '../../core/project/repo-status';
 import { EditorStore } from '../editor/editor-store';
+import { SearchStore } from '../search/search-store';
 import { WorkspacesStore } from '../workspaces/workspaces-store';
 import { SideBar } from './side-bar';
 import { WorkbenchState } from './workbench-state';
 
 /**
- * Integration: the real SideBar with its Explorer and Source Control views, WorkbenchState, ProjectContext (router),
- * RepoStatusStore, EditorStore and WorkspacesStore. Only HTTP is replaced (HttpTestingController).
+ * Integration: the real SideBar with its Explorer, Search and Source Control views, WorkbenchState, ProjectContext (router),
+ * RepoStatusStore, EditorStore, WorkspacesStore and SearchStore. Only HTTP is replaced (HttpTestingController).
  */
 @Component({
   imports: [SideBar],
-  providers: [ProjectContext, RepoStatusStore, EditorStore, WorkspacesStore, WorkbenchState],
+  providers: [ProjectContext, RepoStatusStore, EditorStore, WorkspacesStore, SearchStore, WorkbenchState],
   template: '<app-side-bar />'
 })
 class Host {
@@ -135,5 +136,36 @@ describe('Side bar (integration)', () => {
       diff: { status: 'ready', original: 'old', isNew: false }
     });
     expect(host.state.drawerOpen()).toBe(false);
+  });
+
+  it("the views come in VS Code's order, and Search keeps its query and results while another view is shown", async () => {
+    const { root, settle } = await setup();
+    expect(Array.from(root.querySelectorAll('[role="tab"]')).map((t) => t.getAttribute('aria-label'))).toEqual([
+      'Explorer',
+      'Search',
+      'Source Control'
+    ]);
+    tab(root, 'Search').click();
+    await settle();
+    const field = root.querySelector<HTMLInputElement>('#view-search input[aria-label="Search"]')!;
+    field.value = 'main';
+    field.dispatchEvent(new Event('input'));
+    field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+    await settle();
+    respond('/api/search', { files: [{ path: 'a.c', matches: [{ line: 1, column: 1, preview: 'main', ranges: [[0, 4]] }] }], matchCount: 1, limit: null });
+    await settle();
+
+    tab(root, 'Explorer').click();
+    await settle();
+    expect(root.querySelector<HTMLElement>('#view-search')!.hidden).toBe(true);
+    tab(root, 'Search').click();
+    await settle();
+    expect(field.value).toBe('main');
+    expect(texts(root, '#view-search .search-match')).toEqual(['main']);
+
+    root.querySelector<HTMLButtonElement>('#view-search button[aria-label="Clear Search Results"]')!.click();
+    await settle();
+    expect(field.value).toBe('');
+    expect(root.querySelector('#view-search .search-match')).toBeNull();
   });
 });

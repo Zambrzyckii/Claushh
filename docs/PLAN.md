@@ -24,7 +24,7 @@ Layout modeled on VS Code:
 | Area | Contents |
 |---|---|
 | Title bar | the command centre (workspace / repository / branch; a click shows Source Control), the toggles of the side bar, the panel and the console, the account menu with the user name, "Security…" and "Log out" |
-| Left | the activity bar with Explorer (OPEN EDITORS, the tree with file icons and git marks) and Source Control (workspaces and repositories with Open / Pull / Push, the open repository's changes) |
+| Left | the activity bar with Explorer (OPEN EDITORS, the tree with file icons and git marks), Search (a query with case, whole word and regular expressions, the files to include and exclude, the results by file) and Source Control (workspaces and repositories with Open / Pull / Push, the open repository's changes) |
 | Center | the editor (Monaco) with tabs, editor actions (the changes view), breadcrumbs and the minimap; the Terminal panel below |
 | Right | **"Console"** as VS Code's secondary side bar: the conversation with Claude as monospace text without icons, images or the name "Claude" (step verbs, counts and notes in color); a composer card with chips for **model**, **effort** and **mode** (ask before edits / accept edits / plan) and Send; permission requests (yes / yes, always / no) |
 | Status bar | branch, number of changes, console status, unsaved files, cursor position, indentation, encoding, line endings, language, session countdown |
@@ -67,7 +67,7 @@ Frontend decisions (UI refresh):
   (deprecated, and a package).
 - Phone layout: below 768 px, or with a coarse pointer and at most 500 px of height (a phone in landscape), the page
   has the tabs Editor · Terminal · Console instead of the columns. Every desktop function stays reachable: the
-  side bar (Explorer and Source Control) as a drawer, Security as a full-screen sheet, Log out in a menu, a Save button and
+  side bar (Explorer, Search and Source Control) as a drawer, Security as a full-screen sheet, Log out in a menu, a Save button and
   a Send button. Rejected: bottom tabs (they fight the keyboard) and a third tab named after the product (the
   console's rule).
 - The two layouts are two template branches, so crossing the breakpoint recreates the views: Monaco's undo history
@@ -120,8 +120,8 @@ Frontend decisions (VS Code layout):
   the focus is, the terminal included, unlike Ctrl+S, which belongs to the program in the terminal. Opening puts the
   focus in the prompt. Rejected: VS Code's Ctrl+B and Ctrl+J (the side bar and the panel): browsers use them
   (Firefox's bookmarks, Chrome's downloads), and a shell reads them as "back one character" and Enter.
-- The primary side bar has an activity bar on top with Explorer and Source Control, whose badges count the unsaved
-  files and the changes. Every view stays mounted and the inactive one is hidden; closing the side bar takes it out of
+- The primary side bar has an activity bar on top with Explorer, Search and Source Control, whose badges count the unsaved
+  files and the changes. Every view stays mounted and the inactive ones are hidden; closing the side bar takes it out of
   the flow at once and slides it out, as the phone's drawer. Rejected: `@if` with `animate.leave` (each close would
   lose the tree) and `display: none` with `@starting-style` (the side bar would slide in at every page load).
 - Source Control shows the Workspaces panel, always as cards, and the open repository's CHANGES; a click opens the
@@ -135,6 +135,12 @@ Frontend decisions (VS Code layout):
   take a quarter of the editor).
 - The status bar shows VS Code's items read-only, without their pickers: the indentation and the line endings from
   Monaco's model, the language by its display name, and "UTF-8" as a constant, since the files API serves only UTF-8.
+- Search in files is VS Code's Search view in the side bar: a field with Match Case, Match Whole Word and Use Regular
+  Expression, the files to include and exclude behind "…", and the results by file with a count and the matches
+  highlighted (text in spans, never HTML); a click opens the file at the match. Typing searches after 300 ms; Enter,
+  the toggles and another repository at once; a new search cancels the request of the one before. The view stays
+  mounted with the others, so its results survive a switch of view; on the phone the Editor tab's Search button opens
+  the drawer on it.
 
 ## Tech stack
 
@@ -428,6 +434,15 @@ Backend decisions (stage 2):
   like the deployment. The API and test assemblies are marked `[SupportedOSPlatform("linux")]` (`Program.cs`,
   `ApiFactory.cs`), so the platform analyzer accepts the Unix-only calls such as `File.SetUnixFileMode`. Rejected: the
   attribute on `FileStore` alone (every caller would get the warning).
+- Search in files is in-process (`POST /api/search`): `ProjectPaths` for the root and the walk, a directory link never
+  entered, `node_modules` and what a repository's `.gitignore` ignores skipped (LibGit2Sharp, tracked files too, as
+  ripgrep does), text read as the files API reads it, and each line matched by .NET's `NonBacktracking` engine, which
+  runs in time linear in the input. Limits are constants: 2,000 matches, files up to 1 MiB, 10 s per request, checked
+  between lines. A POST keeps the searched text out of URLs and so out of access logs, and the API never logs it: a
+  pattern .NET refuses is a `400`, and its exception, whose message quotes the pattern, is dropped. Rejected: `git grep`
+  through `GitRunner` (it keeps only the last 64 KB of output, its columns count bytes, the projects directory and
+  workspaces are not repositories, and its regular expressions are POSIX or PCRE), ripgrep (a new system package for
+  the server) and GET (the query in URLs).
 
 Backend decisions (stage 3):
 - The console's code lives in `Claude/` (`Claushh.Api.Claude`) and `Hubs/ConsoleHub.cs`. Rejected: `Console/`, whose
@@ -867,4 +882,4 @@ The order is chosen so that only already secured things reach the internet.
   - [x] Backend: passkeys.
   - [x] Frontend: passkeys (Security dialog, login button).
   - [x] Colors (the owner will refine them in later iterations), a possible phone view (low priority).
-  - [x] Frontend: the VS Code layout (title bar, side bars, open editors, file icons, the console composer).
+  - [x] Frontend: the VS Code layout (title bar, side bars, search, open editors, file icons, the console composer).

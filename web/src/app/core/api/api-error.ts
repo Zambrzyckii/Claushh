@@ -1,7 +1,7 @@
 import { HttpErrorResponse } from '@angular/common/http';
 
 /**
- * Error of a workspaces or git API call (files have their own FileApiError).
+ * Error of a workspaces, git or search API call (files have their own FileApiError).
  * `detail` is an optional description from the server (the `message` field in the error body, e.g. a git message).
  * We display it only as text.
  */

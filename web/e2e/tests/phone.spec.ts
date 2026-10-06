@@ -90,6 +90,23 @@ test('OPEN EDITORS in the drawer switches the file and closes the drawer, and th
   await expect(page.locator('.monaco-editor .minimap')).toBeHidden();
 });
 
+test('the Search button opens the drawer on Search, and a result opens the file and closes the drawer', async ({ page }) => {
+  await login(page);
+  const search = page.getByRole('button', { name: 'Search', exact: true });
+  await search.click();
+  const drawer = page.locator('.drawer');
+  await expect(drawer).toHaveClass(/drawer--open/);
+  await expect(drawer.getByRole('tab', { name: 'Search' })).toHaveAttribute('aria-selected', 'true');
+  const field = drawer.getByRole('textbox', { name: 'Search', exact: true });
+  await expect(field).toBeFocused();
+  await field.fill('parse');
+  await field.press('Enter');
+  await drawer.locator('.search-match', { hasText: 'int parse(void)' }).click();
+  await expect(drawer).not.toHaveClass(/drawer--open/);
+  await expectEditorToContain(page, 'int parse');
+  await expect(search).toHaveAttribute('aria-expanded', 'false');
+});
+
 test('switching tabs keeps the editor and its unsaved text, and the terminal mounts once on its first visit', async ({ page, request }) => {
   await login(page);
   await page.getByRole('button', { name: 'Explorer' }).click();

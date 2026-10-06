@@ -6,6 +6,7 @@ using System.Text;
 using Claushh.Api.Auth;
 using Claushh.Api.Claude;
 using Claushh.Api.Data;
+using Claushh.Api.Files;
 using Claushh.Api.Git;
 using Claushh.Api.Terminal;
 using Claushh.Api.Workspaces;
@@ -17,6 +18,7 @@ using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Testcontainers.PostgreSql;
 
@@ -122,6 +124,9 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     // Stands in for ntfy.sh (Notifications:NtfyUrl in ConfigureWebHost): every notification the API sends arrives here.
     public TestNtfy Ntfy { get; } = new();
 
+    // What the API logs, captured while a test listens (TestLogs).
+    public TestLogs Logs { get; } = new();
+
     public TestGit Git { get; }
 
     // The global git configuration of the test run: https://git.test/<name>.git leads to RemotesRoot through the file
@@ -193,6 +198,9 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     // uses it; ResetAsync puts back none.
     public void SetApiKeyFile(string? path) => Services.GetRequiredService<IOptions<ConsoleOptions>>().Value.ApiKeyFile = path;
 
+    // SearchLimits.Time for the API (a DI singleton, as Console:ApiKeyFile above); ResetAsync puts back the default.
+    public void SetSearchTime(TimeSpan time) => Services.GetRequiredService<SearchLimits>().Time = time;
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
@@ -230,6 +238,8 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
             // Only the network boundary: the API's own notification client (LoginNotifications.ClientName) with ntfy.sh
             // replaced by the fake.
             services.AddHttpClient("ntfy").ConfigurePrimaryHttpMessageHandler(() => Ntfy);
+            // Every category at every level reaches TestLogs: only a rule for the provider itself overrides appsettings.json.
+            services.AddLogging(logging => logging.AddProvider(Logs).AddFilter<TestLogs>(null, Microsoft.Extensions.Logging.LogLevel.Trace));
         });
     }
 
@@ -263,6 +273,8 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         WriteGitConfig();
         _fileTransport = true;
         SetNetworkTimeout(null);
+        SetSearchTime(SearchLimits.DefaultTime);
+        Logs.Reset();
         Clock.Reset();
         Services.GetRequiredService<PasskeyCeremonies>().Clear();
         await using var scope = Services.CreateAsyncScope();

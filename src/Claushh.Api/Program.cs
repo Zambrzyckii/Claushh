@@ -107,6 +107,8 @@ builder.Services.AddHostedService(services => services.GetRequiredService<LoginN
 builder.Services.AddScoped<CreateUserCommand>();
 builder.Services.AddSingleton<ProjectPaths>();
 builder.Services.AddSingleton<FileStore>();
+builder.Services.AddSingleton<SearchLimits>();
+builder.Services.AddSingleton<FileSearch>();
 builder.Services.AddSingleton<Repositories>();
 builder.Services.AddScoped<WorkspaceStore>();
 builder.Services.AddSingleton<GitRunner>();
@@ -206,7 +208,7 @@ app.UseAuthorization();
 
 app.MapGet("/api/health", () => Results.Ok(new { status = "ok" })).AllowAnonymous();
 var api = app.MapGroup("/api").RequireXsrfToken();
-api.MapAuthEndpoints().MapSessionEndpoints().MapPasskeyEndpoints().MapFileEndpoints().MapWorkspaceEndpoints().MapGitEndpoints();
+api.MapAuthEndpoints().MapSessionEndpoints().MapPasskeyEndpoints().MapFileEndpoints().MapSearchEndpoints().MapWorkspaceEndpoints().MapGitEndpoints();
 // Unknown /api paths: 401 without a session (fallback policy), 404 with one, never another handler's response.
 api.Map("{**path}", () => Results.NotFound());
 // WebSocket only: the frontend skips negotiation, and other transports would only add ways in.

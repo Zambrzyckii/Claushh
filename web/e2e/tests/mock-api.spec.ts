@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import type { APIRequestContext } from '@playwright/test';
 
 import { expect, test } from './fixtures';
-import { USER, login, mockState, resetMock, setRepoState } from './helpers';
+import { MAIN, USER, login, mockState, resetMock, setRepoState } from './helpers';
 
 /** Mock backend: tests of the mock itself (it has unprotected /__test/*) and of contract rules that the frontend does not let through. */
 
@@ -186,6 +186,34 @@ test('the mock refuses console paths, prompts and options that the contract forb
     'Invalid options'
   ]);
   expect((await mockState(request)).prompts).toHaveLength(0);
+});
+
+test('the mock searches like the backend: its 400s, the 404 for a file and the XSRF token', async ({ request }) => {
+  const xsrf = await apiLogin(request);
+  const post = (data: object, token = xsrf) => request.post('/api/search', { headers: { 'X-XSRF-TOKEN': token }, data });
+  const found = await post({ path: '', query: 'main' });
+  expect(found.status()).toBe(200);
+  expect(await found.json()).toEqual({
+    files: [
+      { path: 'studia/lab-3-sieci/Makefile', matches: [{ line: 2, column: 16, preview: 'cc -o app src/main.c', ranges: [[14, 18]] }] },
+      { path: MAIN, matches: [{ line: 3, column: 5, preview: 'int main(void)', ranges: [[4, 8]] }] },
+      { path: 'studia/so-projekt-shell/src/shell.c', matches: [{ line: 1, column: 5, preview: 'int main(void) { return 0; }', ranges: [[4, 8]] }] }
+    ],
+    matchCount: 3,
+    limit: null
+  });
+  for (const data of [
+    { path: '', query: '' },
+    { path: '../x', query: 'a' },
+    { path: '', query: 'x'.repeat(1001) },
+    { path: '', query: '(?<=a)b', regex: true },
+    { path: '', query: '(a)\\1', regex: true },
+    { path: '', query: 'a', include: 'a/../b' }
+  ]) {
+    expect((await post(data)).status(), JSON.stringify(data)).toBe(400);
+  }
+  expect((await post({ path: MAIN, query: 'a' })).status()).toBe(404);
+  expect((await post({ path: '', query: 'main' }, 'stale')).status()).toBe(400);
 });
 
 test('the mock follows the passkey management contract like the backend', async ({ request }) => {
