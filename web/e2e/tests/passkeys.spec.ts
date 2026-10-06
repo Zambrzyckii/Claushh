@@ -126,6 +126,17 @@ test('a refused user verification cancels the prompt and adds nothing', async ({
   expect(state.registrationCount).toBe(1); // the creation options were never used: nothing was sent
 });
 
+test('Esc closes the Security window and drops the password and code form', async ({ page }) => {
+  await login(page);
+  await addVirtualAuthenticator(page);
+  const security = await openSecurity(page);
+  await security.getByRole('button', { name: 'Add passkey' }).click();
+  await security.getByLabel('Password', { exact: true }).fill('typed but not sent');
+  await page.keyboard.press('Escape');
+  await expect(security).toBeHidden();
+  await expect(page.locator('#reauth-password')).toHaveCount(0);
+});
+
 test('a passkey logs in without a user name, and the history shows it', async ({ page }) => {
   await login(page);
   await addVirtualAuthenticator(page);

@@ -11,7 +11,7 @@ import { formatWait } from '../../core/text/format';
  * Login screen: login, password and a 6-digit TOTP code from the phone app.
  * Or a passkey, without a user name, where the browser can use one (docs/ARCHITECTURE.md, "Flows").
  * Error messages are deliberately generic: they do not reveal which field was wrong.
- * After a failed attempt the password and the code are cleared from the form.
+ * After a failed password attempt the password and the code are cleared from the form.
  *
  * After an unconfirmed logout (`?logout=unconfirmed`) the screen retries ending the session on the server:
  * on its own (right away, after 3 s, after 10 s, then every 30 s, until the server confirms) only when the app left a marker

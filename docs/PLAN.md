@@ -300,12 +300,13 @@ Frontend decisions (passkeys):
   options by hand (code for browsers older than the owner's) and a WebAuthn package.
 - The Security window lists the passkeys (name, date added, synced or this device only) and adds, renames and removes
   them. When adding or removing gets `403`, the window asks for the password and a code inline and then repeats the
-  change once; a name is checked by the backend's rule before anything is sent, and a blank name lets the backend name
-  the passkey after the device. Rejected: asking for the password and code before every change (the backend allows
-  changes for 5 minutes after one check).
+  change once (nothing goes out until a password and a 6-digit code are filled in, and closing the window drops them); a
+  name is checked by the backend's rule before anything is sent, and a blank name lets the backend name the passkey
+  after the device. Rejected: asking for the password and code before every change (the backend allows changes for 5
+  minutes after one check).
 - The login screen's "Log in with a passkey" button asks for the login options, lets the browser's prompt run outside
   the `claushh-auth` lock (it may stay open for minutes, and the other tabs must not wait for it) and sends the
-  passkey under the lock, like a password login. A cancelled prompt sends nothing. Rejected: autofill (conditional
+  passkey under the lock, like a password login. A cancelled prompt sends no login. Rejected: autofill (conditional
   mediation), which would keep a pending prompt next to the password form.
 
 Backend decisions (stage 2):

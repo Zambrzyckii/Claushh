@@ -56,7 +56,9 @@ export class SecurityDialog {
     void this.passkeys.load();
   }
 
+  /** Esc comes here too (`(cancel)`), so a typed password and code never stay in the closed window. */
   protected close(): void {
+    this.passkeys.cancelReauthentication();
     this.dialog().nativeElement.close();
   }
 
@@ -108,7 +110,10 @@ export class SecurityDialog {
     }
   }
 
-  /** The password and code: the code is cleared after every attempt, the password also after a refusal. */
+  /**
+   * The password and code: nothing is sent until both are filled in;
+   * the code is cleared after every attempt, the password also after a refusal.
+   */
   protected async reauthenticate(event: Event): Promise<void> {
     event.preventDefault();
     const password = this.reauthPassword()?.nativeElement;
@@ -117,6 +122,9 @@ export class SecurityDialog {
       return;
     }
     const outcome = await this.passkeys.reauthenticate(password.value, code.value);
+    if (outcome === 'invalid') {
+      return;
+    }
     code.value = '';
     if (outcome === 'refused') {
       password.value = '';

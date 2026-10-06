@@ -315,6 +315,40 @@ describe('Passkeys in the Security window (integration)', () => {
     http.expectNone(PASSKEYS_API.creationOptions);
   });
 
+  it('the password and code are checked before anything is sent', async () => {
+    const { root, render } = await open([LAPTOP]);
+    submit(root, 'form.passkey-add');
+    await render();
+    http.expectOne(PASSKEYS_API.creationOptions).flush(null, FORBIDDEN);
+    await render();
+
+    submit(root, 'form.reauth');
+    await render();
+    expect(alert(root)).toBe('Enter your password and the 6-digit code.');
+    fill(root, '#reauth-password', 'secret');
+    fill(root, '#reauth-code', '12345');
+    submit(root, 'form.reauth');
+    await render();
+    http.expectNone(PASSKEYS_API.reauthenticate);
+    expect(alert(root)).toBe('Enter your password and the 6-digit code.');
+    expect(value(root, '#reauth-password')).toBe('secret');
+    expect(value(root, '#reauth-code')).toBe('12345');
+  });
+
+  it('closing the window drops the password and code form', async () => {
+    const { root, render } = await open([LAPTOP]);
+    submit(root, 'form.passkey-add');
+    await render();
+    http.expectOne(PASSKEYS_API.creationOptions).flush(null, FORBIDDEN);
+    await render();
+    fill(root, '#reauth-password', 'secret');
+
+    button(root, 'Close').click();
+    await render();
+    expect(root.querySelector('dialog')!.hasAttribute('open')).toBe(false);
+    expect(root.querySelector('#reauth-password')).toBeNull();
+  });
+
   it('without passkeys in this browser the list stays and adding is not offered', async () => {
     webAuthn.available.mockReturnValue(false);
     const { root } = await open([LAPTOP]);

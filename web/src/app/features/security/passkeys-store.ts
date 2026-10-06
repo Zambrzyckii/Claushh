@@ -10,7 +10,7 @@ const NAME_RULE = 'A passkey name has 1 to 64 characters and no control characte
 const NOT_ADDED = 'The passkey could not be added. Try again.';
 
 /** How the password and code ended: the waiting change ran, the server refused them (`403`), or another failure. */
-export type ReauthOutcome = 'done' | 'refused' | 'failed';
+export type ReauthOutcome = 'done' | 'refused' | 'failed' | 'invalid';
 
 /** A change of the passkeys and its message when it fails. */
 interface Change {
@@ -105,11 +105,18 @@ export class PasskeysStore {
     });
   }
 
-  /** The form's password and code; after a success the waiting change runs once more. */
+  /**
+   * The form's password and code, checked as on the login screen (a password and 6 digits) before anything is sent;
+   * after a success the waiting change runs once more.
+   */
   async reauthenticate(password: string, totpCode: string): Promise<ReauthOutcome> {
     const change = this.waiting();
     if (change === null || this.busy()) {
       return 'failed';
+    }
+    if (password === '' || !/^\d{6}$/.test(totpCode)) {
+      this.error.set('Enter your password and the 6-digit code.');
+      return 'invalid';
     }
     this.busy.set(true);
     this.error.set(null);

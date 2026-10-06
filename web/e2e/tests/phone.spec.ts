@@ -4,6 +4,7 @@ import { expect, test } from './fixtures';
 import {
   MAIN,
   PASSKEY_ORIGIN,
+  USER,
   activeTerminal,
   addPasskey,
   addVirtualAuthenticator,
@@ -234,7 +235,15 @@ test.describe('passkeys at localhost', () => {
     await page.getByRole('button', { name: 'Menu' }).click();
     await page.getByRole('menuitem', { name: 'Security' }).click();
     const security = page.getByRole('dialog', { name: 'Security' });
-    await addPasskey(security, 'Phone');
+    await security.getByRole('textbox', { name: 'New passkey name' }).fill('Phone');
+    await security.getByRole('button', { name: 'Add passkey' }).click();
+    const password = security.getByLabel('Password', { exact: true });
+    await expect(password).toBeVisible();
+    expect(await noSidewaysScroll(page)).toBe(true); // the password and code form fits the sheet
+    await password.fill(USER.password);
+    await security.getByLabel('Authenticator code', { exact: true }).fill(USER.totpCode);
+    await security.getByRole('button', { name: 'Confirm' }).click();
+    await expect(security.locator('tr.passkey [data-label="Name"]', { hasText: 'Phone' })).toBeVisible();
     const card = security.locator('tr.passkey');
     expect(await card.evaluate((row) => getComputedStyle(row).display)).toBe('block');
     await expect(card.locator('[data-label="Sync"]')).toHaveText('this device only');
