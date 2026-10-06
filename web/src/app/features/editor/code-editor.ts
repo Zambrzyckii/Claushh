@@ -25,7 +25,6 @@ interface ModelEntry {
 const EDITOR_OPTIONS: MonacoApi.editor.IEditorOptions & MonacoApi.editor.IGlobalEditorOptions = {
   theme: MONACO_THEME,
   automaticLayout: true,
-  minimap: { enabled: false },
   fontFamily: "'JetBrains Mono', ui-monospace, monospace",
   fontSize: 13,
   lineHeight: 20,
@@ -42,6 +41,9 @@ const EDITOR_OPTIONS: MonacoApi.editor.IEditorOptions & MonacoApi.editor.IGlobal
  *
  * Diff view: on the left the version from HEAD (a separate read-only model), on the right the same model as
  * in the regular editor, so editing and Ctrl+S work the same way. A narrow screen switches the diff to a single-column view.
+ *
+ * The minimap is on in the desktop layout only (crossing the breakpoint recreates the editor anyway). The status bar's
+ * values of the shown file go to the store: cursor, indentation, line endings and the language's display name.
  */
 @Component({
   selector: 'app-code-editor',
@@ -133,9 +135,14 @@ export class CodeEditor {
       return;
     }
     this.monaco = monaco;
-    this.editor = monaco.editor.create(this.host().nativeElement, { ...EDITOR_OPTIONS, model: null });
+    this.editor = monaco.editor.create(this.host().nativeElement, { ...EDITOR_OPTIONS, minimap: this.minimap(), model: null });
     this.wire(this.editor);
     this.ready.set(true);
+  }
+
+  /** The minimap only on a desktop: at a phone's width it would take a quarter of the editor. */
+  private minimap(): MonacoApi.editor.IEditorMinimapOptions {
+    return { enabled: !this.layout.phone() };
   }
 
   /** Ctrl+S and cursor position for the editor (the regular one or the right side of the diff view). */
@@ -195,6 +202,8 @@ export class CodeEditor {
     } else {
       this.store.cursor.set(null);
       this.store.language.set(null);
+      this.store.indentation.set(null);
+      this.store.eol.set(null);
     }
   }
 
@@ -216,6 +225,9 @@ export class CodeEditor {
         const model = monaco.editor.createModel(doc.value, undefined, uri);
         const path = doc.path;
         model.onDidChangeContent(() => this.store.updateValue(path, model.getValue()));
+        // The indentation and the language may settle after creation; the status bar follows the shown file.
+        model.onDidChangeOptions(() => this.reportModelIfShown(path, model));
+        model.onDidChangeLanguage(() => this.reportModelIfShown(path, model));
         this.models.set(path, { model, revision: doc.revision, viewState: null });
       } else if (entry.revision !== doc.revision) {
         entry.revision = doc.revision;
@@ -256,6 +268,7 @@ export class CodeEditor {
     if (!this.diffEditor) {
       this.diffEditor = monaco.editor.createDiffEditor(this.diffHost().nativeElement, {
         ...EDITOR_OPTIONS,
+        minimap: this.minimap(),
         originalEditable: false,
         renderSideBySide: true,
         useInlineViewWhenSpaceIsLimited: true
@@ -279,6 +292,24 @@ export class CodeEditor {
   private reportPosition(editor: MonacoApi.editor.ICodeEditor, model: MonacoApi.editor.ITextModel): void {
     const position = editor.getPosition();
     this.store.cursor.set(position ? { line: position.lineNumber, column: position.column } : null);
-    this.store.language.set(model.getLanguageId());
+    this.reportModel(model);
+  }
+
+  private reportModelIfShown(path: string, model: MonacoApi.editor.ITextModel): void {
+    if (this.shownPath === path) {
+      this.reportModel(model);
+    }
+  }
+
+  /** Indentation (spaces of the indent size, or the tab size), line endings and the language's display name ("C"). */
+  private reportModel(model: MonacoApi.editor.ITextModel): void {
+    const options = model.getOptions();
+    this.store.indentation.set({
+      insertSpaces: options.insertSpaces,
+      size: options.insertSpaces ? options.indentSize : options.tabSize
+    });
+    this.store.eol.set(model.getEOL() === '\r\n' ? 'CRLF' : 'LF');
+    const id = model.getLanguageId();
+    this.store.language.set(this.monaco?.languages.getLanguages().find((language) => language.id === id)?.aliases?.[0] ?? id);
   }
 }

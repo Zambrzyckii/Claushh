@@ -3,6 +3,7 @@ import { Component, inject } from '@angular/core';
 import { ProjectContext } from '../../core/project/project-context';
 import { RepoStatusStore } from '../../core/project/repo-status';
 import { EditorStore } from '../editor/editor-store';
+import { OpenEditors } from '../editor/open-editors';
 import { Explorer } from '../explorer/explorer';
 import { SourceControlView } from '../workspaces/source-control-view';
 import { WorkspacesStore } from '../workspaces/workspaces-store';
@@ -10,13 +11,13 @@ import { SideView, WorkbenchState } from './workbench-state';
 
 /**
  * The primary side bar (docs/ARCHITECTURE.md, "Frontend" → "Layout"): VS Code's activity bar on top (Explorer, Source
- * Control, with their badges) and the views below. Every view stays mounted and the inactive one is hidden, so the
- * explorer keeps its expanded folders. Used by both layouts: the desktop's left column and the phone's drawer, which
- * closes when a file opens from a view.
+ * Control, with their badges) and the views below; Explorer starts with OPEN EDITORS. Every view stays mounted and
+ * the inactive one is hidden, so the explorer keeps its expanded folders. Used by both layouts: the desktop's left
+ * column and the phone's drawer, which closes when a file opens from a view.
  */
 @Component({
   selector: 'app-side-bar',
-  imports: [Explorer, SourceControlView],
+  imports: [Explorer, OpenEditors, SourceControlView],
   templateUrl: './side-bar.html',
   styleUrl: './side-bar.scss'
 })

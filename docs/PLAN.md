@@ -125,6 +125,12 @@ Frontend decisions (VS Code layout):
   Source Control (two copies of the panel would mean two of every row).
 - The bottom panel holds only the terminal, inside the editor's column, and starts closed, so the terminal hub
   connects only when the terminal is first shown. The session countdown moves to the status bar on the desktop.
+- The Explorer view starts with OPEN EDITORS, collapsed as in VS Code (a dot marks unsaved files, closing asks the
+  tab's question). The editor actions hold only what the portal can do, the changes view; actions without a function
+  here (run, split, timeline) are left out. The minimap is on in the desktop layout only (at a phone's width it would
+  take a quarter of the editor).
+- The status bar shows VS Code's items read-only, without their pickers: the indentation and the line endings from
+  Monaco's model, the language by its display name, and "UTF-8" as a constant, since the files API serves only UTF-8.
 
 ## Tech stack
 
@@ -857,4 +863,4 @@ The order is chosen so that only already secured things reach the internet.
   - [x] Backend: passkeys.
   - [x] Frontend: passkeys (Security dialog, login button).
   - [x] Colors (the owner will refine them in later iterations), a possible phone view (low priority).
-  - [ ] Frontend: the VS Code layout (title bar, side bars, open editors, file icons, the console composer).
+  - [x] Frontend: the VS Code layout (title bar, side bars, open editors, file icons, the console composer).

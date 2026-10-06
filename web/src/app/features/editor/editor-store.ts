@@ -51,6 +51,12 @@ export interface CursorPosition {
   column: number;
 }
 
+/** The shown file's indentation: spaces of `size`, or tabs `size` wide. */
+export interface Indentation {
+  insertSpaces: boolean;
+  size: number;
+}
+
 @Injectable()
 export class EditorStore {
   private readonly files = inject(FilesApi);
@@ -64,9 +70,11 @@ export class EditorStore {
   readonly active = computed(() => this.docs().find((d) => d.path === this.activePathSignal()) ?? null);
   readonly unsavedCount = computed(() => this.docs().filter(isDirty).length);
 
-  /** Set by CodeEditor, shown in the status bar. */
+  /** Set by CodeEditor for the shown file, shown in the status bar; the language by its display name ("C"). */
   readonly cursor = signal<CursorPosition | null>(null);
   readonly language = signal<string | null>(null);
+  readonly indentation = signal<Indentation | null>(null);
+  readonly eol = signal<'LF' | 'CRLF' | null>(null);
 
   private readonly project = inject(ProjectContext, { optional: true });
 
@@ -210,6 +218,8 @@ export class EditorStore {
       if (!next) {
         this.cursor.set(null);
         this.language.set(null);
+        this.indentation.set(null);
+        this.eol.set(null);
       }
     }
     return true;

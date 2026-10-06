@@ -17,6 +17,7 @@ import {
   setSessionTimeout,
   terminalInputs,
   terminalText,
+  treeRow,
   typeInTerminal
 } from './helpers';
 
@@ -68,6 +69,25 @@ test('the explorer drawer opens a file and closes, and Save writes it', async ({
   await save.click();
   await expect(save).toBeDisabled();
   expect((await mockState(request)).files[MAIN]).toMatch(/^\/\/ phone\n#include/);
+});
+
+test('OPEN EDITORS in the drawer switches the file and closes the drawer, and the phone has no minimap', async ({ page }) => {
+  await login(page);
+  const explorer = page.getByRole('button', { name: 'Explorer' });
+  await explorer.click();
+  await openFile(page, MAIN);
+  await expectEditorToContain(page, 'int main');
+  await explorer.click();
+  await treeRow(page, 'parser.c').click();
+  await expectEditorToContain(page, 'int parse');
+
+  await explorer.click();
+  const section = page.locator('app-open-editors');
+  await section.getByRole('button', { name: 'Open Editors' }).click();
+  await section.locator('.open-editor__name', { hasText: 'main.c' }).click();
+  await expect(page.locator('.drawer')).not.toHaveClass(/drawer--open/);
+  await expectEditorToContain(page, 'int main');
+  await expect(page.locator('.monaco-editor .minimap')).toBeHidden();
 });
 
 test('switching tabs keeps the editor and its unsaved text, and the terminal mounts once on its first visit', async ({ page, request }) => {

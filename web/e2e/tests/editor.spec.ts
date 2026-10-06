@@ -38,7 +38,7 @@ test('opens a file in Monaco with highlighting, breadcrumb and status bar', asyn
   await expect(page.locator('.tab__name')).toHaveText(['main.c']);
   await expect(page.locator('.breadcrumb')).toHaveText(/studia\s*lab-3-sieci\s*src\s*main\.c/);
   await expect(page.locator('.statusbar')).toContainText('Ln 1, Col 1');
-  await expect(page.locator('.statusbar__language')).toHaveText('c');
+  await expect(page.locator('.statusbar__language')).toHaveText('C');
   expect(await page.locator('.monaco-editor .view-lines span[class*="mtk"]').count()).toBeGreaterThan(3);
   await expect(page.locator('.monaco-editor .line-numbers').first()).toBeVisible();
 });

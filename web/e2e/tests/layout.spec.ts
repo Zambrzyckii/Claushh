@@ -1,5 +1,6 @@
 import { expect, test } from './fixtures';
 import {
+  MAIN,
   expectEditorToContain,
   login,
   mockState,
@@ -82,4 +83,54 @@ test('Source Control lists the changes of the open repository and opens one with
   await expect(page.locator('app-side-bar').getByRole('tab', { name: 'Source Control' }).locator('.badge')).toHaveText('1');
   await change.click();
   await expect(page.locator('.monaco-diff-editor')).toBeVisible();
+});
+
+test('OPEN EDITORS lists the open files, marks the active and the unsaved one, and closes them', async ({ page }) => {
+  await openFile(page, MAIN);
+  await expectEditorToContain(page, 'int main');
+  await treeRow(page, 'parser.c').click();
+  await expectEditorToContain(page, 'int parse');
+  const section = page.locator('app-open-editors');
+  await section.getByRole('button', { name: 'Open Editors' }).click();
+  const rows = section.locator('.open-editor');
+  await expect(rows.locator('.open-editor__file')).toHaveText(['main.c', 'parser.c']);
+  await expect(rows.nth(1)).toHaveClass(/open-editor--active/);
+
+  await page.locator('.monaco-editor .view-lines').click();
+  await page.keyboard.type('Z');
+  await expect(rows.nth(1)).toHaveClass(/open-editor--dirty/);
+  await rows.nth(0).locator('.open-editor__name').click();
+  await expect(rows.nth(0)).toHaveClass(/open-editor--active/);
+
+  page.once('dialog', (dialog) => dialog.dismiss());
+  await section.getByRole('button', { name: 'Close editor parser.c' }).click();
+  await expect(rows).toHaveCount(2);
+  await section.getByRole('button', { name: 'Close editor main.c' }).click();
+  await expect(rows.locator('.open-editor__file')).toHaveText(['parser.c']);
+  await expect(page.locator('.tab__name')).toHaveText(['parser.c']);
+});
+
+test('the status bar shows the cursor, the indentation, the encoding, the line endings and the language', async ({ page }) => {
+  await openFile(page, MAIN);
+  await expectEditorToContain(page, 'int main');
+  const bar = page.locator('.statusbar');
+  await expect(bar).toContainText('Ln 1, Col 1');
+  await expect(page.locator('.statusbar__indent')).toHaveText('Spaces: 4');
+  await expect(bar).toContainText('UTF-8');
+  await expect(page.locator('.statusbar__eol')).toHaveText('LF');
+  await expect(page.locator('.statusbar__language')).toHaveText('C');
+  await treeRow(page, 'Makefile').click();
+  await expect(page.locator('.statusbar__indent')).toHaveText('Tab Size: 4');
+});
+
+test('the editor shows a minimap on a desktop, and the changes are an editor action', async ({ page }) => {
+  await openRepo(page, 'lab-3-sieci');
+  await openFile(page, 'src/main.c');
+  await expectEditorToContain(page, 'int main');
+  await expect(page.locator('.monaco-editor .minimap').first()).toBeVisible();
+  const action = page.getByRole('toolbar', { name: 'Editor actions' }).getByRole('button', { name: 'Show changes' });
+  await expect(action).toHaveAttribute('aria-pressed', 'false');
+  await action.click();
+  await expect(page.locator('.monaco-diff-editor')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Hide changes' })).toHaveAttribute('aria-pressed', 'true');
 });

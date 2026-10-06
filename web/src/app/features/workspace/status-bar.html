@@ -14,6 +14,15 @@
       @if (editor.cursor(); as c) {
         <span>Ln {{ c.line }}, Col {{ c.column }}</span>
       }
+      @if (!layout.phone()) {
+        @if (editor.indentation(); as indent) {
+          <span class="statusbar__indent">{{ (indent.insertSpaces ? 'Spaces: ' : 'Tab Size: ') + indent.size }}</span>
+        }
+        @if (editor.eol(); as eol) {
+          <span>UTF-8</span>
+          <span class="statusbar__eol">{{ eol }}</span>
+        }
+      }
       @if (editor.language(); as lang) {
         <span class="statusbar__language">{{ lang }}</span>
       }

@@ -1,0 +1,24 @@
+<button type="button" class="head" [attr.aria-expanded]="state.openEditorsExpanded()"
+        (click)="state.openEditorsExpanded.set(!state.openEditorsExpanded())">
+  <span class="codicon" [class.codicon-chevron-down]="state.openEditorsExpanded()"
+        [class.codicon-chevron-right]="!state.openEditorsExpanded()" aria-hidden="true"></span>
+  <span class="section-title">Open Editors</span>
+</button>
+@if (state.openEditorsExpanded()) {
+  <ul class="list" aria-label="Open editors">
+    @for (doc of store.documents(); track doc.path) {
+      <li class="open-editor" [class.open-editor--active]="doc.path === store.activePath()" [class.open-editor--dirty]="dirty(doc)">
+        <button type="button" class="icon open-editor__close" [attr.aria-label]="'Close editor ' + doc.name"
+                [title]="'Close ' + doc.name" (click)="close(doc)">
+          <span class="codicon codicon-close" aria-hidden="true"></span>
+          <span class="codicon codicon-circle-filled" aria-hidden="true"></span>
+        </button>
+        <button type="button" class="open-editor__name" [title]="doc.path" (click)="activate(doc)">
+          <img class="file-icon" [src]="icon(doc)" alt="" width="16" height="16" draggable="false">
+          <span class="open-editor__file">{{ doc.name }}</span>
+          <span class="open-editor__dir">{{ directory(doc) }}</span>
+        </button>
+      </li>
+    }
+  </ul>
+}

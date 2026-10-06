@@ -112,4 +112,21 @@ describe('Status bar (integration)', () => {
     await settle();
     expect(http.expectOne(AUTH_API.keepAlive).request.method).toBe('POST');
   });
+
+  it('shows the indentation, the encoding, the line endings and the language of the shown file', async () => {
+    const { root, settle, host } = await setup();
+    host.editor.cursor.set({ line: 4, column: 1 });
+    host.editor.indentation.set({ insertSpaces: true, size: 4 });
+    host.editor.eol.set('LF');
+    host.editor.language.set('C');
+    await settle();
+    const right = Array.from(root.querySelectorAll('.statusbar__group')[1].children).map((e) => e.textContent!.trim());
+    expect(right.slice(0, 5)).toEqual(['Ln 4, Col 1', 'Spaces: 4', 'UTF-8', 'LF', 'C']);
+
+    host.editor.indentation.set({ insertSpaces: false, size: 8 });
+    host.editor.eol.set('CRLF');
+    await settle();
+    expect(root.querySelector('.statusbar__indent')!.textContent!.trim()).toBe('Tab Size: 8');
+    expect(root.querySelector('.statusbar__eol')!.textContent!.trim()).toBe('CRLF');
+  });
 });

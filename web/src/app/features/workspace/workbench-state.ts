@@ -21,6 +21,8 @@ export class WorkbenchState {
   readonly consoleOpen = signal(true);
   readonly view = signal<SideView>('explorer');
   readonly drawerOpen = signal(false);
+  /** OPEN EDITORS in the Explorer view: collapsed at start, as in VS Code. */
+  readonly openEditorsExpanded = signal(false);
 
   constructor() {
     // Opening a repository closes the phone's drawer, as opening a file does.

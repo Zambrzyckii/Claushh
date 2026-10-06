@@ -1,16 +1,29 @@
-<div class="tabs" role="tablist" aria-label="Open files">
-  @for (doc of store.documents(); track doc.path) {
-    <div class="tab" [class.tab--active]="doc.path === store.activePath()" (auxclick)="closeWithMiddleClick(doc, $event)">
-      <button type="button" role="tab" class="tab__name" [attr.aria-selected]="doc.path === store.activePath()"
-              [title]="doc.path" (click)="store.activate(doc.path)">
-        <img class="file-icon" [src]="icon(doc.name)" alt="" width="16" height="16" draggable="false">
-        {{ doc.name }}
-        @if (dirty(doc)) {
-          <span class="tab__dirty codicon codicon-circle-filled" aria-label="unsaved changes"></span>
-        }
-      </button>
-      <button type="button" class="tab__close icon" [attr.aria-label]="'Close ' + doc.name" (click)="close(doc, $event)"><span class="codicon codicon-close" aria-hidden="true"></span></button>
-    </div>
+<div class="tab-row">
+  <div class="tabs" role="tablist" aria-label="Open files">
+    @for (doc of store.documents(); track doc.path) {
+      <div class="tab" [class.tab--active]="doc.path === store.activePath()" (auxclick)="closeWithMiddleClick(doc, $event)">
+        <button type="button" role="tab" class="tab__name" [attr.aria-selected]="doc.path === store.activePath()"
+                [title]="doc.path" (click)="store.activate(doc.path)">
+          <img class="file-icon" [src]="icon(doc.name)" alt="" width="16" height="16" draggable="false">
+          {{ doc.name }}
+          @if (dirty(doc)) {
+            <span class="tab__dirty codicon codicon-circle-filled" aria-label="unsaved changes"></span>
+          }
+        </button>
+        <button type="button" class="tab__close icon" [attr.aria-label]="'Close ' + doc.name" (click)="close(doc, $event)"><span class="codicon codicon-close" aria-hidden="true"></span></button>
+      </div>
+    }
+  </div>
+  @if (store.active(); as doc) {
+    @if (doc.status === 'ready' && store.canDiff(doc.path)) {
+      <div class="actions" role="toolbar" aria-label="Editor actions">
+        <button type="button" class="icon" [attr.aria-label]="doc.diff ? 'Hide changes' : 'Show changes'"
+                [title]="doc.diff ? 'Hide changes' : 'Show changes'" [attr.aria-pressed]="doc.diff !== null"
+                (click)="store.toggleDiff(doc.path)">
+          <span class="codicon codicon-git-compare" aria-hidden="true"></span>
+        </button>
+      </div>
+    }
   }
 </div>
 
@@ -34,10 +47,6 @@
         New file (not in the last commit)
       }
     </span>
-    @if (doc.status === 'ready' && store.canDiff(doc.path)) {
-      <button type="button" class="breadcrumb__toggle" [attr.aria-pressed]="doc.diff !== null"
-              (click)="store.toggleDiff(doc.path)">{{ doc.diff ? 'Hide changes' : 'Show changes' }}</button>
-    }
   </div>
 
   @if (doc.diff?.status === 'error') {
