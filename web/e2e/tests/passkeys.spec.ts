@@ -1,7 +1,18 @@
+import crypto from 'node:crypto';
 import { Locator, Page } from '@playwright/test';
 
 import { expect, test } from './fixtures';
-import { PASSKEY_ORIGIN, USER, addPasskey, addVirtualAuthenticator, login, mockState, resetMock } from './helpers';
+import {
+  MOCK_ORIGIN,
+  PASSKEY_ORIGIN,
+  USER,
+  type VirtualAuthenticator,
+  addPasskey,
+  addVirtualAuthenticator,
+  login,
+  mockState,
+  resetMock
+} from './helpers';
 
 /**
  * Passkeys in a real browser (docs/ARCHITECTURE.md, "Tests"): Chromium's virtual authenticator stands for the device.
@@ -23,6 +34,22 @@ async function confirmPassword(security: Locator): Promise<void> {
   await security.getByLabel('Password', { exact: true }).fill(USER.password);
   await security.getByLabel('Authenticator code', { exact: true }).fill(USER.totpCode);
   await security.getByRole('button', { name: 'Confirm' }).click();
+}
+
+/** Puts a passkey for localhost that the portal does not know into the authenticator. */
+async function addUnknownPasskey(authenticator: VirtualAuthenticator): Promise<void> {
+  const { privateKey } = crypto.generateKeyPairSync('ec', { namedCurve: 'P-256' });
+  await authenticator.cdp.send('WebAuthn.addCredential', {
+    authenticatorId: authenticator.id,
+    credential: {
+      credentialId: Buffer.from('unknown-passkey').toString('base64'),
+      isResidentCredential: true,
+      rpId: 'localhost',
+      privateKey: privateKey.export({ format: 'der', type: 'pkcs8' }).toString('base64'),
+      userHandle: Buffer.from('mock-owner').toString('base64'),
+      signCount: 0
+    }
+  });
 }
 
 test('a passkey is added after the password and code, listed as synced, and kept as a discoverable credential', async ({ page, request }) => {
@@ -97,4 +124,71 @@ test('a refused user verification cancels the prompt and adds nothing', async ({
   const state = await mockState(request);
   expect(state.passkeyCount).toBe(0);
   expect(state.registrationCount).toBe(1); // the creation options were never used: nothing was sent
+});
+
+test('a passkey logs in without a user name, and the history shows it', async ({ page }) => {
+  await login(page);
+  await addVirtualAuthenticator(page);
+  await addPasskey(await openSecurity(page), 'Laptop');
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'Log out', exact: true }).click();
+  await expect(page).toHaveURL('/login?logout=ok');
+
+  await page.getByRole('button', { name: 'Log in with a passkey' }).click();
+  await page.waitForURL('/');
+  const newest = (await openSecurity(page)).locator('tr.login').first();
+  await expect(newest.locator('[data-label="Method"]')).toHaveText('passkey');
+  await expect(newest.locator('[data-label="Result"]')).toHaveText('succeeded');
+});
+
+test('a cancelled passkey prompt sends no login', async ({ page, request }) => {
+  await page.goto('/login');
+  const authenticator = await addVirtualAuthenticator(page);
+  await addUnknownPasskey(authenticator);
+  await authenticator.cdp.send('WebAuthn.setUserVerified', { authenticatorId: authenticator.id, isUserVerified: false });
+  await page.getByRole('button', { name: 'Log in with a passkey' }).click();
+  await expect(page.getByRole('alert')).toHaveText('Passkey login cancelled.');
+  const paths = (await mockState(request)).log.map((entry) => entry.path);
+  expect(paths).toContain('/api/auth/passkeys/login-options');
+  expect(paths).not.toContain('/api/auth/passkeys/login');
+});
+
+test('an open passkey prompt does not hold the login lock: another tab logs in with a password meanwhile', async ({ page, context, request }) => {
+  await page.goto('/login');
+  const authenticator = await addVirtualAuthenticator(page);
+  await addUnknownPasskey(authenticator);
+  await authenticator.cdp.send('WebAuthn.setAutomaticPresenceSimulation', { authenticatorId: authenticator.id, enabled: false });
+  const passkey = page.getByRole('button', { name: 'Log in with a passkey' });
+  await passkey.click();
+  await expect.poll(async () => (await mockState(request)).challengeCount).toBe(1);
+  await expect(passkey).toBeDisabled();
+
+  const other = await context.newPage();
+  await login(other);
+  await expect(other.locator('.topbar__user')).toHaveText('owner');
+  await expect(passkey).toBeDisabled(); // the prompt is still open
+  expect((await mockState(request)).log.map((entry) => entry.path)).not.toContain('/api/auth/passkeys/login');
+});
+
+test('a passkey the portal does not know is refused, and after three failures the wait is shown', async ({ page, request }) => {
+  await page.goto('/login');
+  await addUnknownPasskey(await addVirtualAuthenticator(page));
+  const passkey = page.getByRole('button', { name: 'Log in with a passkey' });
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    await passkey.click();
+    await expect
+      .poll(async () => (await mockState(request)).log.filter((entry) => entry.path === '/api/auth/passkeys/login').length)
+      .toBe(attempt);
+    await expect(page.getByRole('alert')).toHaveText('The passkey was not accepted.');
+    await expect(passkey).toBeEnabled();
+  }
+  await passkey.click();
+  await expect(page.getByRole('alert')).toHaveText('Too many attempts. Try again in 30 s.');
+  await expect(page).toHaveURL('/login');
+});
+
+test('on an IP address the passkey button says that passkeys need the domain name', async ({ page }) => {
+  await page.goto(`${MOCK_ORIGIN}/login`);
+  await page.getByRole('button', { name: 'Log in with a passkey' }).click();
+  await expect(page.getByRole('alert')).toHaveText("Passkeys work only at the portal's domain name.");
 });

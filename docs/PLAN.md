@@ -303,6 +303,10 @@ Frontend decisions (passkeys):
   change once; a name is checked by the backend's rule before anything is sent, and a blank name lets the backend name
   the passkey after the device. Rejected: asking for the password and code before every change (the backend allows
   changes for 5 minutes after one check).
+- The login screen's "Log in with a passkey" button asks for the login options, lets the browser's prompt run outside
+  the `claushh-auth` lock (it may stay open for minutes, and the other tabs must not wait for it) and sends the
+  passkey under the lock, like a password login. A cancelled prompt sends nothing. Rejected: autofill (conditional
+  mediation), which would keep a pending prompt next to the password form.
 
 Backend decisions (stage 2):
 - The projects directory is the configuration key `Projects:Root` (`/srv/projects` in `appsettings.json`, a user-secret
@@ -668,9 +672,9 @@ passkey on someone else's computer.
     - two networks (phone data and home Wi-Fi) show different IPs;
     - a terminal still answers after 10 idle minutes (the hub's WebSocket through the tunnel);
     - the login notification arrives.
-    - a passkey, once the Security dialog has them: adding one asks for the password and a code first and sends the
-      "added" notification; a login with it shows `passkey` in the history and its notification names it; removing it
-      sends the "removed" notification.
+    - a passkey: adding one in Security asks for the password and a code first and sends the "added" notification; a
+      login with it shows `passkey` in the history and its notification names it; the same on the phone (the Security
+      sheet, then the login button); removing it sends the "removed" notification.
 
 Deployment decisions:
 - The API runs as `claushh.service` (`deploy/claushh.service`), as the user `workspace`, on `http://127.0.0.1:5090`
@@ -815,5 +819,5 @@ The order is chosen so that only already secured things reach the internet.
         expiry without the server, "Log out everywhere", CSP with Trusted Types and headers, XSRF token bound to the identity,
         mock only on `127.0.0.1`), verified in several rounds of independent review, with integration and e2e tests.
   - [x] Backend: passkeys.
-  - [ ] Frontend: passkeys (Security dialog, login button).
+  - [x] Frontend: passkeys (Security dialog, login button).
   - [x] Colors (the owner will refine them in later iterations), a possible phone view (low priority).

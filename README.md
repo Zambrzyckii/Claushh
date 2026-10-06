@@ -4,11 +4,11 @@ A private web portal for working on projects from any device: code editor, conso
 terminal and git in the browser. Runs on a home computer (EndeavourOS), access through Cloudflare Tunnel,
 login with a password and a TOTP code, or with a passkey. One user.
 
-Status: **frontend ready (login and sessions, passkeys in the Security window, editor with a diff view, console,
-workspaces and git, terminal); backend: login, sessions, login protection, passkeys (logging in, adding, renaming and
-removing), the security headers, serving the built frontend, the client IP behind Cloudflare and login notifications
-(stage 1, parts A-C), the files API (stage 2), the console hub (stage 3), the workspaces and git API and the terminal
-hub (stage 4).** Not deployed yet: the steps are in "Deployment" below.
+Status: **frontend ready (login with a password or a passkey, sessions and passkeys in the Security window, editor with
+a diff view, console, workspaces and git, terminal); backend: login, sessions, login protection, passkeys (logging in,
+adding, renaming and removing), the security headers, serving the built frontend, the client IP behind Cloudflare and
+login notifications (stage 1, parts A-C), the files API (stage 2), the console hub (stage 3), the workspaces and git
+API and the terminal hub (stage 4).** Not deployed yet: the steps are in "Deployment" below.
 Progress: [`docs/PLAN.md`](docs/PLAN.md), section "Stages".
 
 ## Documentation
@@ -327,9 +327,10 @@ sudo docker compose -p claushh-prod -f /opt/claushh/deploy/docker-compose.yml --
 - **WebSocket.** A terminal still answers after 10 idle minutes, and the output of `docker run` streams.
 - **Headers.** On `/` the developer tools show `Content-Security-Policy` with `frame-ancestors 'none'`,
   `X-Frame-Options: DENY` and `Strict-Transport-Security`; the ntfy notification of this login arrives.
-- **Passkey** (once the Security dialog has passkeys). Add one in "Security": the password and a code are asked
-  first, and the "passkey added" notification arrives. Log out and log in with it: the history shows `passkey`, and
-  the notification names it. Remove it: the "passkey removed" notification arrives.
+- **Passkey.** Add one in "Security": the password and a code are asked first, and the "passkey added" notification
+  arrives. Log out and log in with it ("Log in with a passkey"): the history shows `passkey`, and the notification
+  names it. Do the same on the phone (iOS 18.4 or later: the Security sheet, then the login button). Remove them: the
+  "passkey removed" notifications arrive.
 
 ### Updates
 

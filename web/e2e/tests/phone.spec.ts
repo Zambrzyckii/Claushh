@@ -241,4 +241,23 @@ test.describe('passkeys at localhost', () => {
     await expect(card.getByRole('button', { name: 'Remove passkey Phone' })).toBeVisible();
     expect(await noSidewaysScroll(page)).toBe(true);
   });
+
+  test('at 375 px the login screen logs in with a passkey', async ({ page }) => {
+    await login(page);
+    await addVirtualAuthenticator(page);
+    await page.getByRole('button', { name: 'Menu' }).click();
+    await page.getByRole('menuitem', { name: 'Security' }).click();
+    await addPasskey(page.getByRole('dialog', { name: 'Security' }), 'Phone');
+    await page.keyboard.press('Escape');
+    await page.getByRole('button', { name: 'Menu' }).click();
+    await page.getByRole('menuitem', { name: 'Log out' }).click();
+    await expect(page).toHaveURL('/login?logout=ok');
+
+    await page.setViewportSize({ width: 375, height: 667 });
+    const passkey = page.getByRole('button', { name: 'Log in with a passkey' });
+    await expect(passkey).toBeVisible();
+    expect(await noSidewaysScroll(page)).toBe(true);
+    await passkey.click();
+    await expect(tab(page, 'Editor')).toHaveAttribute('aria-selected', 'true');
+  });
 });

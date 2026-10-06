@@ -5,8 +5,8 @@ import { catchError, throwError } from 'rxjs';
 import { AUTH_API, AuthService } from './auth.service';
 import { IGNORE_UNAUTHORIZED } from './ignore-unauthorized';
 
-/** Endpoints for which 401 is a normal response and not a sign of an expired session. */
-const OWN_AUTH_ENDPOINTS: readonly string[] = [AUTH_API.me, AUTH_API.login, AUTH_API.logout];
+/** Endpoints for which 401 is a normal response and not a sign of an expired session (a refused passkey, too). */
+const OWN_AUTH_ENDPOINTS: readonly string[] = [AUTH_API.me, AUTH_API.login, AUTH_API.logout, AUTH_API.passkeyLogin];
 
 /**
  * When the API responds 401 to a regular request, the session has expired or was invalidated on the server.

@@ -2,12 +2,14 @@ import { Component, DestroyRef, inject, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
-import { AuthService, LoginResult } from '../../core/auth/auth.service';
+import { AuthService, LoginResult, PasskeyLoginResult } from '../../core/auth/auth.service';
 import { safeReturnUrl } from '../../core/auth/return-url';
+import { WebAuthn } from '../../core/browser/webauthn';
 import { formatWait } from '../../core/text/format';
 
 /**
  * Login screen: login, password and a 6-digit TOTP code from the phone app.
+ * Or a passkey, without a user name, where the browser can use one (docs/ARCHITECTURE.md, "Flows").
  * Error messages are deliberately generic: they do not reveal which field was wrong.
  * After a failed attempt the password and the code are cleared from the form.
  *
@@ -26,6 +28,9 @@ export class Login {
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
   private readonly query = inject(ActivatedRoute).snapshot.queryParamMap;
+
+  /** Whether this browser can log in with a passkey; otherwise the button is hidden. */
+  protected readonly passkeys = inject(WebAuthn).available();
 
   protected readonly form = inject(NonNullableFormBuilder).group({
     userName: ['', [Validators.required, Validators.maxLength(256)]],
@@ -123,25 +128,51 @@ export class Login {
       return;
     }
 
-    this.submitting.set(true);
-    this.error.set(null);
-    // An ongoing logout retry must end before login: otherwise it could end the new session.
-    this.cancelLogoutRetries();
-    await this.logoutRetry;
+    await this.startLogin();
     const result = await this.auth.login(this.form.getRawValue());
 
     if (result.ok) {
       this.form.reset();
-      // The login screen disappears from history: "Back" will not return to it (e.g. to an outdated logout warning).
-      await this.router.navigateByUrl(safeReturnUrl(this.query.get('returnUrl')), { replaceUrl: true });
+      await this.enterApp();
       return;
     }
 
     this.form.controls.password.reset();
     this.form.controls.totpCode.reset();
-    this.error.set(errorMessage(result));
+    this.loginFailed(errorMessage(result));
+  }
+
+  /** "Log in with a passkey": no user name, the browser asks for the passkey (docs/ARCHITECTURE.md, "Flows"). */
+  protected async passkeyLogin(): Promise<void> {
+    if (this.submitting()) {
+      return;
+    }
+    await this.startLogin();
+    const result = await this.auth.loginWithPasskey();
+    if (result.ok) {
+      await this.enterApp();
+      return;
+    }
+    this.loginFailed(passkeyErrorMessage(result));
+  }
+
+  /** An ongoing logout retry must end before login: otherwise it could end the new session. */
+  private async startLogin(): Promise<void> {
+    this.submitting.set(true);
+    this.error.set(null);
+    this.cancelLogoutRetries();
+    await this.logoutRetry;
+  }
+
+  /** The login screen disappears from history: "Back" will not return to it (e.g. to an outdated logout warning). */
+  private async enterApp(): Promise<void> {
+    await this.router.navigateByUrl(safeReturnUrl(this.query.get('returnUrl')), { replaceUrl: true });
+  }
+
+  /** There is no new session, so the retry (and the "Retry logout" button) can end the previous one again. */
+  private loginFailed(message: string): void {
+    this.error.set(message);
     this.submitting.set(false);
-    // There is no new session, so the retry (and the "Retry logout" button) can end the previous one again.
     this.stopRetries = false;
     if (this.logoutUnconfirmed()) {
       void this.autoRetry(LOGOUT_RETRY_DELAYS_MS.length);
@@ -199,6 +230,23 @@ function errorMessage(result: Extract<LoginResult, { ok: false }>): string {
       return 'No connection to the server.';
     case 'server':
       return 'Server error. Try again.';
+  }
+}
+
+/** Messages of a passkey login; the server's answers other than a refusal read as for a password login. */
+function passkeyErrorMessage(result: Extract<PasskeyLoginResult, { ok: false }>): string {
+  switch (result.reason) {
+    case 'cancelled':
+      return 'Passkey login cancelled.';
+    case 'not-here':
+      return "Passkeys work only at the portal's domain name.";
+    case 'already-registered':
+    case 'failed':
+      return 'The passkey could not be used.';
+    case 'invalid':
+      return 'The passkey was not accepted.';
+    default:
+      return errorMessage(result);
   }
 }
 

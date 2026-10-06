@@ -3,6 +3,7 @@ import { Injectable, OnDestroy, computed, inject, signal } from '@angular/core';
 import { firstValueFrom, timeout } from 'rxjs';
 
 import { HardNavigation } from '../browser/hard-navigation';
+import { PasskeyCredentialJson, WebAuthn, WebAuthnFailure } from '../browser/webauthn';
 import { IGNORE_UNAUTHORIZED } from './ignore-unauthorized';
 
 /**
@@ -57,6 +58,15 @@ export type LoginResult =
   | { ok: true }
   | { ok: false; reason: LoginFailure; retryAfterSeconds?: number };
 
+/** A failed login: why, and with `rate-limited` the wait from `Retry-After`. */
+type LoginFailureResult = Extract<LoginResult, { ok: false }>;
+
+/**
+ * Result of a passkey login: as a password login (`invalid` is a refused passkey), or the browser's prompt ended
+ * without a passkey and nothing more was sent.
+ */
+export type PasskeyLoginResult = LoginResult | { ok: false; reason: WebAuthnFailure };
+
 type AuthState =
   | { status: 'unknown' }
   | { status: 'anonymous' }
@@ -67,7 +77,9 @@ export const AUTH_API = {
   login: '/api/auth/login',
   logout: '/api/auth/logout',
   keepAlive: '/api/auth/keepalive',
-  sessions: '/api/auth/sessions'
+  sessions: '/api/auth/sessions',
+  passkeyLoginOptions: '/api/auth/passkeys/login-options',
+  passkeyLogin: '/api/auth/passkeys/login'
 } as const;
 
 /** Channel between tabs of the same browser: a logout in one tab closes the others. */
@@ -114,6 +126,7 @@ const AUTH_LOCK = 'claushh-auth';
 export class AuthService implements OnDestroy {
   private readonly http = inject(HttpClient);
   private readonly navigation = inject(HardNavigation);
+  private readonly webAuthn = inject(WebAuthn);
 
   private readonly state = signal<AuthState>({ status: 'unknown' });
   private pendingCheck: Promise<boolean> | null = null;
@@ -236,17 +249,70 @@ export class AuthService implements OnDestroy {
     return withAuthLock(() => this.loginNow(credentials));
   }
 
+  /**
+   * Login with a passkey, without a user name (docs/ARCHITECTURE.md, "Flows"): the options from the server, the
+   * browser's prompt, then the login. The requests run under the `AUTH_LOCK` lock like a password login, the prompt
+   * does not: it may stay open for minutes, and the other tabs must not wait for it. A prompt that ends without a
+   * passkey sends nothing more.
+   */
+  async loginWithPasskey(): Promise<PasskeyLoginResult> {
+    const options = await withAuthLock(() => this.passkeyOptions());
+    if (!options.ok) {
+      return options;
+    }
+    const assertion = await this.webAuthn.get(options.options);
+    if (!assertion.ok) {
+      return assertion;
+    }
+    return withAuthLock(() => this.passkeyLoginNow(assertion.credential));
+  }
+
   private async loginNow(credentials: LoginCredentials): Promise<LoginResult> {
-    // Login requires an XSRF token issued for the current (anonymous) identity. An old token (e.g. after an unconfirmed
-    // logout) or no token (logout removes it) would give 400, so always get a fresh one from `GET /api/auth/me` first.
-    await firstValueFrom(this.http.get(AUTH_API.me).pipe(timeout(VERIFY_TIMEOUT_MS))).catch(() => undefined);
+    await this.freshXsrfToken();
     try {
       await firstValueFrom(this.http.post(AUTH_API.login, credentials));
     } catch (error) {
       return toLoginFailure(error);
     }
-    // After login we ask the server again: it confirms that the session cookie works
-    // and issues a new XSRF token bound to the logged-in user.
+    return this.confirmLogin();
+  }
+
+  private async passkeyOptions(): Promise<{ ok: true; options: PublicKeyCredentialRequestOptionsJSON } | LoginFailureResult> {
+    await this.freshXsrfToken();
+    try {
+      const options = await firstValueFrom(
+        this.http.post<PublicKeyCredentialRequestOptionsJSON>(AUTH_API.passkeyLoginOptions, null)
+      );
+      return { ok: true, options };
+    } catch (error) {
+      return toLoginFailure(error);
+    }
+  }
+
+  private async passkeyLoginNow(credential: PasskeyCredentialJson): Promise<LoginResult> {
+    await this.freshXsrfToken();
+    try {
+      await firstValueFrom(this.http.post(AUTH_API.passkeyLogin, { credential }));
+    } catch (error) {
+      return toLoginFailure(error);
+    }
+    return this.confirmLogin();
+  }
+
+  /**
+   * Login requires an XSRF token issued for the current (anonymous) identity. An old token (e.g. after an unconfirmed
+   * logout) or no token (logout removes it) would give 400, so always get a fresh one from `GET /api/auth/me` first.
+   */
+  private async freshXsrfToken(): Promise<void> {
+    await firstValueFrom(this.http.get(AUTH_API.me).pipe(timeout(VERIFY_TIMEOUT_MS))).catch(() => undefined);
+  }
+
+  /**
+   * After the server accepted a login we ask it again: it confirms that the session cookie works and issues a new XSRF
+   * token bound to the logged-in user. Then the other tabs learn the session, and the session of an unconfirmed logout
+   * is ended from the new one.
+   */
+  private async confirmLogin(): Promise<LoginResult> {
     this.state.set({ status: 'unknown' });
     if (!(await this.ensureSession())) {
       return { ok: false, reason: 'server' };
@@ -509,7 +575,7 @@ function asChannelMessage(data: unknown): ChannelMessage | null {
   return null;
 }
 
-function toLoginFailure(error: unknown): LoginResult {
+function toLoginFailure(error: unknown): LoginFailureResult {
   if (!(error instanceof HttpErrorResponse)) {
     return { ok: false, reason: 'server' };
   }

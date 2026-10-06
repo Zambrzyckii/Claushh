@@ -29,4 +29,10 @@
   <button type="submit" class="primary" [disabled]="submitting()">
     {{ submitting() ? 'Logging in…' : 'Log in' }}
   </button>
+
+  @if (passkeys) {
+    <button type="button" class="passkey" [disabled]="submitting()" (click)="passkeyLogin()">
+      <span class="codicon codicon-key" aria-hidden="true"></span>Log in with a passkey
+    </button>
+  }
 </form>
