@@ -1,0 +1,70 @@
+// A panel's draggable edge (sash.ts): a strip over the panel's border that takes no room in the flow. The accent line
+// shows after 300 ms of hover, and at once while dragged and with the keyboard focus.
+:host {
+  flex: none;
+  position: relative;
+  z-index: 35; // above Monaco's scrollbars and widgets
+  touch-action: none;
+  outline: none;
+
+  &::after {
+    content: '';
+    position: absolute;
+    transition: background-color 100ms ease-out 300ms;
+  }
+
+  &:hover::after {
+    background: var(--accent);
+  }
+}
+
+:host(.sash--active)::after,
+:host(:focus-visible)::after {
+  background: var(--accent);
+  transition-delay: 0s;
+}
+
+:host(.sash--vertical) {
+  width: 4px;
+  margin: 0 -2px;
+  cursor: col-resize;
+
+  &::after {
+    inset-block: 0;
+    left: 1px;
+    width: 2px;
+  }
+}
+
+:host(.sash--horizontal) {
+  height: 4px;
+  margin: -2px 0;
+  cursor: row-resize;
+
+  &::after {
+    inset-inline: 0;
+    top: 1px;
+    height: 2px;
+  }
+}
+
+// A wider strip for a finger (a tablet in the desktop layout); the line stays 2 px.
+@media (pointer: coarse) {
+  :host(.sash--vertical) {
+    width: 16px;
+    margin: 0 -8px;
+
+    &::after {
+      left: 7px;
+    }
+  }
+
+  :host(.sash--horizontal) {
+    height: 16px;
+    margin: -8px 0;
+
+    &::after {
+      top: 7px;
+    }
+  }
+}

@@ -357,6 +357,20 @@ dialog.sheet {
   }
 }
 
+// While a panel's edge is dragged (features/workspace/sash.ts): its cursor over the whole page, Monaco and the
+// terminal included, and no text selection.
+html.sash-dragging-vertical,
+html.sash-dragging-vertical * {
+  cursor: col-resize !important;
+  user-select: none;
+}
+
+html.sash-dragging-horizontal,
+html.sash-dragging-horizontal * {
+  cursor: row-resize !important;
+  user-select: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

@@ -3,16 +3,20 @@
 @if (layout.phone()) {
   <app-phone-panes [(tab)]="phoneTab" />
 } @else {
-  <div class="main">
-    <app-side-bar class="sidebar" [class.sidebar--closed]="!state.sideBarOpen()" />
+  <div class="main" #main>
+    <app-side-bar class="sidebar" [class.sidebar--closed]="!state.sideBarOpen()" [style.width.px]="sizes().sideBar" />
+    @if (state.sideBarOpen()) {
+      <app-sash edge="right" label="Resize side bar" [size]="sizes().sideBar" [min]="SIDE_BAR.min" [max]="sizes().sideBarMax" (resized)="state.sideBarWidth.set($event)" (reset)="state.sideBarWidth.set(SIDE_BAR.initial)" />
+    }
 
-    <div class="center">
+    <div class="center" #center>
       <main class="editor">
         <app-editor-pane />
       </main>
 
       @if (state.panelOpen()) {
-        <section class="bottom" aria-label="Panel" animate.enter="slide-in-up" animate.leave="slide-out-down">
+        <app-sash edge="top" label="Resize panel" [size]="sizes().panel" [min]="PANEL.min" [max]="sizes().panelMax" (resized)="state.panelHeight.set($event)" (reset)="state.panelHeight.set(PANEL.initial)" />
+        <section class="bottom" aria-label="Panel" [style.height.px]="sizes().panel" animate.enter="slide-in-up" animate.leave="slide-out-down">
           <div class="bottom__bar">
             <div class="bottom__tabs" role="tablist" aria-label="Panel views">
               <button type="button" role="tab" id="panel-tab-terminal" aria-selected="true" aria-controls="panel-terminal">TERMINAL</button>
@@ -29,7 +33,8 @@
     </div>
 
     @if (state.consoleOpen()) {
-      <aside class="console" aria-label="Console" animate.enter="slide-in-right" animate.leave="slide-out-right">
+      <app-sash edge="left" label="Resize console" [size]="sizes().console" [min]="CONSOLE.min" [max]="sizes().consoleMax" (resized)="state.consoleWidth.set($event)" (reset)="state.consoleWidth.set(CONSOLE.initial)" />
+      <aside class="console" aria-label="Console" [style.width.px]="sizes().console" animate.enter="slide-in-right" animate.leave="slide-out-right">
         <app-console-panel (collapse)="state.consoleOpen.set(false)" />
       </aside>
     }

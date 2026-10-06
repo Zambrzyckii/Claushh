@@ -31,7 +31,7 @@ test.beforeEach(async ({ request }) => resetMock(request));
 const tab = (page: Page, name: 'Editor' | 'Terminal' | 'Console') => page.getByRole('tab', { name, exact: true });
 const noSidewaysScroll = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
 
-test('a phone gets the phone layout, the login fits, and no tab scrolls sideways', async ({ page }) => {
+test('a phone gets the phone layout, the login fits, no tab scrolls sideways, and no panel has an edge', async ({ page }) => {
   const phone = page.viewportSize()!;
   await page.setViewportSize({ width: 375, height: 667 });
   await page.goto('/login');
@@ -47,6 +47,7 @@ test('a phone gets the phone layout, the login fits, and no tab scrolls sideways
     await expect(tab(page, name)).toHaveAttribute('aria-selected', 'true');
     expect(await noSidewaysScroll(page)).toBe(true);
   }
+  await expect(page.getByRole('separator', { name: /^Resize / })).toHaveCount(0);
   await expect(page.locator('app-phone-panes .tabbar')).not.toContainText(/claude/i);
   await expect(page.locator('.topbar')).not.toContainText(/claude/i);
 });

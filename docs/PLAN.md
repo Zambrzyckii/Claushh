@@ -129,6 +129,13 @@ Frontend decisions (VS Code layout):
   Source Control (two copies of the panel would mean two of every row).
 - The bottom panel holds only the terminal, inside the editor's column, and starts closed, so the terminal hub
   connects only when the terminal is first shown. The session countdown moves to the status bar on the desktop.
+- The side bar, the bottom panel and the console resize by dragging their edge, as VS Code's sashes, and with the
+  keyboard (the arrows, Home, End); a double-click brings back the size at start. Minimums keep the panels usable
+  (the console's composer needs 320 px) and the editor at least 240 × 120 px; a window too narrow for the chosen
+  widths takes the room from the console first. The sizes stay in memory with the rest of `WorkbenchState`. While an
+  edge is dragged the terminals keep their size and fit once at the end (tmux resized on every frame is rejected
+  above). Rejected: remembering the sizes in `localStorage` (only the unconfirmed logout marker goes there, and a
+  logout clears it).
 - The Explorer view starts with OPEN EDITORS, collapsed as in VS Code (a dot marks unsaved files, closing asks the
   tab's question). The editor actions hold only what the portal can do, the changes view; actions without a function
   here (run, split, timeline) are left out. The minimap is on in the desktop layout only (at a phone's width it would
@@ -896,4 +903,4 @@ The order is chosen so that only already secured things reach the internet.
   - [x] Backend: passkeys.
   - [x] Frontend: passkeys (Security dialog, login button).
   - [x] Colors (the owner will refine them in later iterations), a possible phone view (low priority).
-  - [x] Frontend: the VS Code layout (title bar, side bars, search, open editors, file icons, the console composer and its file chip).
+  - [x] Frontend: the VS Code layout (title bar, side bars, search, open editors, file icons, the console composer and its file chip, resizable panels).

@@ -1,4 +1,17 @@
-import { Component, DOCUMENT, DestroyRef, HostListener, Injector, afterNextRender, inject, signal, viewChild } from '@angular/core';
+import {
+  Component,
+  DOCUMENT,
+  DestroyRef,
+  ElementRef,
+  HostListener,
+  Injector,
+  afterNextRender,
+  computed,
+  effect,
+  inject,
+  signal,
+  viewChild
+} from '@angular/core';
 
 import { AuthService } from '../../core/auth/auth.service';
 import { SessionTimer } from '../../core/auth/session-timer';
@@ -19,6 +32,8 @@ import { TerminalPanel } from '../terminal/terminal-panel';
 import { TerminalStore } from '../terminal/terminal-store';
 import { WorkspacesStore } from '../workspaces/workspaces-store';
 import { PhonePanes, PhoneTab } from './phone-panes';
+import { CONSOLE, PANEL, SIDE_BAR, fitPanels } from './panel-sizes';
+import { Sash } from './sash';
 import { SideBar } from './side-bar';
 import { StatusBar } from './status-bar';
 import { TitleBar } from './title-bar';
@@ -39,7 +54,7 @@ import { WorkbenchState } from './workbench-state';
  */
 @Component({
   selector: 'app-workspace',
-  imports: [TitleBar, SideBar, EditorPane, TerminalPanel, ConsolePanel, StatusBar, SecurityDialog, PhonePanes],
+  imports: [TitleBar, SideBar, EditorPane, TerminalPanel, ConsolePanel, StatusBar, SecurityDialog, PhonePanes, Sash],
   providers: [
     SessionTimer,
     ProjectContext,
@@ -68,6 +83,25 @@ export class Workspace {
   private readonly securityDialog = viewChild.required(SecurityDialog);
   private readonly consolePanel = viewChild(ConsolePanel);
 
+  private readonly mainElement = viewChild<ElementRef<HTMLElement>>('main');
+  private readonly centerElement = viewChild<ElementRef<HTMLElement>>('center');
+  /** The measured width of `.main` and height of `.center`: 0 until measured (jsdom has no ResizeObserver). */
+  private readonly mainWidth = signal(0);
+  private readonly centerHeight = signal(0);
+
+  protected readonly SIDE_BAR = SIDE_BAR;
+  protected readonly CONSOLE = CONSOLE;
+  protected readonly PANEL = PANEL;
+  /** The chosen sizes fitted to the window, with each edge's maximum (panel-sizes.ts). */
+  protected readonly sizes = computed(() =>
+    fitPanels(
+      { sideBar: this.state.sideBarWidth(), console: this.state.consoleWidth(), panel: this.state.panelHeight() },
+      { sideBar: this.state.sideBarOpen(), console: this.state.consoleOpen() },
+      this.mainWidth(),
+      this.centerHeight()
+    )
+  );
+
   protected readonly loggingOut = signal(false);
   /** The phone's active tab, in memory only: a reload starts on Editor. */
   protected readonly phoneTab = signal<PhoneTab>('editor');
@@ -82,6 +116,22 @@ export class Workspace {
     const listener = (event: KeyboardEvent) => this.toggleConsoleByKey(event);
     this.document.addEventListener('keydown', listener, { capture: true });
     inject(DestroyRef).onDestroy(() => this.document.removeEventListener('keydown', listener, { capture: true }));
+
+    // Measures the desktop's columns, so that the panels' sizes follow the window (fitPanels).
+    effect((onCleanup) => {
+      const main = this.mainElement()?.nativeElement;
+      const center = this.centerElement()?.nativeElement;
+      if (!main || !center || typeof ResizeObserver === 'undefined') {
+        return;
+      }
+      const observer = new ResizeObserver(() => {
+        this.mainWidth.set(main.clientWidth);
+        this.centerHeight.set(center.clientHeight);
+      });
+      observer.observe(main);
+      observer.observe(center);
+      onCleanup(() => observer.disconnect());
+    });
   }
 
   protected openSecurity(): void {

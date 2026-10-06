@@ -17,8 +17,8 @@
 // Closing takes it out of the flow at once (the editor widens once), slides it out over the editor and then hides it,
 // as the phone's drawer does.
 .sidebar {
-  width: 240px;
   flex-shrink: 0;
+  box-sizing: border-box; // the chosen size (panel-sizes.ts) includes the border
   border-right: 1px solid var(--border);
   transition:
     transform var(--motion-in),
@@ -53,8 +53,8 @@
 }
 
 .console {
-  width: 420px;
   flex-shrink: 0;
+  box-sizing: border-box;
   min-height: 0;
   display: flex;
   flex-direction: column;
@@ -76,8 +76,8 @@
 }
 
 .bottom {
-  height: 232px;
   flex-shrink: 0;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   background: var(--surface);

@@ -1,8 +1,11 @@
+import { Locator, Page } from '@playwright/test';
+
 import { expect, test } from './fixtures';
 import {
   MAIN,
   activeTerminal,
   expectEditorToContain,
+  expectTerminalToContain,
   login,
   mockState,
   openFile,
@@ -11,7 +14,8 @@ import {
   resetMock,
   showView,
   terminalInputs,
-  treeRow
+  treeRow,
+  typeInTerminal
 } from './helpers';
 
 /**
@@ -23,6 +27,27 @@ test.beforeEach(async ({ page, request }) => {
   await resetMock(request);
   await login(page);
 });
+
+/** Drags the edge named `name` with the mouse to the point (x, y) of the page, in ten steps. */
+async function dragEdgeTo(page: Page, name: string, x: number, y: number): Promise<void> {
+  const box = (await page.getByRole('separator', { name }).boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(x, y, { steps: 10 });
+  await page.mouse.up();
+}
+
+/** Drags the edge named `name` with the mouse by `dx` and `dy` pixels. */
+async function dragEdge(page: Page, name: string, dx: number, dy: number): Promise<void> {
+  const box = (await page.getByRole('separator', { name }).boundingBox())!;
+  await dragEdgeTo(page, name, box.x + box.width / 2 + dx, box.y + box.height / 2 + dy);
+}
+
+/** The rendered size of a locator's element, in whole pixels. */
+async function sizeOf(locator: Locator): Promise<{ width: number; height: number }> {
+  const box = (await locator.boundingBox())!;
+  return { width: Math.round(box.width), height: Math.round(box.height) };
+}
 
 test('the side bar hides and comes back with its expanded folder', async ({ page }) => {
   await treeRow(page, 'studia').click();
@@ -173,4 +198,105 @@ test('Ctrl+Alt+B works in the terminal, never reaches the shell, and gives the f
 
   await page.keyboard.type('ls');
   await expect.poll(() => terminalInputs(request)).toBe('ls');
+});
+
+test('dragging the edge of the side bar widens it, and a double-click brings back 240 px', async ({ page }) => {
+  const edge = page.getByRole('separator', { name: 'Resize side bar' });
+  await expect(edge).toHaveAttribute('aria-valuenow', '240');
+  await dragEdge(page, 'Resize side bar', 100, 0);
+  await expect(edge).toHaveAttribute('aria-valuenow', '340');
+  expect((await sizeOf(page.locator('app-side-bar'))).width).toBe(340);
+  await edge.dblclick();
+  await expect(edge).toHaveAttribute('aria-valuenow', '240');
+  expect((await sizeOf(page.locator('app-side-bar'))).width).toBe(240);
+});
+
+test('the edge of the console stops at its minimum and at the minimum of the editor', async ({ page }) => {
+  const edge = page.getByRole('separator', { name: 'Resize console' });
+  await dragEdge(page, 'Resize console', -100, 0);
+  await expect(edge).toHaveAttribute('aria-valuenow', '520');
+  await dragEdgeTo(page, 'Resize console', 1430, 450);
+  await expect(edge).toHaveAttribute('aria-valuenow', '320');
+  expect((await sizeOf(page.locator('aside.console'))).width).toBe(320);
+  await expect(page.getByRole('button', { name: 'Send' })).toBeInViewport({ ratio: 1 });
+  await dragEdgeTo(page, 'Resize console', 10, 450);
+  // 1440 - 240 (the side bar) - 240 (the editor's minimum)
+  await expect(edge).toHaveAttribute('aria-valuenow', '960');
+  expect((await sizeOf(page.locator('aside.console'))).width).toBe(960);
+});
+
+test('dragging the edge of the panel makes it taller, and the terminal gets one new size per drag', async ({ page, request }) => {
+  await openTerminalTab(page);
+  await expect.poll(async () => (await mockState(request)).terminals[0]?.sizes.length ?? 0).toBeGreaterThan(1);
+  await typeInTerminal(page, 'pwd');
+  await expectTerminalToContain(page, '/srv/projects');
+  const before = (await mockState(request)).terminals[0].sizes;
+
+  const edge = page.getByRole('separator', { name: 'Resize panel' });
+  await expect(edge).toHaveAttribute('aria-valuenow', '232');
+  await dragEdge(page, 'Resize panel', 0, -100);
+  await expect(edge).toHaveAttribute('aria-valuenow', '332');
+  expect((await sizeOf(page.locator('section.bottom'))).height).toBe(332);
+  await expect.poll(async () => (await mockState(request)).terminals[0].sizes.length).toBe(before.length + 1);
+  expect((await mockState(request)).terminals[0].sizes.at(-1)![1]).toBeGreaterThan(before.at(-1)![1]);
+
+  const center = await sizeOf(page.locator('.center'));
+  await dragEdgeTo(page, 'Resize panel', 700, 50);
+  await expect(edge).toHaveAttribute('aria-valuenow', String(center.height - 120));
+  await dragEdgeTo(page, 'Resize panel', 700, 890);
+  await expect(edge).toHaveAttribute('aria-valuenow', '120');
+});
+
+test('the edges move with the keyboard', async ({ page }) => {
+  const side = page.getByRole('separator', { name: 'Resize side bar' });
+  await side.focus();
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('ArrowRight');
+  await expect(side).toHaveAttribute('aria-valuenow', '260');
+  await page.keyboard.press('ArrowLeft');
+  await expect(side).toHaveAttribute('aria-valuenow', '250');
+  await page.keyboard.press('End');
+  // 1440 - 420 (the console) - 240 (the editor's minimum)
+  await expect(side).toHaveAttribute('aria-valuenow', '780');
+  await expect(side).toHaveAttribute('aria-valuemin', '170');
+  await expect(side).toHaveAttribute('aria-valuemax', '780');
+  await page.keyboard.press('Home');
+  await expect(side).toHaveAttribute('aria-valuenow', '170');
+
+  // the side bar at its minimum leaves the console room to grow
+  const consoleEdge = page.getByRole('separator', { name: 'Resize console' });
+  await consoleEdge.focus();
+  await page.keyboard.press('ArrowLeft');
+  await expect(consoleEdge).toHaveAttribute('aria-valuenow', '430');
+});
+
+test('a narrower window takes the room from the console first, and a wider one gives it back', async ({ page }) => {
+  const side = page.getByRole('separator', { name: 'Resize side bar' });
+  const consoleEdge = page.getByRole('separator', { name: 'Resize console' });
+  await page.setViewportSize({ width: 850, height: 900 });
+  // 850 - 240 (the side bar) - 240 (the editor's minimum)
+  await expect(consoleEdge).toHaveAttribute('aria-valuenow', '370');
+  await expect(side).toHaveAttribute('aria-valuenow', '240');
+  await page.setViewportSize({ width: 780, height: 900 });
+  // the console at its minimum, then 780 - 320 - 240 for the side bar
+  await expect(consoleEdge).toHaveAttribute('aria-valuenow', '320');
+  await expect(side).toHaveAttribute('aria-valuenow', '220');
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await expect(consoleEdge).toHaveAttribute('aria-valuenow', '420');
+  await expect(side).toHaveAttribute('aria-valuenow', '240');
+});
+
+test('a panel has an edge only while it is open', async ({ page }) => {
+  const side = page.getByRole('separator', { name: 'Resize side bar' });
+  const panel = page.getByRole('separator', { name: 'Resize panel' });
+  const consoleEdge = page.getByRole('separator', { name: 'Resize console' });
+  await expect(side).toHaveCount(1);
+  await expect(consoleEdge).toHaveCount(1);
+  await expect(panel).toHaveCount(0); // the panel starts closed
+  await page.getByRole('button', { name: 'Panel', exact: true }).click();
+  await expect(panel).toHaveCount(1);
+  await page.getByRole('button', { name: 'Side bar', exact: true }).click();
+  await page.getByRole('button', { name: 'Console', exact: true }).click();
+  await expect(side).toHaveCount(0);
+  await expect(consoleEdge).toHaveCount(0);
 });
