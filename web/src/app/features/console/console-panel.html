@@ -1,9 +1,18 @@
 <div class="header">
-  <span class="header__title">CONSOLE · {{ project.label() }}</span>
-  <div class="header__actions">
-    <button type="button" class="link" [disabled]="!store.canSend()" (click)="store.newConversation()">New</button>
-    @if (!layout.phone()) { <button type="button" class="link" (click)="collapse.emit()">Hide</button> }
-  </div>
+  <span class="section-title">Console</span>
+  @if (!layout.phone()) {
+    <button type="button" class="icon" aria-label="Hide console" title="Hide console" (click)="collapse.emit()">
+      <span class="codicon codicon-close" aria-hidden="true"></span>
+    </button>
+  }
+</div>
+
+<div class="conversation">
+  <span class="conversation__title" [title]="project.label()">{{ project.label() }}</span>
+  <button type="button" class="icon" aria-label="New conversation" title="New conversation" [disabled]="!store.canSend()"
+          (click)="store.newConversation()">
+    <span class="codicon codicon-add" aria-hidden="true"></span>
+  </button>
 </div>
 
 <div #log class="log" (scroll)="onScroll()" aria-live="polite">
@@ -18,7 +27,7 @@
       @case ('steps') {
         <div class="steps">
           @for (step of entry.steps; track step.stepId) {
-            <div class="line">{{ verb(step.kind) }}{{ reveal(step.target) }}{{ stats(step) }}</div>
+            <div class="line"><span class="verb">{{ verb(step.kind) }}</span>{{ reveal(step.target) }}@if (step.added) {<span class="added">{{ '  +' + step.added }}</span>}@if (step.removed) {<span class="removed">{{ (step.added ? ' −' : '  −') + step.removed }}</span>}</div>
             @for (out of step.output; track $index) {
               <div class="output" [class.output--error]="out.isError">{{ out.text }}</div>
             }
@@ -52,12 +61,15 @@
         }
       }
       @case ('notice') {
-        <div class="line" [class.faint]="!entry.error" [class.error]="entry.error">{{ entry.text }}</div>
+        <div class="line" [class.info]="!entry.error" [class.error]="entry.error">{{ entry.text }}</div>
       }
     }
   } @empty {
     @if (store.connectionState() === 'connected') {
-      <div class="line faint">Empty conversation. Type a prompt below.</div>
+      <div class="empty">
+        <span class="codicon codicon-comment-discussion" aria-hidden="true"></span>
+        <span>Empty conversation. Type a prompt below.</span>
+      </div>
     }
   }
 
@@ -80,40 +92,51 @@
 </div>
 
 <div class="composer">
-  <div class="composer__input">
-    <span class="composer__prompt" aria-hidden="true">&gt;</span>
-    <textarea #input rows="3" aria-label="Prompt" placeholder="type a prompt…"
-              spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"
-              (keydown)="onKeydown($event)"></textarea>
-  </div>
-  <div class="composer__options">
-    <label>model
-      <select [ngModel]="store.options().model" (ngModelChange)="setModel($event)">
-        @for (m of models; track m.value) {
-          <option [ngValue]="m.value">{{ m.label }}</option>
-        }
-      </select>
-    </label>
-    <label>effort
-      <select [ngModel]="store.options().effort" (ngModelChange)="setEffort($event)">
-        @for (e of efforts; track e.value) {
-          <option [ngValue]="e.value">{{ e.label }}</option>
-        }
-      </select>
-    </label>
-    <label>mode
-      <select [ngModel]="store.options().mode" (ngModelChange)="setMode($event)">
+  <textarea #input rows="2" aria-label="Prompt" placeholder="type a prompt…"
+            spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"
+            (keydown)="onKeydown($event)"></textarea>
+  <div class="composer__bar">
+    <span class="composer__spacer"></span>
+    <label class="chip" [title]="'Mode: ' + modeLabel()">
+      <span [class]="'codicon codicon-' + modeIcon()" aria-hidden="true"></span>
+      <span class="chip__value" aria-hidden="true">{{ modeLabel() }}</span>
+      <select aria-label="mode" [ngModel]="store.options().mode" (ngModelChange)="setMode($event)">
         @for (m of modes; track m.value) {
           <option [ngValue]="m.value">{{ m.label }}</option>
         }
       </select>
     </label>
-    @if (store.state() === 'working' || store.state() === 'waiting') {
-      <button type="button" class="link composer__hint" (click)="store.interrupt()">interrupt</button>
-    } @else if (layout.touch()) {
-      <button type="button" class="primary composer__send" [disabled]="!store.canSend()" (click)="submit()">Send</button>
+    @if (busy()) {
+      <button type="button" class="primary icon composer__stop" aria-label="Interrupt" title="Interrupt (Esc)"
+              (click)="store.interrupt()">
+        <span class="codicon codicon-debug-stop" aria-hidden="true"></span>
+      </button>
     } @else {
-      <span class="composer__hint">Enter to send</span>
+      <button type="button" class="primary icon composer__send" aria-label="Send" [title]="layout.touch() ? 'Send' : 'Send (Enter)'"
+              [disabled]="!store.canSend()" (click)="submit()">
+        <span class="codicon codicon-arrow-up" aria-hidden="true"></span>
+      </button>
     }
+  </div>
+  <div class="composer__bar">
+    <span class="chip">
+      <label class="chip__part" title="Model">
+        <span class="chip__value" aria-hidden="true">{{ modelLabel() }}</span>
+        <select aria-label="model" [ngModel]="store.options().model" (ngModelChange)="setModel($event)">
+          @for (m of models; track m.value) {
+            <option [ngValue]="m.value">{{ m.label }}</option>
+          }
+        </select>
+      </label>
+      <span class="chip__divider" aria-hidden="true"></span>
+      <label class="chip__part" title="Effort">
+        <span class="chip__value" aria-hidden="true">{{ effortLabel() }}</span>
+        <select aria-label="effort" [ngModel]="store.options().effort" (ngModelChange)="setEffort($event)">
+          @for (e of efforts; track e.value) {
+            <option [ngValue]="e.value">{{ e.label }}</option>
+          }
+        </select>
+      </label>
+    </span>
   </div>
 </div>

@@ -8,30 +8,30 @@
   line-height: 19px;
 }
 
-.header {
-  height: 36px;
+.header,
+.conversation {
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 8px 0 16px;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
+  gap: 8px;
+  padding: 0 4px 0 16px;
+  font-family: var(--font-ui);
+}
+
+.header {
+  height: 35px;
+}
+
+.conversation {
+  height: 32px;
+  font-size: 13px;
+  color: var(--text-strong);
 
   &__title {
-    font-family: var(--font-ui);
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.08em;
-    color: var(--text-muted);
-    white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-  }
-
-  &__actions {
-    display: flex;
-    gap: 2px;
+    white-space: nowrap;
   }
 }
 
@@ -57,7 +57,13 @@
   color: var(--text-faint);
 }
 
-.error {
+.info,
+.log button.link {
+  color: var(--blue);
+}
+
+.error,
+.removed {
   color: var(--error);
 }
 
@@ -75,11 +81,34 @@
   color: var(--text-muted);
 }
 
+.verb {
+  color: var(--purple);
+}
+
+.added {
+  color: var(--green);
+}
+
 .output {
   padding-left: 13ch;
 
   &--error {
     color: var(--text);
+  }
+}
+
+.empty {
+  margin: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  font: 13px/1.5 var(--font-ui);
+  color: var(--text-faint);
+  text-align: center;
+
+  .codicon {
+    font-size: 32px;
   }
 }
 
@@ -114,77 +143,54 @@
   }
 }
 
+// The composer card: the border shows the focus of any of its fields.
 .composer {
   flex-shrink: 0;
-  border-top: 1px solid var(--border);
-  padding: 10px 16px 8px;
+  margin: 8px;
+  padding: 6px 8px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
 
-  &__input {
-    display: flex;
-    gap: 8px;
-    align-items: flex-start;
-    padding: 4px 6px;
-    border: 1px solid transparent;
-    border-radius: 4px;
-
-    &:focus-within {
-      border-color: var(--focus);
-    }
-  }
-
-  &__prompt {
-    color: var(--text-muted);
-    line-height: 20px;
+  &:focus-within {
+    border-color: var(--focus);
   }
 
   textarea {
-    flex-grow: 1;
+    min-height: 40px; // two lines
+    max-height: 200px; // ten lines, then it scrolls
+    field-sizing: content;
     resize: none;
-    background: transparent;
+    padding: 0;
     border: none;
+    background: transparent;
     color: var(--text-strong);
     font-family: var(--font-mono);
     font-size: 12.5px;
     line-height: 20px;
-    padding: 0;
 
-    // The field's frame shows the focus (.composer__input:focus-within).
     &:focus-visible {
       outline: none;
     }
   }
 
-  &__options {
+  &__bar {
     display: flex;
-    flex-wrap: wrap;
     align-items: center;
-    gap: 6px 14px;
-    font-size: 11px;
-    color: var(--text-muted);
-
-    label {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-
-    select {
-      font-family: var(--font-mono);
-      font-size: 11px;
-      padding: 2px 4px;
-    }
+    gap: 6px;
   }
 
-  &__hint {
-    margin-left: auto;
-    color: var(--text-faint);
-    font-size: 11px;
+  &__spacer {
+    flex-grow: 1;
   }
 
-  &__send {
-    margin-left: auto;
+  &__send,
+  &__stop {
+    width: 24px;
+    height: 24px;
+    min-height: 24px;
   }
 }

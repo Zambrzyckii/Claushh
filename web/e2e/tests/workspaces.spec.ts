@@ -49,7 +49,7 @@ test('opening a repository scopes the explorer, top bar, status bar and console'
   await expect(page.locator('.row__name')).toHaveText(['src', 'logo.png', 'Makefile']);
   await expect(page.locator('.statusbar__branch')).toHaveText('main');
   await expect(page.locator('.statusbar__changes')).toHaveText('no changes');
-  await expect(page.locator('app-console-panel')).toContainText('CONSOLE · lab-3-sieci');
+  await expect(page.locator('app-console-panel .conversation__title')).toHaveText('lab-3-sieci');
   await expect(repoRow(page, 'lab-3-sieci')).toHaveClass(/repo--open/);
 
   await page.reload();
@@ -197,7 +197,7 @@ test('each repository has its own console conversation', async ({ page }) => {
   await expect(consolePanel).toContainText('Gotowe.');
 
   await openRepo(page, 'so-projekt-shell');
-  await expect(consolePanel).toContainText('CONSOLE · so-projekt-shell');
+  await expect(consolePanel.locator('.conversation__title')).toHaveText('so-projekt-shell');
   await expect(consolePanel).toContainText('Empty conversation');
 
   await openRepo(page, 'lab-3-sieci');

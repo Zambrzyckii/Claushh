@@ -3,6 +3,7 @@ import {
   DestroyRef,
   ElementRef,
   afterRenderEffect,
+  computed,
   effect,
   inject,
   output,
@@ -18,7 +19,7 @@ import { ProjectContext } from '../../core/project/project-context';
 import { ConsoleEffort, ConsoleMode, ConsoleModel, PermissionDecision, StepKind } from '../../core/realtime/console-protocol';
 import { countLabel, formatTime } from '../../core/text/format';
 import { revealHidden } from '../../core/text/visible-text';
-import { ConsoleStep, ConsoleStore } from './console-store';
+import { ConsoleStore } from './console-store';
 
 /**
  * The permission buttons ("yes", "yes, always") stay inactive for this many ms after a request appears. The request arrives
@@ -27,9 +28,10 @@ import { ConsoleStep, ConsoleStore } from './console-store';
 export const PERMISSION_ARM_MS = 600;
 
 /**
- * The Console panel (right column): the conversation with Claude Code as plain monospace text,
- * without icons, colors or animations (a requirement from the mockup). Prompt field with model, effort and mode selection.
- * State and communication: ConsoleStore.
+ * The Console panel, VS Code's secondary side bar (docs/ARCHITECTURE.md, "Console"): the conversation with Claude Code
+ * as monospace text without icons or images (the step verbs, counts and notes in color), its chrome with codicons, and
+ * the composer card: the prompt, the mode chip, Send or Stop, and the model and effort chip. A chip is a native
+ * <select> laid over its label, so a tap opens the platform's own picker. State and communication: ConsoleStore.
  *
  * Permission requests: the command with hidden characters made visible (`revealHidden`), permission buttons active only after
  * `PERMISSION_ARM_MS`, "yes, always" only with a known rule and after confirmation (docs/ARCHITECTURE.md, "Console").
@@ -76,6 +78,13 @@ export class ConsolePanel {
     { value: 'acceptEdits', label: 'accept edits' },
     { value: 'plan', label: 'plan' }
   ];
+
+  /** While the console works or waits for an answer, Stop takes the place of Send. */
+  protected readonly busy = computed(() => this.store.state() === 'working' || this.store.state() === 'waiting');
+  protected readonly modeLabel = computed(() => labelOf(this.modes, this.store.options().mode));
+  protected readonly modeIcon = computed(() => MODE_ICONS[this.store.options().mode]);
+  protected readonly modelLabel = computed(() => labelOf(this.models, this.store.options().model));
+  protected readonly effortLabel = computed(() => labelOf(this.efforts, this.store.options().effort));
 
   constructor() {
     effect(() => {
@@ -219,17 +228,6 @@ export class ConsolePanel {
     return VERBS[kind].padEnd(VERB_WIDTH);
   }
 
-  protected stats(step: ConsoleStep): string {
-    const parts: string[] = [];
-    if (step.added) {
-      parts.push(`+${step.added}`);
-    }
-    if (step.removed) {
-      parts.push(`−${step.removed}`);
-    }
-    return parts.length ? `  ${parts.join(' ')}` : '';
-  }
-
   protected time(iso: string): string {
     return formatTime(iso);
   }
@@ -255,3 +253,14 @@ const DECISIONS: Record<PermissionDecision, string> = {
   'allow-always': 'always allowed',
   deny: 'denied'
 };
+
+/** The icon of the mode chip. */
+const MODE_ICONS: Record<ConsoleMode, string> = {
+  default: 'shield',
+  acceptEdits: 'edit',
+  plan: 'checklist'
+};
+
+function labelOf<T>(options: readonly { value: T; label: string }[], value: T): string {
+  return options.find((option) => option.value === value)?.label ?? String(value);
+}

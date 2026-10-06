@@ -19,11 +19,14 @@
   --scrim: rgb(0 0 0 / 55%);
   --error: #f48771;
   --warning: #cca700;
-  --git-added: #81b88b;
+  --blue: #4fc1ff; // info notes and the console's links
+  --green: #89d185; // git added, untracked and renamed, the console's "+N", success messages
+  --purple: #c586c0; // badges, the console's step verbs
+  --git-added: var(--green);
   --git-modified: #e2c08d;
-  --git-deleted: #c74e39;
-  --git-untracked: #73c991;
-  --git-renamed: #73c991;
+  --git-deleted: var(--error);
+  --git-untracked: var(--green);
+  --git-renamed: var(--green);
   --git-conflict: #e4676b;
 
   --font-ui: 'IBM Plex Sans', system-ui, sans-serif;
@@ -157,6 +160,57 @@ textarea:focus-visible,
   color: var(--text-muted);
 }
 
+// Chips (docs/ARCHITECTURE.md, "Frontend"): a value shown as a small pill with a native <select> laid over it, so a
+// tap opens the platform's own picker (the wheel on iOS), and the keyboard, focus and screen readers come from the
+// select. A pair of values shares one pill: each .chip__part has its own select.
+.chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--hover);
+  font: 11px/1 var(--font-ui);
+  color: var(--text-muted);
+  white-space: nowrap;
+
+  &:hover {
+    color: var(--text-strong);
+  }
+
+  &:has(select:focus-visible) {
+    outline: 1px solid var(--focus);
+    outline-offset: 1px;
+  }
+
+  select {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    opacity: 0;
+    appearance: none;
+    cursor: pointer;
+    font-size: 16px;
+  }
+
+  &__part {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    height: 100%;
+  }
+
+  &__divider {
+    width: 1px;
+    height: 12px;
+    background: var(--border-strong);
+  }
+}
+
 // Phone sheets (docs/ARCHITECTURE.md, "Frontend" → "Phone layout"): full-screen <dialog>s opened with showModal() that
 // slide up; browsers without overlay transitions close them without the slide.
 dialog.sheet {
@@ -228,6 +282,16 @@ dialog.sheet {
   [role='tab'] {
     min-height: 40px;
     min-width: 40px;
+  }
+
+  .chip {
+    min-height: 32px;
+  }
+
+  // iOS Safari zooms into a focused field under 16 px; Monaco's and xterm's own text fields keep their sizes. The
+  // line heights are fixed in px, so the fields keep their heights.
+  :is(input, select, textarea):not(.monaco-editor *, .xterm *) {
+    font-size: 16px !important;
   }
 }
 

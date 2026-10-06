@@ -73,7 +73,8 @@ docker compose -p claushh-dev -f deploy/docker-compose.yml --env-file deploy/.en
 
 The config directory also holds the login (`.credentials.json`), the CLI's transcripts (kept 90 days), plan files and
 backups of its own state. Everything but `.credentials.json` may be deleted while the API is stopped; older
-conversations then cannot be resumed, and "New" starts a new one. Without `.credentials.json`, log in again as above.
+conversations then cannot be resumed, and "New conversation" starts a new one. Without `.credentials.json`, log in
+again as above.
 
 Cloning, fetching and pulling a public repository needs no credential helper in development; pushing always needs
 credentials (also for a public repository); the server's GitHub token is set up in "Deployment", step 8.

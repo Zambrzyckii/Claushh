@@ -26,7 +26,7 @@ Layout modeled on VS Code:
 | Top bar | workspace / repo / branch path, session countdown, panel toggles, "Log out" |
 | Left | file tree, marking of changed files (`M`) |
 | Center | editor (Monaco) with tabs, syntax highlighting and manual editing |
-| Right | collapsible **"Console"** panel: conversation with Claude as plain monospace text, without icons, colors or the name "Claude"; under the prompt field a choice of **model**, **effort** and **mode** (ask before edits / accept edits / plan); permission requests (yes / yes, always / no) |
+| Right | **"Console"** as VS Code's secondary side bar: the conversation with Claude as monospace text without icons, images or the name "Claude" (step verbs, counts and notes in color); a composer card with chips for **model**, **effort** and **mode** (ask before edits / accept edits / plan) and Send; permission requests (yes / yes, always / no) |
 | Bottom | collapsible panel with the tabs **Workspace** (list of workspaces and their repositories: branch, status, last commit, Open / Pull / Push) and **Terminal** |
 | Status bar | branch, number of changes, console status, cursor position |
 
@@ -35,7 +35,8 @@ the page does not load at all while the tunnel is down, and a tunnel that fails 
 in the status bar as "Console: disconnected" (console status).
 
 Colors: a dark theme after VS Code's structure: two surfaces, one amber accent for focus, the primary action and the
-active tab; errors, warnings and git marks in VS Code's colors.
+active tab; blue for info notes, green for success and git additions, purple for badges; errors, warnings and the
+modified mark in VS Code's colors.
 Fonts: IBM Plex Sans (interface) and JetBrains Mono (code, console, terminal), self-hosted through Fontsource; in the
 terminal the Nerd Font version comes first when the device has it, so that the icons from the dotfiles prompt work.
 Icons: codicons.
@@ -57,7 +58,7 @@ Frontend decisions (UI refresh):
   browser fetches only the subsets a page needs. Monaco and xterm measure their cells when they are created, so they
   wait for JetBrains Mono (3 s at most) and measure again when a font arrives later. Rejected: system font stacks
   (each device falls back to its own) and a font CDN (the CSP allows only the portal's own files).
-- Icons are codicons (CC BY 4.0, attributed in `README.md`) in the shell; the console panel has none. Rejected:
+- Icons are codicons (CC BY 4.0, attributed in `README.md`) in the shell and the console's chrome; the console's log has none. Rejected:
   inline SVGs (markup per icon) and text glyphs.
 - The Monaco and xterm themes read the tokens when they are created (`theme.ts`), so the palette lives in
   `styles.scss` only. Rejected: hex values repeated in TypeScript.
@@ -90,6 +91,23 @@ Frontend decisions (UI refresh):
 - iOS Safari does not resize the page for the soft keyboard (`interactive-widget` is not supported there), so in the
   phone layout the page keeps room at the bottom for the part of the screen `visualViewport` says the keyboard covers.
   Rejected: letting the keyboard cover the phone keys and the console's Send button.
+
+Frontend decisions (VS Code layout):
+- The workspace follows VS Code's layout practically one to one, colors aside: a title bar, the primary side bar with
+  its activity bar on top, the editor with the bottom panel under it, the console as the secondary side bar and the
+  status bar. Left out: the extensions of the owner's VS Code, a product logo or mascot, and buttons without a
+  function here.
+- Colors: blue (`#4fc1ff`) for info notes and the console's links, green (`#89d185`) for success, git additions and
+  the console's "+N", purple (`#c586c0`) for badges and the console's step verbs; added, untracked and renamed files
+  are green, deleted ones take the error color. The palette stays in `styles.scss`.
+- The console's composer is a card: the prompt, then the mode chip and Send (Stop while the console works), then one
+  chip for the model and the effort. A chip is a pill with a native `<select>` laid over it, so a tap opens the
+  platform's own picker (the wheel on iOS) and the keyboard, focus and screen readers come from the select. The chrome
+  has codicons; the log stays monospace text without icons or images. Rejected: a custom listbox (its own keyboard,
+  focus and Esc handling, and no iOS picker) and one select for model × effort (12 options).
+- With a coarse pointer every input, select and textarea outside Monaco and xterm has 16 px text, so iOS Safari never
+  zooms into a focused field; the line heights are fixed in px, so the fields keep their heights. Rejected: a size per
+  field (component rules outrank a global rule, so a new field would slip through).
 
 ## Tech stack
 
@@ -822,3 +840,4 @@ The order is chosen so that only already secured things reach the internet.
   - [x] Backend: passkeys.
   - [x] Frontend: passkeys (Security dialog, login button).
   - [x] Colors (the owner will refine them in later iterations), a possible phone view (low priority).
+  - [ ] Frontend: the VS Code layout (title bar, side bars, open editors, file icons, the console composer).

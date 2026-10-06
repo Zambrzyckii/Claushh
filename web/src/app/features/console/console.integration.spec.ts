@@ -49,7 +49,10 @@ class FakeConnection {
   async answerPermission(...args: unknown[]) {
     this.answers.push(args);
   }
-  async interrupt() {}
+  readonly interrupts: string[] = [];
+  async interrupt(conversationId: string) {
+    this.interrupts.push(conversationId);
+  }
   emit(event: ConsoleEvent) {
     this.events$.next(event);
   }
@@ -126,11 +129,12 @@ describe('Console (integration)', () => {
   it('starts a conversation on the first prompt and sends the selected options', async () => {
     const { host, root, settle } = await setup();
     const textarea = root.querySelector('textarea')!;
-    const selects = root.querySelectorAll('select');
-    selects[0].value = selects[0].options[2].value;
-    selects[0].dispatchEvent(new Event('change'));
-    selects[2].value = selects[2].options[2].value;
-    selects[2].dispatchEvent(new Event('change'));
+    const model = root.querySelector<HTMLSelectElement>('select[aria-label="model"]')!;
+    const mode = root.querySelector<HTMLSelectElement>('select[aria-label="mode"]')!;
+    model.value = model.options[2].value;
+    model.dispatchEvent(new Event('change'));
+    mode.value = mode.options[2].value;
+    mode.dispatchEvent(new Event('change'));
     textarea.value = '  napisz testy  ';
     textarea.dispatchEvent(new Event('input'));
     textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
@@ -326,10 +330,9 @@ describe('Console (integration)', () => {
     expect(host.editor.active()).toMatchObject({ value: 'mine', changedOnDisk: true });
   });
 
-  it('on a phone Enter makes a new line, Send sends the trimmed prompt once, and there is no Hide', async () => {
+  it('on a phone Enter makes a new line, Send sends the trimmed prompt once, and there is no Hide console', async () => {
     const { host, root, settle } = await setup(undefined, { phone: true, touch: true });
-    const labels = () => Array.from(root.querySelectorAll<HTMLButtonElement>('button')).map((b) => b.textContent!.trim());
-    expect(labels()).not.toContain('Hide');
+    expect(root.querySelector('button[aria-label="Hide console"]')).toBeNull();
     const textarea = root.querySelector('textarea')!;
     textarea.value = '  napisz testy\n';
     textarea.dispatchEvent(new Event('input'));
@@ -340,14 +343,49 @@ describe('Console (integration)', () => {
     expect(host.connection.sent).toEqual([]);
 
     const send = root.querySelector<HTMLButtonElement>('.composer__send')!;
-    expect(send.textContent!.trim()).toBe('Send');
+    expect([send.getAttribute('aria-label'), send.title]).toEqual(['Send', 'Send']);
     send.click();
     send.click();
     await settle();
     expect(host.connection.sent).toEqual([
       { conversationId: 'c-new', text: 'napisz testy', model: 'opus', effort: 'medium', mode: 'default' }
     ]);
-    // While the console works, "interrupt" takes the Send button's place.
+    // While the console works, Stop takes the Send button's place.
     expect(root.querySelector('.composer__send')).toBeNull();
+    expect(root.querySelector('.composer__stop')).not.toBeNull();
+  });
+
+  it('the options are chips with the icon of the mode, and the hint is gone', async () => {
+    const { root, settle } = await setup();
+    const values = () => Array.from(root.querySelectorAll('.chip__value')).map((e) => e.textContent!.trim());
+    expect(values()).toEqual(['ask before edits', 'opus-5.5', 'medium']);
+    expect(root.querySelector('.chip .codicon-shield')).not.toBeNull();
+    const mode = root.querySelector<HTMLSelectElement>('select[aria-label="mode"]')!;
+    mode.value = mode.options[2].value;
+    mode.dispatchEvent(new Event('change'));
+    await settle();
+    expect(values()[0]).toBe('plan');
+    expect(root.querySelector('.chip .codicon-checklist')).not.toBeNull();
+    expect(root.textContent).not.toContain('Enter to send');
+  });
+
+  it('Send sends, and while the console works Stop takes its place and interrupts', async () => {
+    const { host, root, settle } = await setup();
+    const textarea = root.querySelector('textarea')!;
+    textarea.value = 'napisz testy';
+    textarea.dispatchEvent(new Event('input'));
+    const send = root.querySelector<HTMLButtonElement>('.composer__send')!;
+    expect([send.getAttribute('aria-label'), send.title]).toEqual(['Send', 'Send (Enter)']);
+    send.click();
+    await settle();
+    expect(host.connection.sent).toEqual([
+      { conversationId: 'c-new', text: 'napisz testy', model: 'opus', effort: 'medium', mode: 'default' }
+    ]);
+    expect(root.querySelector('.composer__send')).toBeNull();
+    const stop = root.querySelector<HTMLButtonElement>('.composer__stop')!;
+    expect(stop.getAttribute('aria-label')).toBe('Interrupt');
+    stop.click();
+    await settle();
+    expect(host.connection.interrupts).toEqual(['c-new']);
   });
 });

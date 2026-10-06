@@ -1,4 +1,4 @@
-import { Page } from '@playwright/test';
+import { Locator, Page } from '@playwright/test';
 
 import { expect, test } from './fixtures';
 import {
@@ -115,6 +115,27 @@ test('in the console Enter makes a new line and Send sends', async ({ page, requ
   await expect(panel).toContainText('Gotowe.');
   expect((await mockState(request)).prompts.map((sent) => sent.text)).toEqual(['dodaj\nkomentarz']);
   await expect(panel.getByRole('button', { name: 'Hide' })).toHaveCount(0);
+});
+
+test('on a touch screen the fields have 16 px text, so iOS does not zoom, and keep their heights', async ({ page }) => {
+  const fontSize = (field: Locator) => field.evaluate((element) => getComputedStyle(element).fontSize);
+  await page.goto('/login');
+  const user = page.locator('#userName');
+  expect(await fontSize(user)).toBe('16px');
+  expect((await user.boundingBox())!.height).toBeCloseTo(36, 0);
+
+  await login(page);
+  await tab(page, 'Console').click();
+  expect(await fontSize(page.getByRole('textbox', { name: 'Prompt' }))).toBe('16px');
+  expect(await fontSize(page.getByLabel('model'))).toBe('16px');
+
+  await tab(page, 'Editor').click();
+  await page.locator('.topbar__repo-button').click();
+  const sheet = page.getByRole('dialog', { name: 'Workspace' });
+  await sheet.getByRole('button', { name: 'New workspace' }).click();
+  const name = sheet.getByRole('textbox', { name: 'New workspace name' });
+  expect(await fontSize(name)).toBe('16px');
+  expect((await name.boundingBox())!.height).toBeCloseTo(28, 0);
 });
 
 test('the Workspace sheet lists repositories as cards and closes when one opens', async ({ page }) => {

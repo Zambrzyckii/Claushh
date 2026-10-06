@@ -11,12 +11,12 @@ const prompt = (page: import('@playwright/test').Page) => page.getByRole('textbo
 
 test('the panel is plain text without the product name', async ({ page }) => {
   const panel = consolePanel(page);
-  await expect(panel).toContainText('CONSOLE · projects directory');
+  await expect(panel.locator('.conversation__title')).toHaveText('projects directory');
   await expect(panel).toContainText('Empty conversation');
   await expect(panel).not.toContainText(/claude/i);
   await expect(page.locator('.topbar')).not.toContainText(/claude/i);
   await expect(page.locator('.statusbar')).toContainText('Console: idle');
-  await expect(panel.locator('svg, img')).toHaveCount(0);
+  await expect(panel.locator('.log').locator('svg, img')).toHaveCount(0);
 });
 
 test('a prompt runs with the chosen model, effort and mode and shows the steps', async ({ page, request }) => {
@@ -129,7 +129,7 @@ test('Esc interrupts a running prompt', async ({ page }) => {
   await prompt(page).fill('pracuj długo');
   await prompt(page).press('Enter');
   await expect(panel).toContainText('working… (Esc interrupts)');
-  await expect(panel.getByRole('button', { name: 'New', exact: true })).toBeDisabled();
+  await expect(panel.getByRole('button', { name: 'New conversation', exact: true })).toBeDisabled();
 
   await prompt(page).press('Escape');
   await expect(panel).toContainText('interrupted');
@@ -161,7 +161,7 @@ test('"New" starts an empty conversation', async ({ page }) => {
   await prompt(page).press('Enter');
   await expect(panel).toContainText('Gotowe.');
 
-  await panel.getByRole('button', { name: 'New', exact: true }).click();
+  await panel.getByRole('button', { name: 'New conversation', exact: true }).click();
   await expect(panel).not.toContainText('dodaj komentarz');
   await expect(panel).toContainText('session · started');
 });
@@ -169,7 +169,7 @@ test('"New" starts an empty conversation', async ({ page }) => {
 test('the conversation keeps running while the panel is collapsed', async ({ page }) => {
   await prompt(page).fill('zrób push');
   await prompt(page).press('Enter');
-  await consolePanel(page).getByRole('button', { name: 'Hide' }).click();
+  await consolePanel(page).getByRole('button', { name: 'Hide console' }).click();
   await expect(page.locator('.statusbar')).toContainText('Console: waiting for permission');
   await page.getByRole('button', { name: 'Show console' }).click();
   await expect(consolePanel(page).getByRole('group', { name: /Allow:/ })).toBeVisible();
@@ -179,4 +179,21 @@ test('a session killed on the server closes the console and returns to login', a
   await expect(consolePanel(page)).toContainText('Empty conversation');
   await killSessions(request);
   await expect(page).toHaveURL(/\/login\?reason=expired/);
+});
+
+test('the composer is a card: its chips show and set the options, Send sends and Stop interrupts', async ({ page, request }) => {
+  const panel = consolePanel(page);
+  await expect(panel.locator('.chip__value')).toHaveText(['ask before edits', 'opus-5.5', 'medium']);
+  await panel.getByLabel(/^mode\b/).selectOption({ label: 'plan' });
+  await expect(panel.locator('.chip__value').first()).toHaveText('plan');
+  await expect(panel).not.toContainText('Enter to send');
+
+  await prompt(page).fill('pracuj długo');
+  await panel.getByRole('button', { name: 'Send', exact: true }).click();
+  await expect(panel).toContainText('working… (Esc interrupts)');
+  await panel.getByRole('button', { name: 'Interrupt' }).click();
+  const note = panel.locator('.line', { hasText: 'interrupted' });
+  await expect(note).toBeVisible();
+  await expect(note).toHaveCSS('color', 'rgb(79, 193, 255)');
+  expect((await mockState(request)).prompts[0]).toMatchObject({ text: 'pracuj długo', mode: 'plan' });
 });
