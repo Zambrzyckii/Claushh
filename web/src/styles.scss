@@ -36,6 +36,16 @@
   --motion-out: 150ms cubic-bezier(0.4, 0, 1, 1); // panels sliding out
 }
 
+// The terminal's symbols (docs/ARCHITECTURE.md, "Frontend" → "Terminal"): the Regular face of JetBrainsMono Nerd Font
+// (Nerd Fonts, SIL OFL 1.1, `fonts/OFL.txt`) for the characters the bundled JetBrains Mono lacks: the prompt's icons,
+// box drawing, braille, arrows. The `unicode-range` makes the browser download it only when such a character appears.
+@font-face {
+  font-family: 'JetBrainsMono Nerd Font Web';
+  src: url('./fonts/JetBrainsMonoNerdFont-Regular.woff2') format('woff2');
+  font-display: swap;
+  unicode-range: U+2190-2BFF, U+E000-F8FF, U+F0000-FFFFD;
+}
+
 html,
 body {
   height: 100%;

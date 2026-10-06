@@ -121,6 +121,7 @@ test('switching tabs keeps the editor and its unsaved text, and the terminal mou
   await tab(page, 'Terminal').click();
   await typeInTerminal(page, 'echo telefon');
   await expect.poll(() => terminalText(page)).toMatch(/^telefon\s*$/m);
+  await expect(activeTerminal(page).locator('.xterm-rows')).toHaveCSS('font-size', '13px');
   await activeTerminal(page).locator('.xterm').evaluate((node) => node.setAttribute('data-probe', 'kept'));
   await tab(page, 'Console').click();
   await expect(page.locator('#phone-pane-editor')).toHaveAttribute('inert', '');

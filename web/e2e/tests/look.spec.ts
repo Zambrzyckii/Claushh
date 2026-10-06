@@ -1,9 +1,10 @@
 import { expect, test } from './fixtures';
-import { MAIN, expectEditorToContain, login, openFile, resetMock, treeRow } from './helpers';
+import { MAIN, activeTerminal, expectEditorToContain, login, openFile, openTerminalTab, resetMock, treeRow } from './helpers';
 
 /**
  * The shipped look (docs/ARCHITECTURE.md, "Frontend"): the self-hosted fonts and the icon font are loaded and served as
- * fonts, and Monaco's own icon font, which loads later, does not change the app's icons.
+ * fonts, the terminal's Nerd Font symbols load only when needed, the desktop terminal has its size and padding, and
+ * Monaco's own icon font, which loads later, does not change the app's icons.
  */
 
 test.beforeEach(async ({ request }) => resetMock(request));
@@ -69,4 +70,38 @@ test('the file icons of the tree load and are served as SVG images', async ({ pa
   expect(decoded.every(Boolean)).toBe(true);
   expect(types.size).toBeGreaterThan(0);
   expect([...new Set(types.values())]).toEqual(['image/svg+xml']);
+});
+
+test('the terminal ships the Nerd Font symbols as a web font that loads only when needed', async ({ page }) => {
+  const types = new Map<string, string>();
+  page.on('response', (response) => {
+    if (new URL(response.url()).pathname.includes('JetBrainsMonoNerdFont')) {
+      types.set(response.url(), response.headers()['content-type'] ?? '');
+    }
+  });
+  await login(page);
+  await openTerminalTab(page);
+  const status = () =>
+    page.evaluate(
+      () => [...document.fonts].find((face) => face.family.replace(/"/g, '') === 'JetBrainsMono Nerd Font Web')?.status ?? 'missing'
+    );
+  expect(await status()).toBe('unloaded');
+  expect(types.size).toBe(0);
+
+  const symbol = String.fromCodePoint(0xe0b6);
+  await page.evaluate((text) => document.fonts.load('13px "JetBrainsMono Nerd Font Web"', text), symbol);
+  expect(await status()).toBe('loaded');
+  expect(await page.evaluate((text) => document.fonts.check('13px "JetBrainsMono Nerd Font Web"', text), symbol)).toBe(true);
+  expect([...new Set(types.values())]).toEqual(['font/woff2']);
+});
+
+test('the desktop terminal uses an 11 pt font with 10 px of padding', async ({ page }) => {
+  await login(page);
+  await openTerminalTab(page);
+  const rows = activeTerminal(page).locator('.xterm-rows');
+  await expect(rows).toHaveCSS('font-size', /^14\.66/);
+  const view = (await activeTerminal(page).boundingBox())!;
+  const xterm = (await activeTerminal(page).locator('.xterm').boundingBox())!;
+  expect(Math.round(xterm.x - view.x)).toBe(10);
+  expect(Math.round(xterm.y - view.y)).toBe(10);
 });

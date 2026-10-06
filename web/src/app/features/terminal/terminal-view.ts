@@ -119,7 +119,7 @@ const PASTE_MARGIN = 16;
     }
     .host {
       position: absolute;
-      inset: 4px 0 0 12px;
+      inset: 10px;
     }
     .failed {
       position: absolute;
@@ -197,7 +197,7 @@ const PASTE_MARGIN = 16;
       color: var(--accent);
     }
     :host(.phone) .host {
-      bottom: 40px;
+      bottom: 50px;
     }
     :host(.phone) .notice,
     :host(.phone) .decision:not(.decision--top) {
@@ -326,7 +326,7 @@ export class TerminalView {
       return;
     }
     const host = this.host().nativeElement;
-    const term = new xterm.Terminal(terminalOptions());
+    const term = new xterm.Terminal(terminalOptions(this.layout.phone()));
     const fit = new xterm.FitAddon();
     term.loadAddon(fit);
     // OSC 8 links disabled: the visible text ("https://github.com/…") could lead somewhere else.

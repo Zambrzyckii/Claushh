@@ -411,7 +411,10 @@ Icons: [Codicons](https://github.com/microsoft/vscode-codicons) by Microsoft,
 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). File and folder icons: a selection from
 [Material Icon Theme](https://github.com/material-extensions/vscode-material-icon-theme) 5.39.0 by Material Extensions,
 MIT (license in `web/public/file-icons/LICENSE`). Fonts: IBM Plex Sans and JetBrains Mono, SIL Open Font License 1.1,
-through Fontsource.
+through Fontsource. The terminal's symbols: the Regular face of JetBrainsMono Nerd Font from
+[Nerd Fonts](https://github.com/ryanoasis/nerd-fonts) 3.5.1, SIL Open Font License 1.1 (license in
+`web/src/fonts/OFL.txt`), with the icon sets that Nerd Fonts credits under their own licenses; the woff2 is the
+`ttf-jetbrains-mono-nerd` package's `JetBrainsMonoNerdFont-Regular.ttf` converted with `woff2_compress`.
 
 ### Updating the file icons
 

@@ -37,7 +37,10 @@ Colors: a dark theme after VS Code's structure: two surfaces, one amber accent f
 active tab; blue for info notes, green for success and git additions, purple for badges; errors, warnings and the
 modified mark in VS Code's colors.
 Fonts: IBM Plex Sans (interface) and JetBrains Mono (code, console, terminal), self-hosted through Fontsource; in the
-terminal the Nerd Font version comes first when the device has it, so that the icons from the dotfiles prompt work.
+terminal the device's own JetBrainsMono Nerd Font comes first, and the frontend ships its Regular face (Nerd Fonts,
+OFL) for the characters JetBrains Mono lacks, so the dotfiles prompt's icons show on every device, a phone included.
+The terminal is set like a desktop terminal: 11 pt (13 px on a phone), a line height near 1, 10 px of padding, and
+bold text keeps its color.
 Icons: codicons; file and folder icons from Material Icon Theme (MIT), a selection.
 
 Devices: laptop and PC, and a phone with every function in three tabs (Editor, Terminal, Console).

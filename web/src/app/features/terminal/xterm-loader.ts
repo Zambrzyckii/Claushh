@@ -27,22 +27,31 @@ export function loadXterm(): Promise<XtermModules> {
   return loading;
 }
 
-/** The Nerd Font first, so that the icons from the dotfiles prompt show when the device has it. */
-export const TERMINAL_FONT = "'JetBrainsMono Nerd Font', 'JetBrains Mono', ui-monospace, monospace";
+/**
+ * The device's own Nerd Font first; then the shipped JetBrains Mono; then the shipped Nerd Font symbols (`styles.scss`),
+ * which the browser downloads only for a character JetBrains Mono lacks (the dotfiles prompt's icons, box drawing).
+ */
+export const TERMINAL_FONT =
+  "'JetBrainsMono Nerd Font', 'JetBrains Mono', 'JetBrainsMono Nerd Font Web', ui-monospace, monospace";
+
+/** 11 pt in CSS px, the size of a desktop terminal; a phone keeps 13 px for its columns. */
+const DESKTOP_FONT_SIZE = (11 * 96) / 72;
 
 /**
  * Terminal appearance from the tokens of `web/src/styles.scss`, read when a terminal is created; the selection and the
- * 16 ANSI colors stay fixed here.
+ * 16 ANSI colors stay fixed here. `phone`: the phone layout's smaller font. The line height adds about a pixel to the
+ * font's own, and bold text keeps its color instead of turning bright, as in a desktop terminal.
  *
  * Deliberately without clipboard addons (OSC 52): a program in the terminal cannot write anything to the browser clipboard.
  */
-export function terminalOptions(): ITerminalOptions {
+export function terminalOptions(phone: boolean): ITerminalOptions {
   const surface = cssToken('--surface');
   return {
     fontFamily: TERMINAL_FONT,
-    fontSize: 13,
-    lineHeight: 1.2,
+    fontSize: phone ? 13 : DESKTOP_FONT_SIZE,
+    lineHeight: 1.05,
     cursorBlink: false,
+    drawBoldTextInBrightColors: false,
     scrollback: 5000,
     allowProposedApi: false,
     theme: {
