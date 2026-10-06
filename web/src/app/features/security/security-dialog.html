@@ -51,6 +51,76 @@
     </div>
   </section>
 
+  <section aria-labelledby="passkeys-title">
+    <h3 id="passkeys-title">Passkeys</h3>
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">Name</th>
+          <th scope="col">Added</th>
+          <th scope="col">Sync</th>
+          <th scope="col"><span class="visually-hidden">Actions</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (p of passkeys.list(); track p.id) {
+          <tr class="passkey">
+            @if (passkeys.renaming() === p.id) {
+              <td colspan="4">
+                <form class="inline passkey-rename" novalidate (submit)="renamePasskey($event, p)">
+                  <input #newName type="text" [value]="p.name" [attr.aria-label]="'New name for passkey ' + p.name"
+                         maxlength="64" autocomplete="off" spellcheck="false">
+                  <button type="submit" class="primary" [disabled]="passkeys.busy()">Save</button>
+                  <button type="button" [disabled]="passkeys.busy()" (click)="passkeys.renaming.set(null)">Cancel</button>
+                </form>
+              </td>
+            } @else {
+              <td data-label="Name">{{ p.name }}</td>
+              <td data-label="Added">{{ date(p.createdAt) }}</td>
+              <td data-label="Sync">{{ p.synced ? 'synced' : 'this device only' }}</td>
+              <td class="actions">
+                <button type="button" [disabled]="passkeys.busy()" [attr.aria-label]="'Rename passkey ' + p.name"
+                        (click)="passkeys.startRenaming(p)">Rename</button>
+                <button type="button" class="danger" [disabled]="passkeys.busy()"
+                        [attr.aria-label]="'Remove passkey ' + p.name" (click)="removePasskey(p)">Remove</button>
+              </td>
+            }
+          </tr>
+        } @empty {
+          <tr><td colspan="4" class="muted">{{ passkeys.list() === null ? 'Loading…' : 'No passkeys.' }}</td></tr>
+        }
+      </tbody>
+    </table>
+
+    @if (passkeys.error(); as message) {
+      <p class="error" role="alert">{{ message }}</p>
+    }
+
+    @if (passkeys.askingForPassword()) {
+      <form class="reauth" novalidate aria-labelledby="reauth-title" (submit)="reauthenticate($event)">
+        <p id="reauth-title">Enter your password and an authenticator code to change your passkeys.</p>
+        <label for="reauth-password">Password</label>
+        <input #reauthPassword id="reauth-password" type="password" autocomplete="current-password">
+        <label for="reauth-code">Authenticator code</label>
+        <input #reauthCode id="reauth-code" type="text" inputmode="numeric" autocomplete="one-time-code"
+               spellcheck="false" maxlength="6">
+        <div class="buttons">
+          <button type="submit" class="primary" [disabled]="passkeys.busy()">Confirm</button>
+          <button type="button" [disabled]="passkeys.busy()" (click)="passkeys.cancelReauthentication()">Cancel</button>
+        </div>
+      </form>
+    } @else if (passkeys.canCreate) {
+      <form class="inline passkey-add" novalidate (submit)="addPasskey($event)">
+        <input #passkeyName type="text" aria-label="New passkey name" placeholder="name (optional)" maxlength="64"
+               autocomplete="off" spellcheck="false" [value]="passkeys.newName()"
+               (input)="passkeys.newName.set(passkeyName.value)">
+        <button type="submit" [disabled]="passkeys.busy()"><span class="codicon codicon-key" aria-hidden="true"></span>Add passkey</button>
+      </form>
+    } @else {
+      <p class="muted hint">This browser cannot create passkeys here. Renaming and removing still work.</p>
+    }
+  </section>
+
   <section aria-labelledby="logins-title">
     <h3 id="logins-title">Login history</h3>
     <table>
@@ -59,6 +129,7 @@
           <th scope="col">Date</th>
           <th scope="col">IP</th>
           <th scope="col">Device</th>
+          <th scope="col">Method</th>
           <th scope="col">Result</th>
         </tr>
       </thead>
@@ -68,10 +139,11 @@
             <td data-label="Date">{{ date(l.at) }}</td>
             <td class="mono" data-label="IP">{{ l.ip }}</td>
             <td data-label="Device">{{ l.device }}</td>
+            <td data-label="Method">{{ l.method }}</td>
             <td data-label="Result">{{ l.success ? 'succeeded' : 'failed' }}</td>
           </tr>
         } @empty {
-          <tr><td colspan="4" class="muted">{{ logins() === null ? 'Loading…' : 'No entries.' }}</td></tr>
+          <tr><td colspan="5" class="muted">{{ logins() === null ? 'Loading…' : 'No entries.' }}</td></tr>
         }
       </tbody>
     </table>

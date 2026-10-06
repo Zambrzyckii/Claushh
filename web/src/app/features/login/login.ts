@@ -4,6 +4,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 
 import { AuthService, LoginResult } from '../../core/auth/auth.service';
 import { safeReturnUrl } from '../../core/auth/return-url';
+import { formatWait } from '../../core/text/format';
 
 /**
  * Login screen: login, password and a 6-digit TOTP code from the phone app.
@@ -192,27 +193,13 @@ function errorMessage(result: Extract<LoginResult, { ok: false }>): string {
       return 'Invalid login details.';
     case 'rate-limited':
       return result.retryAfterSeconds
-        ? `Too many attempts. Try again in ${waitText(result.retryAfterSeconds)}`
+        ? `Too many attempts. Try again in ${formatWait(result.retryAfterSeconds)}`
         : 'Too many attempts. Try again later.';
     case 'network':
       return 'No connection to the server.';
     case 'server':
       return 'Server error. Try again.';
   }
-}
-
-/**
- * The wait from `Retry-After`, rounded up, with the sentence's full stop: "30 s." below a minute, "15 min." below an
- * hour, "24 h." otherwise. Abbreviations need no plural forms.
- */
-function waitText(seconds: number): string {
-  if (seconds < 60) {
-    return `${seconds} s.`;
-  }
-  if (seconds < 3600) {
-    return `${Math.ceil(seconds / 60)} min.`;
-  }
-  return `${Math.ceil(seconds / 3600)} h.`;
 }
 
 function noticeFor(reason: string | null, logout: string | null): { text: string; warning: boolean } | null {

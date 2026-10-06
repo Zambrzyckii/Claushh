@@ -26,6 +26,7 @@ In this repository documentation has priority. It should let you find your way a
 - **Do not write new unit tests.** Test new code with integration and e2e tests.
 - Integration (Vitest, `web/src/**/*.spec.ts`): real components and services together, with only the
   network boundary replaced (HTTP through `HttpTestingController`, SignalR by replacing the connection).
+- Besides the network boundary, integration specs replace the browser wrappers in `web/src/app/core/browser/` that stand for the device or the user (the page reload, `confirm()`, WebAuthn's `navigator.credentials`), and stub a browser API directly only where jsdom lacks it or a test must make it fail; e2e tests cover the real APIs, WebAuthn with Chromium's virtual authenticator.
 - E2E (Playwright, `web/e2e/`): the built app in a browser with the mock backend `web/e2e/mock-api/`,
   which implements the contracts from `docs/ARCHITECTURE.md`. A contract change requires a mock change.
 - Existing unit tests stay until the owner decides otherwise.

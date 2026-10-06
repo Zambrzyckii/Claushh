@@ -1,10 +1,15 @@
-import { APIRequestContext, Locator, Page, expect } from '@playwright/test';
+import { APIRequestContext, CDPSession, Locator, Page, expect } from '@playwright/test';
 
 /** Data and paths from the mock backend (e2e/mock-api/server.mjs). */
 export const USER = { userName: 'owner', password: 'secret', totpCode: '123456' };
 export const MAIN = 'studia/lab-3-sieci/src/main.c';
 export const LAB = 'studia/lab-3-sieci';
 export const BAZY_SQL = 'studia/bazy-danych-lab/zadanie4.sql';
+
+/** The mock and its /__test/* endpoints: always at 127.0.0.1, also in tests that open the portal at localhost. */
+export const MOCK_ORIGIN = 'http://127.0.0.1:4400';
+/** Where the passkey tests open the portal: WebAuthn refuses an IP address (docs/ARCHITECTURE.md, "Tests"). */
+export const PASSKEY_ORIGIN = 'http://localhost:4400';
 
 export interface MockState {
   files: Record<string, string | null>;
@@ -28,15 +33,15 @@ export interface MockState {
 }
 
 export async function resetMock(request: APIRequestContext): Promise<void> {
-  await request.post('/__test/reset');
+  await request.post(`${MOCK_ORIGIN}/__test/reset`);
 }
 
 export async function mockState(request: APIRequestContext): Promise<MockState> {
-  return (await request.get('/__test/state')).json();
+  return (await request.get(`${MOCK_ORIGIN}/__test/state`)).json();
 }
 
 export async function setFile(request: APIRequestContext, path: string, content: string): Promise<void> {
-  await request.put('/__test/file', { data: { path, content } });
+  await request.put(`${MOCK_ORIGIN}/__test/file`, { data: { path, content } });
 }
 
 /** Sets a repository's ahead/behind in the mock, so a test gets its own push/pull state without a fourth repository. */
@@ -45,22 +50,22 @@ export async function setRepoState(
   repo: string,
   state: { ahead?: number; behind?: number }
 ): Promise<void> {
-  await request.post('/__test/repo-state', { data: { repo, ...state } });
+  await request.post(`${MOCK_ORIGIN}/__test/repo-state`, { data: { repo, ...state } });
 }
 
 /** Sets the session inactivity timeout in the mock (seconds), also for already existing sessions. */
 export async function setSessionTimeout(request: APIRequestContext, idleSeconds: number): Promise<void> {
-  await request.post(`/__test/session-timeout?idle=${idleSeconds}`);
+  await request.post(`${MOCK_ORIGIN}/__test/session-timeout?idle=${idleSeconds}`);
 }
 
 /** Invalidates sessions on the server. By default it also drops console connections, like the real backend. */
 export async function killSessions(request: APIRequestContext, options: { keepSockets?: boolean } = {}): Promise<void> {
-  await request.post(options.keepSockets ? '/__test/kill-sessions?keepSockets=1' : '/__test/kill-sessions');
+  await request.post(`${MOCK_ORIGIN}/__test/kill-sessions${options.keepSockets ? '?keepSockets=1' : ''}`);
 }
 
 /** Drops hub connections without ending the session (a brief network failure). The client reconnects. */
 export async function dropSockets(request: APIRequestContext): Promise<void> {
-  await request.post('/__test/drop-sockets');
+  await request.post(`${MOCK_ORIGIN}/__test/drop-sockets`);
 }
 
 /**
@@ -73,7 +78,7 @@ export async function setFault(
   faults: { dropInputAck?: number; downAfterDropMs?: number; attachDelayMs?: number; hubDownMs?: number; listDelayMs?: number }
 ): Promise<void> {
   const query = new URLSearchParams(Object.entries(faults).map(([key, value]) => [key, String(value)]));
-  await request.post(`/__test/fault?${query}`);
+  await request.post(`${MOCK_ORIGIN}/__test/fault?${query}`);
 }
 
 /** Everything that reached the terminal shell (`Input` batches joined in order). */
@@ -173,4 +178,41 @@ export async function expectEditorToContain(page: Page, text: string): Promise<v
 
 function escape(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** The page's virtual authenticator (Chromium's CDP `WebAuthn` domain) and the CDP session that controls it. */
+export interface VirtualAuthenticator {
+  cdp: CDPSession;
+  id: string;
+}
+
+/**
+ * Gives the page Chromium's virtual authenticator: built in, with discoverable passkeys and user verification, and it
+ * answers at once. `synced` marks new passkeys as backup eligible, which the Security window shows as "synced".
+ */
+export async function addVirtualAuthenticator(page: Page, synced = false): Promise<VirtualAuthenticator> {
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('WebAuthn.enable', { enableUI: false });
+  const { authenticatorId } = await cdp.send('WebAuthn.addVirtualAuthenticator', {
+    options: {
+      protocol: 'ctap2',
+      transport: 'internal',
+      hasResidentKey: true,
+      hasUserVerification: true,
+      isUserVerified: true,
+      automaticPresenceSimulation: true,
+      defaultBackupEligibility: synced
+    }
+  });
+  return { cdp, id: authenticatorId };
+}
+
+/** Adds a passkey in the open Security window of a session that has not re-authenticated yet: name, Add, password and code. */
+export async function addPasskey(security: Locator, name: string): Promise<void> {
+  await security.getByRole('textbox', { name: 'New passkey name' }).fill(name);
+  await security.getByRole('button', { name: 'Add passkey' }).click();
+  await security.getByLabel('Password', { exact: true }).fill(USER.password);
+  await security.getByLabel('Authenticator code', { exact: true }).fill(USER.totpCode);
+  await security.getByRole('button', { name: 'Confirm' }).click();
+  await expect(security.locator('tr.passkey [data-label="Name"]', { hasText: name })).toBeVisible();
 }

@@ -25,6 +25,8 @@ export interface LoginAttempt {
   ip: string;
   device: string;
   success: boolean;
+  /** How the login was made; a failed re-authentication is `password`. */
+  method: 'password' | 'passkey';
 }
 
 const SESSIONS_API = {
@@ -68,7 +70,17 @@ export class SessionsApi {
 
   logins(): Observable<LoginAttempt[]> {
     return this.http.get<LoginAttempt[]>(SESSIONS_API.logins).pipe(
-      map((list) => list.map((l) => ({ at: l.at, ip: l.ip, device: l.device, success: l.success === true }))),
+      map((list) =>
+        list.map(
+          (l): LoginAttempt => ({
+            at: l.at,
+            ip: l.ip,
+            device: l.device,
+            success: l.success === true,
+            method: l.method === 'passkey' ? 'passkey' : 'password'
+          })
+        )
+      ),
       catchError((e: unknown) => throwError(() => toApiError(e)))
     );
   }

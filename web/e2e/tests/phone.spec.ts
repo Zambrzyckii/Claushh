@@ -3,7 +3,10 @@ import { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import {
   MAIN,
+  PASSKEY_ORIGIN,
   activeTerminal,
+  addPasskey,
+  addVirtualAuthenticator,
   expectEditorToContain,
   login,
   mockState,
@@ -220,4 +223,22 @@ test('a long paste keeps the decision above the keys, and the keys wait for it',
   await question.getByRole('button', { name: 'Cancel' }).click();
   await expect(question).toHaveCount(0);
   await expect(keys.getByRole('button', { name: 'Esc' })).toBeEnabled();
+});
+
+test.describe('passkeys at localhost', () => {
+  test.use({ baseURL: PASSKEY_ORIGIN });
+
+  test('the Security sheet adds a passkey after the password and code and shows it as a card', async ({ page }) => {
+    await login(page);
+    await addVirtualAuthenticator(page);
+    await page.getByRole('button', { name: 'Menu' }).click();
+    await page.getByRole('menuitem', { name: 'Security' }).click();
+    const security = page.getByRole('dialog', { name: 'Security' });
+    await addPasskey(security, 'Phone');
+    const card = security.locator('tr.passkey');
+    expect(await card.evaluate((row) => getComputedStyle(row).display)).toBe('block');
+    await expect(card.locator('[data-label="Sync"]')).toHaveText('this device only');
+    await expect(card.getByRole('button', { name: 'Remove passkey Phone' })).toBeVisible();
+    expect(await noSidewaysScroll(page)).toBe(true);
+  });
 });

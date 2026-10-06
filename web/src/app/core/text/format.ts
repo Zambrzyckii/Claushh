@@ -1,6 +1,6 @@
 /**
- * Shared text helpers of the interface (docs/ARCHITECTURE.md, "Frontend"): English plurals, relative time and the date
- * formats. The interface has one language; dates are day first with a 24-hour clock (en-GB).
+ * Shared text helpers of the interface (docs/ARCHITECTURE.md, "Frontend"): English plurals, relative time, the date
+ * formats and the wait of a 429. The interface has one language; dates are day first with a 24-hour clock (en-GB).
  */
 
 /** "1 change", "3 changes", "0 changes". */
@@ -59,4 +59,18 @@ export function formatTime(iso: string): string {
 export function formatDateTime(iso: string): string {
   const date = new Date(iso);
   return Number.isNaN(date.getTime()) ? iso : dateTime.format(date);
+}
+
+/**
+ * The wait from `Retry-After`, rounded up, with the sentence's full stop: "30 s." below a minute, "15 min." below an
+ * hour, "24 h." otherwise. Abbreviations need no plural forms.
+ */
+export function formatWait(seconds: number): string {
+  if (seconds < 60) {
+    return `${seconds} s.`;
+  }
+  if (seconds < 3600) {
+    return `${Math.ceil(seconds / 60)} min.`;
+  }
+  return `${Math.ceil(seconds / 3600)} h.`;
 }

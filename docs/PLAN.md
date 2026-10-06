@@ -291,6 +291,19 @@ Backend decisions (passkeys):
 - After a passkey login the passkey's sign count and backup state are saved (Identity's handler leaves that to the
   app). The login creates the same session as a password login, and its notification names the passkey.
 
+Frontend decisions (passkeys):
+- The browser's passkey API is wrapped in `core/browser/webauthn.ts`. The API's options go through
+  `PublicKeyCredential.parseCreationOptionsFromJSON` and `parseRequestOptionsFromJSON` (Chrome 129, Firefox 119,
+  Safari and iOS 18.4), and the credential goes back as JSON built by hand, because some password managers break
+  `PublicKeyCredential.toJSON()`. A browser without those functions is not offered passkeys. Integration specs replace
+  the wrapper; the e2e tests use Chromium's virtual authenticator at `http://localhost:4400`. Rejected: decoding the
+  options by hand (code for browsers older than the owner's) and a WebAuthn package.
+- The Security window lists the passkeys (name, date added, synced or this device only) and adds, renames and removes
+  them. When adding or removing gets `403`, the window asks for the password and a code inline and then repeats the
+  change once; a name is checked by the backend's rule before anything is sent, and a blank name lets the backend name
+  the passkey after the device. Rejected: asking for the password and code before every change (the backend allows
+  changes for 5 minutes after one check).
+
 Backend decisions (stage 2):
 - The projects directory is the configuration key `Projects:Root` (`/srv/projects` in `appsettings.json`, a user-secret
   in development, a temporary directory in tests), checked when the API starts: an absolute path to an existing

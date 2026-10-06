@@ -93,6 +93,43 @@ td {
   margin-top: 10px;
 }
 
+.inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+
+  input {
+    flex: 1 1 160px;
+    min-width: 0;
+    max-width: 320px;
+  }
+}
+
+td .inline {
+  margin-top: 0;
+}
+
+.reauth {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 240px);
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 10px;
+
+  p,
+  .buttons {
+    grid-column: 1 / -1;
+    margin: 0;
+  }
+
+  label {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+}
+
 .visually-hidden {
   position: absolute;
   width: 1px;
@@ -103,7 +140,8 @@ td {
 }
 
 .actions button,
-.buttons button {
+.buttons button,
+.inline button {
   border-color: var(--border-strong);
 }
 
@@ -150,5 +188,13 @@ dialog.sheet {
   .actions {
     padding-top: 6px;
     text-align: left;
+  }
+
+  .inline input {
+    max-width: none;
+  }
+
+  .reauth {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
