@@ -820,6 +820,13 @@ Deployment decisions:
   argument it only loads the dump into a new database of that name. Rejected: the host's `pg_dump` (another major
   version; its dump may not load into 17), plain SQL (larger, no selective restore) and `pg_restore --clean` into the
   live database (the tables of a newer migration would block it or survive it).
+- The terminal's colours: an optional `claushh-wal-sync@<owner>.path` watches the owner's pywal `colors.json` and
+  starts `claushh-wal-sync@<owner>.service`, which copies it and pywal's `sequences` into `/home/workspace/.cache/wal`
+  as `workspace`: `ProtectHome=tmpfs` with the owner's pywal directory bound read-only and workspace's bound
+  writable, no network, no capabilities, and each file written next to its place and renamed. The API reads the copy
+  (`Terminal:ThemeFile`, set in `claushh.service`); the shell's dotfiles can print the sequences. Rejected: binding the
+  owner's pywal directory into the API's unit (its sandbox keeps to `/home/workspace`) and copying by hand after each
+  wallpaper change.
 - The tunnel is remotely managed. `cloudflared` runs on the host, so its requests reach the API from loopback, which
   `ForwardedHeaders` trusts; it runs as `deploy/cloudflared.service` with a dynamic user, its own sandbox and the token
   as a credential (`LoadCredential=` from `/etc/cloudflared/tunnel-token`, root, `600`, passed as `--token-file`, which
@@ -838,7 +845,8 @@ Deployment decisions:
 - The computer is a desktop: the BIOS powers it on after a power loss, and `sleep.target`, `suspend.target`,
   `hibernate.target` and `hybrid-sleep.target` are masked.
 - Build and install are two steps: `deploy/install.sh build <dir>` runs as the owner (a self-contained `dotnet
-  publish` for linux-x64 and the frontend build); `sudo deploy/install.sh install <dir>` checks the server, copies the
+  publish` for linux-x64 and the frontend build); `sudo deploy/install.sh install <dir>` checks the server and that the
+  build has every unit it installs (a build from an older checkout is refused before the API stops), copies the
   build next to the installed one while the API still runs, takes a dump before an update, stops the API, swaps in the
   new `/opt/claushh/{api,web,deploy}` (the previous copy stays as `*.previous`), installs the units and starts the API
   again when it is enabled, with a health check. It never enables the API and never starts `cloudflared`. Rejected: one

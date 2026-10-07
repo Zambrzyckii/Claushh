@@ -1,0 +1,11 @@
+# Starts claushh-wal-sync@%i.service whenever pywal rewrites the colours of the user %i, so the portal's terminal takes
+# the desktop terminal's palette (README.md, "Deployment" → "The terminal's colours (pywal)"). Optional: install.sh
+# installs it and never enables it.
+[Unit]
+Description=Claushh: watch the pywal colours of %i
+
+[Path]
+PathChanged=/home/%i/.cache/wal/colors.json
+
+[Install]
+WantedBy=paths.target

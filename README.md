@@ -239,6 +239,21 @@ sudo docker compose -p claushh-prod -f /opt/claushh/deploy/docker-compose.yml --
   exec postgres psql -U claushh -d claushh -c "DELETE FROM \"ConsoleRules\" WHERE \"ProjectPath\" = '<project>' AND \"Rule\" = '<rule>'"
 ```
 
+### The terminal's colours (pywal)
+
+Optional, when your desktop terminal takes its colours from pywal: the portal's terminal then has the same palette,
+also after a reload (`docs/ARCHITECTURE.md`, "Terminal theme API contract"). `claushh-wal-sync@<you>.path` watches
+your `~/.cache/wal/colors.json`; on every change `claushh-wal-sync@<you>.service` copies it and pywal's `sequences`
+into `/home/workspace/.cache/wal`, where the API reads the colours (`Terminal:ThemeFile`, set in the unit) and the
+dotfiles of `workspace` can print the sequences. The units expect your home at `/home/<you>`. As you:
+```bash
+sudo install -d -o workspace -g workspace -m 0755 /home/workspace/.cache /home/workspace/.cache/wal
+sudo systemctl enable --now "claushh-wal-sync@$USER.path"
+sudo systemctl start "claushh-wal-sync@$USER.service"    # the first copy
+```
+A terminal takes the colours when it is created; one that is open while the wallpaper changes keeps its colours until
+the page is reloaded. A failed copy shows in `journalctl -u "claushh-wal-sync@$USER"`.
+
 ### Phase A: on loopback, before the tunnel
 
 - **Service.** `systemctl is-active claushh` gives `active`; `curl -s http://127.0.0.1:5090/api/health` gives

@@ -4,13 +4,15 @@
 #   install.sh build <dir>     as you: the self-contained API, the frontend build and deploy/ into <dir>
 #   install.sh install <dir>   as root: checks, a dump before an update, /opt/claushh/{api,web,deploy} replaced (the
 #                              old copy kept as *.previous), the units installed, the API started again if it is enabled
-# It never enables claushh.service and never enables or starts cloudflared.service.
+# It never enables claushh.service, never enables or starts cloudflared.service, and never enables the pywal copy
+# (claushh-wal-sync@.path).
 set -euo pipefail
 
 repo=$(realpath -- "$(dirname -- "${BASH_SOURCE[0]}")/..")
 readonly repo
 readonly prefix=/opt/claushh
-readonly -a units=(claushh.service cloudflared.service claushh-backup.service claushh-backup.timer)
+readonly -a units=(claushh.service cloudflared.service claushh-backup.service claushh-backup.timer
+  claushh-wal-sync@.path claushh-wal-sync@.service)
 
 die() {
   printf 'install.sh: %s\n' "$*" >&2
@@ -38,8 +40,8 @@ build() {
   npm --prefix "$repo/web" run build
   cp -a -- "$repo/web/dist/web/browser" "$out/web"
   mkdir -- "$out/deploy"
-  install -m 0644 -- "$repo"/deploy/*.service "$repo"/deploy/*.timer "$repo/deploy/docker-compose.yml" \
-    "$repo/deploy/podman-socket.conf" "$out/deploy/"
+  install -m 0644 -- "$repo"/deploy/*.service "$repo"/deploy/*.timer "$repo"/deploy/*.path \
+    "$repo/deploy/docker-compose.yml" "$repo/deploy/podman-socket.conf" "$out/deploy/"
   install -m 0755 -- "$repo/deploy/backup.sh" "$out/deploy/"
   printf '\ninstall.sh: built into %s. Install it with:\n  sudo %s install %s\n' "$out" "$repo/deploy/install.sh" "$out"
 }
@@ -80,6 +82,10 @@ install_build() {
   src=$(realpath -- "$1")
   [[ -x $src/api/Claushh.Api && -f $src/web/index.html && -f $src/deploy/claushh.service ]] \
     || die "$src is not a build of 'install.sh build'"
+  # A build from an older checkout lacks a unit installed below: refused here, before the API stops.
+  for file in "${units[@]}"; do
+    [[ -f $src/deploy/$file ]] || die "$src has no deploy/$file: build it with this checkout ('install.sh build')"
+  done
   for file in /etc/claushh/compose.env /etc/claushh/claushh.env; do
     [[ $(stat -c '%U %a' -- "$file" 2>/dev/null) == 'root 600' ]] \
       || die "$file must exist, owned by root, with mode 600 (README.md, \"Deployment\", step 5)"

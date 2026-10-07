@@ -33,7 +33,9 @@ server: one process and one origin.
 On the server (decisions: `PLAN.md`, "Deployment decisions"):
 - `claushh.service` runs the API as the user `workspace` on `http://127.0.0.1:5090`, from `/opt/claushh/api`, serving
   `/opt/claushh/web`; `cloudflared.service` connects the tunnel; `claushh-backup.timer` dumps the database daily into
-  `/var/backups/claushh`. `deploy/install.sh` installs the build and the units (`README.md`, "Deployment").
+  `/var/backups/claushh`; the optional `claushh-wal-sync@<owner>.path` copies the owner's pywal colours for the
+  terminal into `/home/workspace/.cache/wal`. `deploy/install.sh` installs the build and the units (`README.md`,
+  "Deployment").
 - PostgreSQL is the compose project `claushh-prod` on `127.0.0.1:5435` (`/opt/claushh/deploy/docker-compose.yml`).
 - `/opt/claushh` (the API, the frontend build, `deploy/`) belongs to root; `/etc/claushh` (root only) holds
   `claushh.env` (the unit's install-specific settings and secrets) and `compose.env` (the compose variables);
@@ -144,9 +146,10 @@ On the server (decisions: `PLAN.md`, "Deployment decisions"):
 | `deploy/claushh.env.example` | template of `/etc/claushh/claushh.env`, the unit's install-specific settings and secrets (key names and placeholders) |
 | `deploy/cloudflared.service` | the tunnel's systemd unit: `cloudflared` with a dynamic user, the token as a credential |
 | `deploy/claushh-backup.service`, `deploy/claushh-backup.timer` | the daily database dump (`backup.sh`), started by the timer |
+| `deploy/claushh-wal-sync@.path`, `deploy/claushh-wal-sync@.service` | optional: on every change of the owner's pywal `colors.json`, a copy of it and of pywal's `sequences` into `/home/workspace/.cache/wal` (`Terminal:ThemeFile`), as `workspace`, with only those two directories of `/home` visible (the owner's read-only) and no network |
 | `deploy/backup.sh` | dump and restore of the production database (the container's `pg_dump -Fc`, 14 days kept), run as root |
 | `deploy/podman-socket.conf` | user drop-in that moves the `podman.socket` of `workspace` into its home, where the API's unit sees it |
-| `deploy/install.sh` | `build <dir>` (as you: the self-contained API, the frontend build, `deploy/`) and `install <dir>` (as root: the checks, a dump before an update, `/opt/claushh` replaced with the old copy kept as `*.previous`, the units, the restart and the health check) |
+| `deploy/install.sh` | `build <dir>` (as you: the self-contained API, the frontend build, `deploy/`) and `install <dir>` (as root: the checks, a dump before an update, `/opt/claushh` replaced with the old copy kept as `*.previous`, the units (the pywal copy installed, never enabled), the restart and the health check) |
 | `docs/` | project documentation |
 
 ## Authentication
@@ -846,7 +849,7 @@ Configuration:
 | `Passkeys:ServerDomain` | `appsettings.json` (empty: the API does not start), `appsettings.Development.json` (`localhost`); tests: `localhost`; server: `Passkeys__ServerDomain=<domain>` in `/etc/claushh/claushh.env` | the RP ID of every passkey: the portal's host name, lower case, without scheme or port (checked at start in every environment). A passkey belongs to it: one made for `localhost` never works on `<domain>`, and `127.0.0.1` cannot have passkeys |
 | `Terminal:SocketDirectory` | not set: `$XDG_RUNTIME_DIR/claushh`; server: `/run/claushh` (the unit, with `RuntimeDirectory=`) | the directory of the API's tmux socket and configuration, created with mode 0700; the socket path must fit in 107 bytes. Without it and without `XDG_RUNTIME_DIR` the terminal is unavailable |
 | `Terminal:Environment:<NAME>` | none (tests: `SHELL`, `HOME`); server: `DOCKER_HOST` and `TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE` (the unit) | variables for tmux and the shell on top of the allowlisted environment; on the server they point `docker` and Testcontainers at the rootless Podman socket of `workspace` (`/home/workspace/.local/state/podman/podman.sock`) |
-| `Terminal:ThemeFile` | not set: the portal's colours | the path of pywal's `colors.json` (a link is followed); `GET /api/terminal/theme` reads its 19 colours on every request (contract: "Terminal" → "Terminal theme API contract") |
+| `Terminal:ThemeFile` | not set: the portal's colours; server: `/home/workspace/.cache/wal/colors.json` (the unit), where `claushh-wal-sync@.path` copies it | the path of pywal's `colors.json` (a link is followed); `GET /api/terminal/theme` reads its 19 colours on every request (contract: "Terminal" → "Terminal theme API contract") |
 | `Frontend:Root` | not set (development uses `ng serve`); to try the build: `dotnet user-secrets`; server: variable `Frontend__Root` (`/opt/claushh/web`, the unit) | the absolute path of the Angular build (`web/dist/web/browser`) the API serves at `/`; when set, its `index.html` must carry the CSP `<meta>`, checked at start (the API does not start otherwise). Read once: restart the API after a build that changes the policy |
 | `Notifications:NtfyUrl` | server: variable `Notifications__NtfyUrl` (required in Production: the API does not start without it); development: optional, `dotnet user-secrets` | the URL of the ntfy topic (an absolute https URL, checked at start). A secret: whoever knows the topic can read it, so it is never logged. Empty: no notifications |
 | `Notifications:NtfyToken` | server: variable `Notifications__NtfyToken`; optional | an ntfy access token, sent as `Authorization: Bearer` |
