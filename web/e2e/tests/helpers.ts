@@ -81,6 +81,66 @@ export async function setFault(
   await request.post(`${MOCK_ORIGIN}/__test/fault?${query}`);
 }
 
+/**
+ * A pywal `colors.json` as pywal16 writes it (checksum, wallpaper, alpha, special, colors), with upper-case digits, for
+ * `setTerminalTheme`.
+ */
+export const PYWAL_COLORS = JSON.stringify(
+  {
+    checksum: '9f2c4e1b7a3d5c6e',
+    wallpaper: '/srv/wallpapers/morze.jpg',
+    alpha: '100',
+    special: { background: '#0B0E14', foreground: '#C5C8C6', cursor: '#F0C674' },
+    colors: {
+      color0: '#0B0E14',
+      color1: '#CC6666',
+      color2: '#B5BD68',
+      color3: '#F0C674',
+      color4: '#81A2BE',
+      color5: '#B294BB',
+      color6: '#8ABEB7',
+      color7: '#C5C8C6',
+      color8: '#4D5057',
+      color9: '#D54E53',
+      color10: '#B9CA4A',
+      color11: '#E7C547',
+      color12: '#7AA6DA',
+      color13: '#C397D8',
+      color14: '#70C0B1',
+      color15: '#EAEAEA'
+    }
+  },
+  null,
+  4
+);
+
+/** What the API answers for PYWAL_COLORS: its 19 colours in lower case, and nothing else. */
+export const PYWAL_THEME = {
+  background: '#0b0e14',
+  foreground: '#c5c8c6',
+  cursor: '#f0c674',
+  palette: [
+    '#0b0e14', '#cc6666', '#b5bd68', '#f0c674', '#81a2be', '#b294bb', '#8abeb7', '#c5c8c6',
+    '#4d5057', '#d54e53', '#b9ca4a', '#e7c547', '#7aa6da', '#c397d8', '#70c0b1', '#eaeaea'
+  ]
+};
+
+/** The text of the pywal file the mock answers `GET /api/terminal/theme` from; null: none (as after a reset). */
+export async function setTerminalTheme(request: APIRequestContext, content: string | null): Promise<void> {
+  await request.put(`${MOCK_ORIGIN}/__test/terminal-theme`, { data: { content } });
+}
+
+/** A colour as the browser computes it: "#0b0e14" → "rgb(11, 14, 20)". */
+export function rgb(hex: string): string {
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  return `rgb(${r}, ${g}, ${b})`;
+}
+
+/** A colour token of styles.scss as the page has it, e.g. "--surface". */
+export async function token(page: Page, name: string): Promise<string> {
+  return page.evaluate((property) => getComputedStyle(document.documentElement).getPropertyValue(property).trim(), name);
+}
+
 /** Everything that reached the terminal shell (`Input` batches joined in order). */
 export async function terminalInputs(request: APIRequestContext, index = 0): Promise<string> {
   return ((await mockState(request)).terminals[index]?.inputs ?? []).join('');

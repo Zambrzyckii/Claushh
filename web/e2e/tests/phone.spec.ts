@@ -4,6 +4,8 @@ import { expect, test } from './fixtures';
 import {
   MAIN,
   PASSKEY_ORIGIN,
+  PYWAL_COLORS,
+  PYWAL_THEME,
   USER,
   activeTerminal,
   addPasskey,
@@ -14,9 +16,12 @@ import {
   openFile,
   repoRow,
   resetMock,
+  rgb,
   setSessionTimeout,
+  setTerminalTheme,
   terminalInputs,
   terminalText,
+  token,
   treeRow,
   typeInTerminal
 } from './helpers';
@@ -305,6 +310,16 @@ test('a long paste keeps the decision above the keys, and the keys wait for it',
   await question.getByRole('button', { name: 'Cancel' }).click();
   await expect(question).toHaveCount(0);
   await expect(keys.getByRole('button', { name: 'Esc' })).toBeEnabled();
+});
+
+test("with a theme the terminal's padding takes its background, and the keys keep the portal surface", async ({ page, request }) => {
+  await setTerminalTheme(request, PYWAL_COLORS);
+  await login(page);
+  await tab(page, 'Terminal').click();
+  const terminal = activeTerminal(page);
+  await expect(terminal.locator('.xterm-scrollable-element')).toHaveCSS('background-color', rgb(PYWAL_THEME.background));
+  await expect(terminal).toHaveCSS('background-color', rgb(PYWAL_THEME.background));
+  await expect(terminal.getByRole('toolbar', { name: 'Terminal keys' })).toHaveCSS('background-color', rgb(await token(page, '--surface')));
 });
 
 test.describe('passkeys at localhost', () => {

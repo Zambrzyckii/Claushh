@@ -16,6 +16,7 @@ import type { FitAddon } from '@xterm/addon-fit';
 import type { Terminal } from '@xterm/xterm';
 import { Subscription } from 'rxjs';
 
+import { TerminalThemeApi } from '../../core/api/terminal-theme-api';
 import { DeviceLayout } from '../../core/browser/device-layout';
 import { Dialogs } from '../../core/browser/dialogs';
 import { isTypingElsewhere } from '../../core/browser/focus';
@@ -47,6 +48,10 @@ const PASTE_MARGIN = 16;
  * After reconnecting to the hub the terminal attaches again. The size fits the container
  * (FitAddon + ResizeObserver) and is sent to the server.
  *
+ * The colors are the server's theme when it has one (pywal's palette, `TerminalThemeApi`, asked for when the view is
+ * created): in xterm's options before it opens, so a reload shows them from the first frame, and behind the padding
+ * around it; otherwise the portal's (docs/ARCHITECTURE.md, "Terminal" → "Rules").
+ *
  * Typing safety (docs/ARCHITECTURE.md, section "Terminal"):
  * - typed characters go through the terminal queue from TerminalStore (TerminalInputQueue): nothing is lost on a dropped
  *   connection and nothing is duplicated. Characters waiting longer than `AUTO_RESEND_MS` are paused until a decision
@@ -63,7 +68,7 @@ const PASTE_MARGIN = 16;
  */
 @Component({
   selector: 'app-terminal-view',
-  host: { '[class.phone]': 'layout.phone()' },
+  host: { '[class.phone]': 'layout.phone()', '[style.background-color]': 'paddingBackground()' },
   template: `
     <div #host class="host"></div>
     @if (loadFailed()) {
@@ -217,6 +222,7 @@ export class TerminalView {
   private readonly injector = inject(Injector);
   /** Optional: a view outside the workspace has no panels to drag. */
   private readonly workbench = inject(WorkbenchState, { optional: true });
+  private readonly themes = inject(TerminalThemeApi);
   private readonly host = viewChild.required<ElementRef<HTMLElement>>('host');
   private readonly cancelPasteButton = viewChild<ElementRef<HTMLButtonElement>>('cancelPasteButton');
   private readonly subscriptions = new Subscription();
@@ -254,6 +260,8 @@ export class TerminalView {
   protected readonly ctrl = signal(false);
 
   protected readonly loadFailed = signal(false);
+  /** The theme's background behind the 10 px of padding around xterm; null: none of its own (the panel's surface shows). */
+  protected readonly paddingBackground = signal<string | null>(null);
   /** Pasted text with line endings waiting for a decision ("Paste" / "Cancel"). */
   protected readonly pasteRequest = signal<{ text: string; preview: string; breaksLabel: string } | null>(null);
   protected readonly stalePreview = computed(() => previewText(this.inputState().heldText.replace(/\r\n?/g, '\n')));
@@ -315,6 +323,8 @@ export class TerminalView {
   }
 
   private async init(): Promise<void> {
+    // In parallel with xterm.js; it never rejects (null: the portal's colors).
+    const themeLoad = this.themes.load();
     let xterm;
     try {
       xterm = await loadXterm();
@@ -322,11 +332,12 @@ export class TerminalView {
       this.loadFailed.set(true);
       return;
     }
+    const theme = await themeLoad;
     if (this.destroyed) {
       return;
     }
     const host = this.host().nativeElement;
-    const term = new xterm.Terminal(terminalOptions(this.layout.phone()));
+    const term = new xterm.Terminal(terminalOptions(this.layout.phone(), theme));
     const fit = new xterm.FitAddon();
     term.loadAddon(fit);
     // OSC 8 links disabled: the visible text ("https://github.com/…") could lead somewhere else.
@@ -354,6 +365,7 @@ export class TerminalView {
     for (const colour of [4, 10, 11, 12]) {
       term.parser.registerOscHandler(colour, (data) => data.split(';').includes('?'));
     }
+    this.paddingBackground.set(theme?.background ?? null);
     term.open(host);
     this.term = term;
     this.fit = fit;

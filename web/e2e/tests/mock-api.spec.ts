@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import type { APIRequestContext } from '@playwright/test';
 
 import { expect, test } from './fixtures';
-import { MAIN, USER, login, mockState, resetMock, setRepoState } from './helpers';
+import { MAIN, PYWAL_COLORS, PYWAL_THEME, USER, login, mockState, resetMock, setRepoState, setTerminalTheme } from './helpers';
 
 /** Mock backend: tests of the mock itself (it has unprotected /__test/*) and of contract rules that the frontend does not let through. */
 
@@ -214,6 +214,37 @@ test('the mock searches like the backend: its 400s, the 404 for a file and the X
   }
   expect((await post({ path: MAIN, query: 'a' })).status()).toBe(404);
   expect((await post({ path: '', query: 'main' }, 'stale')).status()).toBe(400);
+});
+
+test('the mock answers the terminal theme like the backend: 401, 204 without a valid file, exactly the 19 colours, a GET without the XSRF token', async ({ request }) => {
+  expect((await request.get('/api/terminal/theme')).status()).toBe(401);
+  await apiLogin(request);
+  const none = await request.get('/api/terminal/theme');
+  expect(none.status()).toBe(204);
+  expect(await none.text()).toBe('');
+
+  await setTerminalTheme(request, PYWAL_COLORS);
+  const themed = await request.get('/api/terminal/theme', { headers: { 'X-XSRF-TOKEN': 'stale' } });
+  expect(themed.status()).toBe(200);
+  expect(await themed.json()).toEqual(PYWAL_THEME);
+  expect(await themed.text()).not.toContain('wallpaper');
+
+  for (const content of [
+    '',
+    PYWAL_COLORS.slice(0, -10),
+    '[]',
+    JSON.stringify({ special: 'x', colors: {} }),
+    PYWAL_COLORS.replace('"#B5BD68"', '"#B5BD6"'),
+    PYWAL_COLORS.replace('"#B5BD68"', '"B5BD68"'),
+    PYWAL_COLORS.replace('"#B5BD68"', '7'),
+    PYWAL_COLORS.replace(/,\s*"color15": "#EAEAEA"/, ''),
+    PYWAL_COLORS + ' '.repeat(16 * 1024)
+  ]) {
+    await setTerminalTheme(request, content);
+    expect((await request.get('/api/terminal/theme')).status(), content.slice(0, 60)).toBe(204);
+  }
+  await setTerminalTheme(request, PYWAL_COLORS + ' '.repeat(16 * 1024 - PYWAL_COLORS.length));
+  expect((await request.get('/api/terminal/theme')).status()).toBe(200);
 });
 
 test('the mock refuses a malformed file before the conversation and a file outside its project after it, like the backend', async ({ page, request }) => {

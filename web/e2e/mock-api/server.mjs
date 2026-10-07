@@ -1,5 +1,5 @@
 // Mock backend for e2e tests: serves the built frontend (dist/web/browser) and implements the contracts
-// from docs/ARCHITECTURE.md (authentication, files, search, workspaces and git, the console hub in the SignalR JSON protocol
+// from docs/ARCHITECTURE.md (authentication, files, search, the terminal theme, workspaces and git, the console hub in the SignalR JSON protocol
 // over WebSocket, the terminal hub with a simple simulated shell). Instead of the real Claude Code it replays short
 // scripts that depend on the prompt text.
 // Git is simulated: the "committed" file content is their state at reset, and status is the difference from it.
@@ -84,6 +84,7 @@ function reset() {
     conversations: new Map(), // id -> { projectPath, events, running }
     latestByProject: new Map(),
     prompts: [],
+    terminalThemeFile: null, // the text of the pywal file GET /api/terminal/theme answers from (/__test/terminal-theme)
     // failures on demand from tests (/__test/fault)
     faults: { dropInputAck: 0, attachDelayMs: 0, hubDownMs: 0, downAfterDropMs: 0, listDelayMs: 0 },
     hubDownUntil: 0
@@ -377,6 +378,34 @@ function byName(a, b) {
   return x < y ? -1 : x > y ? 1 : 0;
 }
 
+/**
+ * The terminal theme (docs/ARCHITECTURE.md, "Terminal theme API contract") from the text of a pywal colors.json a test
+ * set (/__test/terminal-theme), checked as the backend checks the file: at most 16 KiB, a JSON object, the 19 values
+ * "#" and 6 hex digits, sent in lower case and nothing else. null: 204.
+ */
+const THEME_MAX_BYTES = 16 * 1024;
+
+function terminalTheme(content) {
+  if (typeof content !== 'string' || Buffer.byteLength(content, 'utf8') > THEME_MAX_BYTES) return null;
+  let file;
+  try {
+    file = JSON.parse(content);
+  } catch {
+    return null;
+  }
+  const section = (name) => {
+    const value = file?.[name];
+    return value !== null && typeof value === 'object' && !Array.isArray(value) ? value : null;
+  };
+  const special = section('special');
+  const colors = section('colors');
+  if (!special || !colors) return null;
+  const values = [special.background, special.foreground, special.cursor, ...Array.from({ length: 16 }, (_, i) => colors[`color${i}`])];
+  if (!values.every((value) => typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value))) return null;
+  const [background, foreground, cursor, ...palette] = values.map((value) => value.toLowerCase());
+  return { background, foreground, cursor, palette };
+}
+
 /** Passkeys (docs/ARCHITECTURE.md, "Authentication" → "Passkeys"): the backend's limits and texts; no signature is checked. */
 const PASSKEY_LIMIT = 10;
 const PASSKEY_FRESH_MS = 5 * 60_000;
@@ -484,6 +513,13 @@ async function handle(req, res) {
   if (url.pathname === '/__test/file' && req.method === 'PUT') {
     const body = await readBody(req);
     state.files.set(body.path, body.content);
+    json(res, 204);
+    return;
+  }
+  if (url.pathname === '/__test/terminal-theme' && req.method === 'PUT') {
+    // A pywal colors.json as text for GET /api/terminal/theme (null: none, as after a reset).
+    const body = await readBody(req);
+    state.terminalThemeFile = typeof body?.content === 'string' ? body.content : null;
     json(res, 204);
     return;
   }
@@ -820,6 +856,13 @@ async function handle(req, res) {
     if (!ok) return json(res, 400);
     const [status, result] = search(body);
     return json(res, status, result);
+  }
+
+  // the terminal's colours (a GET: no XSRF token, as in the backend)
+  if (url.pathname === '/api/terminal/theme' && req.method === 'GET') {
+    if (!session) return json(res, 401);
+    const theme = terminalTheme(state.terminalThemeFile);
+    return theme ? json(res, 200, theme) : json(res, 204);
   }
 
   // files

@@ -41,6 +41,11 @@ terminal the device's own JetBrainsMono Nerd Font comes first, and the frontend 
 OFL) for the characters JetBrains Mono lacks, so the dotfiles prompt's icons show on every device, a phone included.
 The terminal is set like a desktop terminal: 11 pt (13 px on a phone), a line height near 1, 10 px of padding, and
 bold text keeps its color.
+The terminal takes pywal's palette through the API and keeps it after a reload: the background, the foreground, the
+cursor and the 16 colours of the `colors.json` that `Terminal:ThemeFile` names (`GET /api/terminal/theme`), with the
+padding in the background colour, so it looks like the desktop terminal whatever the wallpaper; without the file it
+keeps the portal's colours. Rejected: a fixed palette (it drifts from the wallpaper) and colours only from the shell
+(pywal's sequences at shell start; a reload loses them, because the snapshot keeps only the text's colours).
 Icons: codicons; file and folder icons from Material Icon Theme (MIT), a selection.
 
 Devices: laptop and PC, and a phone with every function in three tabs (Editor, Terminal, Console).
@@ -63,7 +68,7 @@ Frontend decisions (UI refresh):
 - Icons are codicons (CC BY 4.0, attributed in `README.md`) in the shell and the console's chrome; the console's log has none. Rejected:
   inline SVGs (markup per icon) and text glyphs.
 - The Monaco and xterm themes read the tokens when they are created (`theme.ts`), so the palette lives in
-  `styles.scss` only. Rejected: hex values repeated in TypeScript.
+  `styles.scss` only; a terminal with pywal's palette from the server takes that instead (above). Rejected: hex values repeated in TypeScript.
 - Panels slide in and out instead of appearing: `transform` only, 200 ms in and 150 ms out, nothing with reduced
   motion. The console column and the bottom panel use Angular's `animate.enter`/`animate.leave`, without a package.
   Rejected: animating width or height (xterm would refit and resize tmux on every frame) and `@angular/animations`
