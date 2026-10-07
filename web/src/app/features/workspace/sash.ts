@@ -1,4 +1,4 @@
-import { Component, DOCUMENT, DestroyRef, ElementRef, computed, inject, input, output, signal } from '@angular/core';
+import { Component, DOCUMENT, DestroyRef, ElementRef, computed, inject, input, linkedSignal, output, signal } from '@angular/core';
 
 import { WorkbenchState } from './workbench-state';
 
@@ -28,9 +28,9 @@ const STEP = 10;
     '[class.sash--active]': 'active()',
     '(pointerdown)': 'onPointerDown($event)',
     '(pointermove)': 'onPointerMove($event)',
-    '(pointerup)': 'endDrag()',
-    '(pointercancel)': 'endDrag()',
-    '(lostpointercapture)': 'endDrag()',
+    '(pointerup)': 'onPointerEnd($event)',
+    '(pointercancel)': 'onPointerEnd($event)',
+    '(lostpointercapture)': 'onPointerEnd($event)',
     '(dblclick)': 'reset.emit()',
     '(keydown)': 'onKeydown($event)'
   }
@@ -53,6 +53,8 @@ export class Sash {
 
   protected readonly orientation = computed(() => (this.edge() === 'top' ? 'horizontal' : 'vertical'));
   protected readonly active = signal(false);
+  /** The size last asked for, so arrows pressed faster than the panel follows add up; a new `size` resets it. */
+  private readonly current = linkedSignal(() => this.size());
   private drag: { pointerId: number; from: number; size: number } | null = null;
 
   constructor() {
@@ -66,7 +68,7 @@ export class Sash {
     }
     event.preventDefault();
     this.element.setPointerCapture(event.pointerId);
-    this.drag = { pointerId: event.pointerId, from: this.position(event), size: this.size() };
+    this.drag = { pointerId: event.pointerId, from: this.position(event), size: this.current() };
     this.active.set(true);
     this.state.resizing.set(true);
     this.document.documentElement.classList.add(`sash-dragging-${this.orientation()}`);
@@ -75,6 +77,13 @@ export class Sash {
   protected onPointerMove(event: PointerEvent): void {
     if (this.drag?.pointerId === event.pointerId) {
       this.resizeTo(this.drag.size + this.sign() * (this.position(event) - this.drag.from));
+    }
+  }
+
+  /** Only the pointer that started the drag ends it: another finger on the strip neither moves nor ends it. */
+  protected onPointerEnd(event: PointerEvent): void {
+    if (this.drag?.pointerId === event.pointerId) {
+      this.endDrag();
     }
   }
 
@@ -93,9 +102,9 @@ export class Sash {
     const vertical = this.orientation() === 'vertical';
     let size: number;
     if (event.key === (vertical ? 'ArrowLeft' : 'ArrowUp')) {
-      size = this.size() - this.sign() * STEP;
+      size = this.current() - this.sign() * STEP;
     } else if (event.key === (vertical ? 'ArrowRight' : 'ArrowDown')) {
-      size = this.size() + this.sign() * STEP;
+      size = this.current() + this.sign() * STEP;
     } else if (event.key === 'Home') {
       size = this.min();
     } else if (event.key === 'End') {
@@ -118,7 +127,8 @@ export class Sash {
 
   private resizeTo(size: number): void {
     const next = Math.round(Math.min(this.max(), Math.max(this.min(), size)));
-    if (next !== this.size()) {
+    if (next !== this.current()) {
+      this.current.set(next);
       this.resized.emit(next);
     }
   }

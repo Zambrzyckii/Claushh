@@ -97,6 +97,12 @@
   }
 }
 
+// An open menu's backdrop covers the page and takes the press that closes the menu, so while a menu is open the bar
+// sits above the workbench's own layers (the panel edges, Monaco's widgets).
+.topbar--menu-open {
+  z-index: 100;
+}
+
 .menu-backdrop {
   position: fixed;
   inset: 0;

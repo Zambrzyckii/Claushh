@@ -1,4 +1,4 @@
-<header class="topbar" [class.topbar--phone]="layout.phone()">
+<header class="topbar" [class.topbar--phone]="layout.phone()" [class.topbar--menu-open]="menuOpen()">
   @if (layout.phone()) {
     <button type="button" class="topbar__repo-button" [attr.aria-expanded]="state.drawerOpen() && state.view() === 'scm'"
             (click)="repository.emit()">

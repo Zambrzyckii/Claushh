@@ -84,6 +84,18 @@ test('the account menu shows the user, opens Security and closes on Esc', async 
   await expect(page.getByRole('dialog', { name: 'Security' })).toBeVisible();
 });
 
+test('an open account menu covers the panel edges: a drag on one closes the menu and resizes nothing', async ({ page }) => {
+  const edge = page.getByRole('separator', { name: 'Resize side bar' });
+  await expect(edge).toHaveAttribute('aria-valuenow', '240');
+  await page.getByRole('button', { name: 'Account: owner' }).click();
+  const menu = page.getByRole('menu', { name: 'Account' });
+  await expect(menu).toBeVisible();
+
+  await dragEdge(page, 'Resize side bar', 100, 0);
+  await expect(menu).toHaveCount(0);
+  await expect(edge).toHaveAttribute('aria-valuenow', '240');
+});
+
 test('the command centre names the repository and its branch and shows Source Control', async ({ page }) => {
   await expect(page.locator('.topbar__path')).toHaveText('projects directory');
   await openRepo(page, 'lab-3-sieci');
