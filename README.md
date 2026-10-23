@@ -1,5 +1,10 @@
 # Claushh
 
+[![CI](https://github.com/Zambrzyckii/Claushh/actions/workflows/ci.yml/badge.svg)](https://github.com/Zambrzyckii/Claushh/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
+![Claushh with a repository open, showing the explorer, a C file in the editor, a terminal below it and a console conversation that edited the file and ran the tests](docs/images/workspace.png)
+
 A private web portal for working on projects from any device: code editor, console for Claude Code,
 terminal and git in the browser. Runs on a home computer (EndeavourOS), access through Cloudflare Tunnel,
 login with a password and a TOTP code, or with a passkey. One user.
@@ -8,7 +13,7 @@ Status: **frontend ready (login with a password or a passkey, sessions and passk
 a diff view, console, workspaces and git, terminal); backend: login, sessions, login protection, passkeys (logging in,
 adding, renaming and removing), the security headers, serving the built frontend, the client IP behind Cloudflare and
 login notifications (stage 1, parts A-C), the files API (stage 2), the console hub (stage 3), the workspaces and git
-API and the terminal hub (stage 4).** Not deployed yet: the steps are in "Deployment" below.
+API and the terminal hub (stage 4).** The steps to deploy it are in "Deployment" below.
 Progress: [`docs/PLAN.md`](docs/PLAN.md), section "Stages".
 
 ## Documentation
@@ -437,3 +442,10 @@ converted with `woff2_compress`.
 The icons in `web/public/file-icons/` and their name map `web/src/app/core/icons/file-icon-map.ts` are copies, so
 builds and tests never need the package. After changing the selection (`ALLOWED` in `web/scripts/file-icons.mjs`) or
 updating `material-icon-theme` (a devDependency), run `cd web && node scripts/file-icons.mjs` and commit both.
+
+## License
+
+The project's own code is under the [MIT License](LICENSE). The third-party files from "Third-party assets" keep their
+own licenses and are not covered by it. These are the icons in `web/public/file-icons/` and the name map generated from
+them, `web/src/app/core/icons/file-icon-map.ts` (both MIT, Material Extensions), and the font in `web/src/fonts/` (SIL
+Open Font License 1.1, plus the licenses of the icon sets that Nerd Fonts adds).

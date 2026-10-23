@@ -151,6 +151,11 @@ On the server (decisions: `PLAN.md`, "Deployment decisions"):
 | `deploy/podman-socket.conf` | user drop-in that moves the `podman.socket` of `workspace` into its home, where the API's unit sees it |
 | `deploy/install.sh` | `build <dir>` (as you: the self-contained API, the frontend build, `deploy/`) and `install <dir>` (as root: the checks, a dump before an update, `/opt/claushh` replaced with the old copy kept as `*.previous`, the units (the pywal copy installed, never enabled), the restart and the health check) |
 | `docs/` | project documentation |
+| `docs/images/` | the README's screenshot, taken from the built frontend on the e2e mock (its files and shell are made up) |
+| `.github/workflows/ci.yml` | CI for every push to `main` and every pull request, which runs the frontend's `npm ci`, integration tests, build and e2e tests |
+| `.github/dependabot.yml` | Dependabot's weekly version updates for npm in `web/` and for the workflow's actions (NuGet stays out while CI does not run the backend's tests) |
+| `LICENSE` | the MIT License of the project's own code (the third-party files keep their own, `README.md`, "License") |
+| `SECURITY.md` | how to report a vulnerability, privately through GitHub's private vulnerability reporting |
 
 ## Authentication
 
