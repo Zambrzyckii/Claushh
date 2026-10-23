@@ -366,7 +366,7 @@ units, starts the API again when it is enabled and waits up to 60 s for `/api/he
 terminals and console processes; conversations come back. Build and install again also when .NET publishes a security
 patch: the API is a self-contained build, which `pacman -Syu` does not update.
 
-Each release on GitHub also carries this build as `claushh-<version>-linux-x64.tar.gz`, made by
+Each release on GitHub also carries this build as `claushh-<tag>-linux-x64.tar.gz`, made by
 `.github/workflows/release.yml` with `install.sh build`. To use it instead of building, extract it into an empty
 directory and run `sudo deploy/install.sh install <that directory>` from a checkout of the same tag.
 

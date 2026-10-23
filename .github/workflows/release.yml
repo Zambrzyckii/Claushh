@@ -1,5 +1,6 @@
 # Builds the self-contained API, the frontend and deploy/ with deploy/install.sh whenever a release is published and
-# attaches them to the release as claushh-<tag>-linux-x64.tar.gz (README.md, "Updates").
+# attaches them to the release as claushh-<tag>-linux-x64.tar.gz. README.md, "Updates", says how to install it.
+# Described in docs/ARCHITECTURE.md, "Repository map".
 name: Release
 
 on:
@@ -19,7 +20,10 @@ jobs:
     env:
       TAG: ${{ github.event.release.tag_name }}
     steps:
+      # The build runs the dependencies' install scripts, so the token that can write stays out of the checkout.
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.x
