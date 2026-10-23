@@ -153,7 +153,7 @@ On the server (decisions: `PLAN.md`, "Deployment decisions"):
 | `docs/` | project documentation |
 | `docs/images/` | the README's screenshot, taken from the built frontend on the e2e mock (its files and shell are made up) |
 | `.github/workflows/ci.yml` | CI for every push to `main` and every pull request, which runs the frontend's `npm ci`, integration tests, build and e2e tests |
-| `.github/workflows/release.yml` | on every published release, builds with `deploy/install.sh build` and attaches `claushh-<tag>-linux-x64.tar.gz` to the release |
+| `.github/workflows/release.yml` | on every published release, builds with `deploy/install.sh build`, attaches `claushh-<tag>-linux-x64.tar.gz` to the release and publishes the same files as the package `ghcr.io/zambrzyckii/claushh` (an image that only holds them under `/claushh`, tagged with the version and `latest`) |
 | `.github/dependabot.yml` | Dependabot's weekly version updates for npm in `web/` and for the workflow's actions (NuGet stays out while CI does not run the backend's tests) |
 | `LICENSE` | the MIT License of the project's own code (the third-party files keep their own, `README.md`, "License") |
 | `SECURITY.md` | how to report a vulnerability, privately through GitHub's private vulnerability reporting |

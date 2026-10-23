@@ -1,6 +1,7 @@
-# Builds the self-contained API, the frontend and deploy/ with deploy/install.sh whenever a release is published and
-# attaches them to the release as claushh-<tag>-linux-x64.tar.gz. README.md, "Updates", says how to install it.
-# Described in docs/ARCHITECTURE.md, "Repository map".
+# Builds the self-contained API, the frontend and deploy/ with deploy/install.sh whenever a release is published,
+# attaches them to the release as claushh-<tag>-linux-x64.tar.gz and publishes the same files as the package
+# ghcr.io/zambrzyckii/claushh, an image that holds them under /claushh and runs nothing. README.md, "Updates", says how
+# to install from either. Described in docs/ARCHITECTURE.md, "Repository map".
 name: Release
 
 on:
@@ -17,6 +18,7 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: write
+      packages: write
     env:
       TAG: ${{ github.event.release.tag_name }}
     steps:
@@ -39,3 +41,17 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "$TAG" "$RUNNER_TEMP/claushh-$TAG-linux-x64.tar.gz" --clobber --repo "$GITHUB_REPOSITORY"
+      # After the upload, so that a registry failure cannot cost the release its archive. GHCR takes lowercase names
+      # only, and the source label links the package to this repository.
+      - name: Publish the package
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          image="ghcr.io/${GITHUB_REPOSITORY,,}"
+          printf 'FROM scratch\nCOPY api /claushh/api\nCOPY web /claushh/web\nCOPY deploy /claushh/deploy\n' |
+            docker build -f - -t "$image:${TAG#v}" -t "$image:latest" \
+              --label "org.opencontainers.image.source=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
+              --label "org.opencontainers.image.description=The Claushh $TAG build for linux-x64 (the API, the frontend and deploy/) under /claushh. The image holds files only and runs nothing." \
+              "$RUNNER_TEMP/claushh"
+          echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          docker push --all-tags "$image"

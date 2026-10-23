@@ -370,6 +370,15 @@ Each release on GitHub also carries this build as `claushh-<tag>-linux-x64.tar.g
 `.github/workflows/release.yml` with `install.sh build`. To use it instead of building, extract it into an empty
 directory and run `sudo deploy/install.sh install <that directory>` from a checkout of the same tag.
 
+The same workflow publishes these files as the package `ghcr.io/zambrzyckii/claushh`, tagged with the release's
+version without the `v` and with `latest`. The image only holds the files under `/claushh` and runs nothing. For
+v1.0.0 these commands copy them into a new directory for `install`:
+```bash
+docker create --name claushh-build ghcr.io/zambrzyckii/claushh:1.0.0 none
+docker cp claushh-build:/claushh/. ~/claushh-1.0.0
+docker rm claushh-build
+```
+
 ### Rollback
 
 An older build does not undo database migrations, so a rollback also restores the dump that `install` took before the
