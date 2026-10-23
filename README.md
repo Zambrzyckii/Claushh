@@ -13,7 +13,7 @@ Status: **frontend ready (login with a password or a passkey, sessions and passk
 a diff view, console, workspaces and git, terminal); backend: login, sessions, login protection, passkeys (logging in,
 adding, renaming and removing), the security headers, serving the built frontend, the client IP behind Cloudflare and
 login notifications (stage 1, parts A-C), the files API (stage 2), the console hub (stage 3), the workspaces and git
-API and the terminal hub (stage 4).** Not deployed yet: the steps are in "Deployment" below.
+API and the terminal hub (stage 4).** The steps to deploy it are in "Deployment" below.
 Progress: [`docs/PLAN.md`](docs/PLAN.md), section "Stages".
 
 ## Documentation

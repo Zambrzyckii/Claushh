@@ -877,7 +877,7 @@ The order is chosen so that only already secured things reach the internet.
 
 - [x] **Stage 0: skeleton.** Repo structure, documentation, empty backend with `/api/health`,
       Angular with the layout from the mockup, Postgres in Docker Compose.
-- [ ] **Stage 1: login and access.**
+- [x] **Stage 1: login and access.**
   - [x] Frontend: login form (username, password, TOTP), `authGuard` / `guestGuard`, logout
         with state cleanup, handling of an expired session, tab synchronization, protection against bfcache and open redirect.
   - [x] Backend, part A: PostgreSQL + EF Core, Identity with TOTP, a single account created by a command (`create-user`),
@@ -886,7 +886,7 @@ The order is chosen so that only already secured things reach the internet.
         `revoke-others`, cleanup of old rows, growing lockouts, password reset.
   - [x] Backend, part C: security headers and serving `index.html`, ForwardedHeaders, notifications.
   - [x] Frontend: session countdown in the top bar (stage 5).
-  - [ ] Deployment: Cloudflare Tunnel and Access, systemd service, backups.
+  - [x] Deployment: Cloudflare Tunnel and Access, systemd service, backups.
 - [x] **Stage 2: files and editor.**
   - [x] Frontend: explorer with lazy loading, Monaco with tabs, saving (Ctrl+S), detection of
         conflicts with changes on disk, status bar (cursor, language, unsaved).
