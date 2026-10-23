@@ -909,7 +909,7 @@ The order is chosen so that only already secured things reach the internet.
   - [x] Backend: workspaces and git API from the contract in `ARCHITECTURE.md` (LibGit2Sharp locally, the `git` CLI
         for the network, display names in the database, a background fetch at most every 5 minutes).
   - [x] Backend: hub `/hubs/terminal` from the contract in `ARCHITECTURE.md` (terminal: tmux in control mode).
-- [ ] **Stage 5: polish.**
+- [x] **Stage 5: polish.**
   - [x] Frontend: session countdown with extension on activity, "Security" dialog (active sessions,
         login history, "Log out other sessions" and "Log out everywhere"), diff view against HEAD in the editor.
   - [x] Frontend: fixes from the security review (pasting and typing in the terminal, OSC 8 links, focus,

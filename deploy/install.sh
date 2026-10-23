@@ -124,7 +124,7 @@ install_build() {
     systemctl start claushh.service
     wait_for_health
   else
-    printf 'install.sh: installed into %s; the API is not enabled and stays stopped (first install: README.md, "Deployment", step 7)\n' "$prefix"
+    printf 'install.sh: installed into %s; the API is not enabled and stays stopped (first install: README.md, "Deployment", step 9)\n' "$prefix"
   fi
 }
 
