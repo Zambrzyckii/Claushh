@@ -154,6 +154,7 @@ On the server (decisions: `PLAN.md`, "Deployment decisions"):
 | `docs/images/` | the README's screenshot, taken from the built frontend on the e2e mock (its files and shell are made up) |
 | `.github/workflows/ci.yml` | CI for every push to `main` and every pull request, which runs the frontend's `npm ci`, integration tests, build and e2e tests |
 | `LICENSE` | the MIT License of the project's own code (the third-party files keep their own, `README.md`, "License") |
+| `SECURITY.md` | how to report a vulnerability, privately through GitHub's private vulnerability reporting |
 
 ## Authentication
 
