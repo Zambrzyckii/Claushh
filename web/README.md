@@ -5,6 +5,6 @@ Frontend of the Claushh portal. Architecture and conventions: [`../docs/ARCHITEC
 ```bash
 npm install
 npm start          # http://localhost:4200, /api and /hubs are proxied to http://localhost:5080
-npm test           # integration tests (Vitest)
+npm test           # integration and older unit tests (Vitest)
 npm run build      # production build to dist/web
 ```
