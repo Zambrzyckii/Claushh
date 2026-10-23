@@ -53,4 +53,7 @@ jobs:
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.x
+      # The tests start their shell as /bin/sh (tests/Claushh.Api.Tests/ApiFactory.cs) and are written for bash, as on Arch.
+      - name: Use bash as /bin/sh
+        run: sudo ln -sf bash /bin/sh && readlink -f /bin/sh
       - run: dotnet test
