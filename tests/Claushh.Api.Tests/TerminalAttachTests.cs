@@ -159,7 +159,10 @@ public sealed class TerminalAttachTests(ApiFactory api) : ApiTest(api)
         // 150 × 14 bytes = 2100 bytes: three send-keys commands, with characters split between them.
         var text = string.Concat(Enumerable.Repeat("zażółć😀", 150));
 
-        await tab.TypeAsync(id, "wc -c");
+        // The text goes only once the shell runs the command line. Bytes that arrive while the shell's line editor
+        // holds the terminal reach wc without being echoed.
+        await tab.TypeAsync(id, "echo go''towe; wc -c");
+        await tab.WaitForAsync(id, "gotowe");
         await tab.InputAsync(id, text + "\r\u0004");
 
         var output = await tab.WaitForAsync(id, "\r\n2101\r\n");
