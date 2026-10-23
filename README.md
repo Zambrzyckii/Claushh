@@ -437,3 +437,10 @@ converted with `woff2_compress`.
 The icons in `web/public/file-icons/` and their name map `web/src/app/core/icons/file-icon-map.ts` are copies, so
 builds and tests never need the package. After changing the selection (`ALLOWED` in `web/scripts/file-icons.mjs`) or
 updating `material-icon-theme` (a devDependency), run `cd web && node scripts/file-icons.mjs` and commit both.
+
+## License
+
+The project's own code is under the [MIT License](LICENSE). The third-party files from "Third-party assets" keep their
+own licenses and are not covered by it. These are the icons in `web/public/file-icons/` and the name map generated from
+them, `web/src/app/core/icons/file-icon-map.ts` (both MIT, Material Extensions), and the font in `web/src/fonts/` (SIL
+Open Font License 1.1, plus the licenses of the icon sets that Nerd Fonts adds).

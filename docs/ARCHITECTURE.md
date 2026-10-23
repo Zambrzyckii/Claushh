@@ -151,6 +151,7 @@ On the server (decisions: `PLAN.md`, "Deployment decisions"):
 | `deploy/podman-socket.conf` | user drop-in that moves the `podman.socket` of `workspace` into its home, where the API's unit sees it |
 | `deploy/install.sh` | `build <dir>` (as you: the self-contained API, the frontend build, `deploy/`) and `install <dir>` (as root: the checks, a dump before an update, `/opt/claushh` replaced with the old copy kept as `*.previous`, the units (the pywal copy installed, never enabled), the restart and the health check) |
 | `docs/` | project documentation |
+| `LICENSE` | the MIT License of the project's own code (the third-party files keep their own, `README.md`, "License") |
 
 ## Authentication
 
