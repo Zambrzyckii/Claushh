@@ -1,6 +1,6 @@
 // Notifications:NtfyUrl and Notifications:NtfyToken (docs/ARCHITECTURE.md, "Backend", configuration): where the phone
 // notifications of logins go. The URL is a secret (whoever knows the topic can read it), so it is never logged.
-namespace Claushh.Api.Notifications;
+namespace Claushh.Api.Auth.Notifications;
 
 public sealed class NotificationsOptions
 {

@@ -54,14 +54,13 @@ On the server (decisions: `PLAN.md`, "Deployment decisions"):
 | `src/Properties/launchSettings.json` | development profile, port 5080 |
 | `src/Web/` | HTTP pipeline pieces every feature shares: the hubs' Origin check and `Hubs:AllowedOrigins` |
 | `src/Data/` | `ClaushhDbContext` (Identity tables, `Sessions`, `LoginAttempts`, `Workspaces`, and the console's `Conversations`, `ConversationEvents` and `ConsoleRules`) and the EF Core migrations, applied at startup |
-| `src/Auth/` | login and sessions: session rules, the login gate with its limits and lockout, TOTP, passkeys, the auth cookies and the XSRF filter, `create-user`, cleanup after 90 days. `Realtime/` (hub connections tied to their session and closed when it ends) |
+| `src/Auth/` | login and sessions: session rules, the login gate with its limits and lockout, TOTP, passkeys, the auth cookies and the XSRF filter, `create-user`, cleanup after 90 days. `Notifications/` (phone notifications of logins through ntfy), `Realtime/` (hub connections tied to their session and closed when it ends) |
 | `src/Files/` | the files API and search in files, plus code other folders use too: the projects directory and its path checks (`ProjectPaths`), the text rule, the libc calls |
 | `src/Workspaces/` | workspaces, the repository list of a workspace, cloning |
 | `src/Git/` | repositories read with libgit2, the git CLI, one lock per repository, the background fetch, the git API |
 | `src/Terminal/` | the terminal: the API's own tmux server, the terminals, the `/hubs/terminal` hub, the theme API |
 | `src/Processes/` | the allowlisted environment of every child process (git, tmux, claude) |
 | `src/Frontend/` | serving the built frontend, and the security headers of every response |
-| `src/Notifications/` | phone notifications of logins through ntfy |
 | `src/Claude/` | the console: the claude CLI, conversations, their processes and event log, the `/hubs/console` hub. Not `Console/`, whose namespace would hide `System.Console` |
 | `dotnet-tools.json` | local .NET tools: `dotnet-ef` (`dotnet tool restore`) |
 | `tests/Claushh.Api.Tests/` | backend integration tests: xUnit, the API in memory (`WebApplicationFactory`), PostgreSQL 17 from Testcontainers (`ApiFactory`) |
@@ -969,7 +968,7 @@ Passkeys (`Auth/`; the contract is in "Authentication" → "Passkeys"; decisions
   sign count and backup state, creates the session as a password login does, and sends the passkey login
   notification.
 
-Notifications (`Notifications/`; decisions: `PLAN.md`, "Backend decisions (stage 1, part C)"):
+Notifications (`Auth/Notifications/`; decisions: `PLAN.md`, "Backend decisions (stage 1, part C)"):
 - `LoginNotifications` sends a phone notification through ntfy for these events, never with the user name:
   - every successful password login: title `Claushh: login`, priority `default`, with the address, the device and
     the time in UTC;

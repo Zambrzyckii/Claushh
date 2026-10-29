@@ -2,7 +2,7 @@
 using System.Globalization;
 using System.Text.Json;
 using Claushh.Api.Auth.Realtime;
-using Claushh.Api.Notifications;
+using Claushh.Api.Auth.Notifications;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Identity;
 

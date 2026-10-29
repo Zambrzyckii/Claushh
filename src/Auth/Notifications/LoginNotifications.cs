@@ -7,10 +7,9 @@ using System.Globalization;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Threading.Channels;
-using Claushh.Api.Auth;
 using Microsoft.Extensions.Options;
 
-namespace Claushh.Api.Notifications;
+namespace Claushh.Api.Auth.Notifications;
 
 public sealed class LoginNotifications(IHttpClientFactory clients, IOptions<NotificationsOptions> options, TimeProvider clock,
     ILogger<LoginNotifications> log) : BackgroundService

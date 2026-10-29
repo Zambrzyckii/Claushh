@@ -7,7 +7,7 @@ using Claushh.Api.Files;
 using Claushh.Api.Frontend;
 using Claushh.Api.Git;
 using Claushh.Api.Web;
-using Claushh.Api.Notifications;
+using Claushh.Api.Auth.Notifications;
 using Claushh.Api.Terminal;
 using Claushh.Api.Workspaces;
 using Microsoft.AspNetCore.Antiforgery;
