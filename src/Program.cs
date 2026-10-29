@@ -30,25 +30,9 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.Configure<AuthSessionOptions>(builder.Configuration.GetSection("Sessions"));
-builder.Services.AddOptions<ProjectsOptions>()
-    .Bind(builder.Configuration.GetSection("Projects"))
-    .Validate(options => Path.IsPathFullyQualified(options.Root) && Directory.Exists(options.Root)
-            && Libc.RealPath(options.Root, out _) is not (null or "/"),
-        "Projects:Root must be the absolute path of an existing directory other than / (README.md, \"Running in development\").")
-    .Validate(options => Libc.CanReadWriteAndSearch(options.Root),
-        "Projects:Root must be a directory the API can read, write and search (README.md, \"Running in development\").")
-    .ValidateOnStart();
-builder.Services.AddOptions<GitOptions>()
-    .Bind(builder.Configuration.GetSection("Git"))
-    .Validate(options => options.NetworkTimeout > TimeSpan.Zero, "Git:NetworkTimeout must be a positive time span.")
-    .ValidateOnStart();
-builder.Services.AddOptions<FrontendOptions>()
-    .Bind(builder.Configuration.GetSection("Frontend"))
-    .Validate(options => options.Root.Length == 0 || Path.IsPathFullyQualified(options.Root),
-        "Frontend:Root must be empty or an absolute path (README.md, \"Running the built frontend\").")
-    .Validate(options => !Path.IsPathFullyQualified(options.Root) || FrontendFiles.ReadPolicy(options.Root) is not null,
-        "Frontend:Root must hold the frontend build: an index.html with a Content-Security-Policy <meta> (README.md, \"Running the built frontend\").")
-    .ValidateOnStart();
+builder.Services.AddProjects(builder.Configuration);
+builder.Services.AddGit(builder.Configuration);
+builder.Services.AddFrontend(builder.Configuration);
 builder.Services.AddDbContext<ClaushhDbContext>((services, options) => options.UseNpgsql(
     services.GetRequiredService<IConfiguration>().GetConnectionString("Claushh")
     ?? throw new InvalidOperationException("ConnectionStrings:Claushh is not set (README.md, \"Running in development\").")));
@@ -109,15 +93,8 @@ builder.Services.AddSingleton<LoginNotifications>();
 // Sends the queued notifications; create-user never starts the host, so it never runs this.
 builder.Services.AddHostedService(services => services.GetRequiredService<LoginNotifications>());
 builder.Services.AddScoped<CreateUserCommand>();
-builder.Services.AddSingleton<ProjectPaths>();
-builder.Services.AddSingleton<FileStore>();
-builder.Services.AddSingleton<SearchLimits>();
-builder.Services.AddSingleton<FileSearch>();
-builder.Services.AddSingleton<Repositories>();
+builder.Services.AddFiles();
 builder.Services.AddScoped<WorkspaceStore>();
-builder.Services.AddSingleton<GitRunner>();
-builder.Services.AddSingleton<RepoLocks>();
-builder.Services.AddSingleton<BackgroundFetch>();
 builder.Services.Configure<HubsOptions>(builder.Configuration.GetSection("Hubs"));
 builder.Services.AddSingleton<HubConnections>();
 builder.Services.AddSingleton<HubSessionFilter>();
