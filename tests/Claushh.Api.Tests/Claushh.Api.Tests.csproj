@@ -11,6 +11,7 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
+    <Using Include="Claushh.Api.Tests.Support" />
   </ItemGroup>
 
   <ItemGroup>
