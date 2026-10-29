@@ -2,7 +2,7 @@
 // session can be closed. Every hub registers here through HubSessionFilter.
 using Microsoft.AspNetCore.SignalR;
 
-namespace Claushh.Api.Hubs;
+namespace Claushh.Api.Auth.Realtime;
 
 public sealed class HubConnections
 {

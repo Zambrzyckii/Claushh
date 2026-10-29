@@ -1,5 +1,6 @@
 // API entry point. Stages and decisions: docs/PLAN.md; endpoints, configuration and commands: docs/ARCHITECTURE.md, "Backend".
 using Claushh.Api.Auth;
+using Claushh.Api.Auth.Realtime;
 using Claushh.Api.Claude;
 using Claushh.Api.Data;
 using Claushh.Api.Files;

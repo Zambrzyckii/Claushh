@@ -1,10 +1,9 @@
 // Ties every hub connection to its session (docs/ARCHITECTURE.md, "Backend" → "Hubs"). SignalR checks the cookie only
 // when the WebSocket opens, so this filter checks the session again on connect and on every call, and registers the
 // connection so HubSessionSweep can close it when the session ends. It never extends the session.
-using Claushh.Api.Auth;
 using Microsoft.AspNetCore.SignalR;
 
-namespace Claushh.Api.Hubs;
+namespace Claushh.Api.Auth.Realtime;
 
 public sealed class HubSessionFilter(HubConnections connections) : IHubFilter
 {

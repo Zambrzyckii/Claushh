@@ -1,7 +1,7 @@
 // Login API from docs/ARCHITECTURE.md, "Authentication" → "API contract"; sessions and cookies: "Backend".
 using System.Globalization;
 using System.Text.Json;
-using Claushh.Api.Hubs;
+using Claushh.Api.Auth.Realtime;
 using Claushh.Api.Notifications;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Identity;

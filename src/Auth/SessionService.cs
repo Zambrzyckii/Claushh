@@ -85,10 +85,10 @@ public sealed class SessionService(ClaushhDbContext db, TimeProvider clock, IOpt
     public Task<List<Session>> ListActiveAsync(string userId, CancellationToken ct) =>
         Active().Where(s => s.UserId == userId).OrderByDescending(s => s.CreatedAt).AsNoTracking().ToListAsync(ct);
 
-    // For the hubs (Hubs/HubSessionFilter): whether a session is still active. Like FindActiveAsync, it never extends it.
+    // For the hubs (Auth/Realtime/HubSessionFilter): whether a session is still active. Like FindActiveAsync, it never extends it.
     public Task<bool> IsActiveAsync(Guid id, CancellationToken ct) => Active().AnyAsync(s => s.Id == id, ct);
 
-    // For the hubs (Hubs/HubSessionSweep): which of these sessions are still active, in one query.
+    // For the hubs (Auth/Realtime/HubSessionSweep): which of these sessions are still active, in one query.
     public Task<List<Guid>> ActiveIdsAsync(Guid[] ids, CancellationToken ct) =>
         Active().Where(s => ids.Contains(s.Id)).Select(s => s.Id).ToListAsync(ct);
 

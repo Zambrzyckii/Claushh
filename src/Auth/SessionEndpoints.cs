@@ -1,6 +1,6 @@
 // Session list, ending sessions and the login history for the security window
 // (docs/ARCHITECTURE.md, "Authentication" → "Sessions and login history").
-using Claushh.Api.Hubs;
+using Claushh.Api.Auth.Realtime;
 
 namespace Claushh.Api.Auth;
 

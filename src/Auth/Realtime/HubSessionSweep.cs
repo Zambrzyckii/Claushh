@@ -1,9 +1,8 @@
 // Closes the hub connections of sessions that ended (docs/ARCHITECTURE.md, "Backend" → "Hubs"): every 5 s, which
 // catches expiry and create-user in another process, and right after a logout or revocation in this process. Tests
 // call RunOnceAsync directly instead of waiting for the timer.
-using Claushh.Api.Auth;
 
-namespace Claushh.Api.Hubs;
+namespace Claushh.Api.Auth.Realtime;
 
 public sealed class HubSessionSweep(HubConnections connections, IServiceScopeFactory scopes, TimeProvider clock,
     ILogger<HubSessionSweep> log) : BackgroundService

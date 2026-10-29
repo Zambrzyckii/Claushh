@@ -2,7 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Claushh.Api.Auth;
-using Claushh.Api.Hubs;
+using Claushh.Api.Auth.Realtime;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.DependencyInjection;
