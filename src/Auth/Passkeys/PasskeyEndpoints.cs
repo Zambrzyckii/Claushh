@@ -163,7 +163,7 @@ public static class PasskeyEndpoints
         {
             Name = name,
         };
-        ThrowIfFailed(await users.AddOrUpdatePasskeyAsync(user, passkey));
+        IdentityResults.ThrowIfFailed(await users.AddOrUpdatePasskeyAsync(user, passkey));
         notifications.PasskeyAdded(name, ip, userAgent);
         return Results.Json(Response(passkey), statusCode: StatusCodes.Status201Created);
     }
@@ -182,7 +182,7 @@ public static class PasskeyEndpoints
             return Results.NotFound();
         }
         passkey.Name = name;
-        ThrowIfFailed(await users.AddOrUpdatePasskeyAsync(user, passkey));
+        IdentityResults.ThrowIfFailed(await users.AddOrUpdatePasskeyAsync(user, passkey));
         return Results.NoContent();
     }
 
@@ -203,7 +203,7 @@ public static class PasskeyEndpoints
         }
         var (ip, _) = LoginGuard.ClientIp(http.Connection.RemoteIpAddress);
         notifications.PasskeyRemoved(passkey.Name ?? "", ip, http.Request.Headers.UserAgent.ToString());
-        ThrowIfFailed(await users.RemovePasskeyAsync(user, credentialId));
+        IdentityResults.ThrowIfFailed(await users.RemovePasskeyAsync(user, credentialId));
         return Results.NoContent();
     }
 
@@ -265,7 +265,7 @@ public static class PasskeyEndpoints
             return Results.Unauthorized();
         }
         // The new sign count and backup state: Identity's handler leaves saving them to the caller.
-        ThrowIfFailed(await users.AddOrUpdatePasskeyAsync(result.User, result.Passkey));
+        IdentityResults.ThrowIfFailed(await users.AddOrUpdatePasskeyAsync(result.User, result.Passkey));
         var (_, secret) = await sessions.CreateAsync(result.User, userAgent, ip, http.RequestAborted);
         cookies.AppendSession(http.Response, secret);
         log.LogInformation("Passkey login of {UserName} from {Ip}", result.User.UserName, ip);
@@ -312,13 +312,5 @@ public static class PasskeyEndpoints
     {
         http.Response.Headers.RetryAfter = seconds.ToString(CultureInfo.InvariantCulture);
         return Results.StatusCode(StatusCodes.Status429TooManyRequests);
-    }
-
-    private static void ThrowIfFailed(IdentityResult result)
-    {
-        if (!result.Succeeded)
-        {
-            throw new InvalidOperationException(string.Join(" ", result.Errors.Select(e => e.Description)));
-        }
     }
 }

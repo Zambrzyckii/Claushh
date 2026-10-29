@@ -34,7 +34,7 @@ public sealed class TotpVerifier(UserManager<IdentityUser> users, TimeProvider c
             if (step > lastStep && CryptographicOperations.FixedTimeEquals(
                     Encoding.ASCII.GetBytes(Code(secret, step)), Encoding.ASCII.GetBytes(code)))
             {
-                ThrowIfFailed(await users.SetAuthenticationTokenAsync(user, LoginProvider, LastStepToken,
+                IdentityResults.ThrowIfFailed(await users.SetAuthenticationTokenAsync(user, LoginProvider, LastStepToken,
                     step.ToString(CultureInfo.InvariantCulture)));
                 return true;
             }
@@ -44,15 +44,7 @@ public sealed class TotpVerifier(UserManager<IdentityUser> users, TimeProvider c
 
     // A new key starts without a used step, so its current code can confirm it (`create-user --reset-totp`).
     public async Task ForgetLastStepAsync(IdentityUser user) =>
-        ThrowIfFailed(await users.RemoveAuthenticationTokenAsync(user, LoginProvider, LastStepToken));
-
-    private static void ThrowIfFailed(IdentityResult result)
-    {
-        if (!result.Succeeded)
-        {
-            throw new InvalidOperationException(string.Join(" ", result.Errors.Select(e => e.Description)));
-        }
-    }
+        IdentityResults.ThrowIfFailed(await users.RemoveAuthenticationTokenAsync(user, LoginProvider, LastStepToken));
 
     private static string Code(byte[] secret, long step)
     {

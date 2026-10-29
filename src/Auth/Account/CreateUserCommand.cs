@@ -99,11 +99,7 @@ public sealed class CreateUserCommand(ClaushhDbContext db, UserManager<IdentityU
         var passkeys = await users.GetPasskeysAsync(user);
         foreach (var passkey in passkeys)
         {
-            var result = await users.RemovePasskeyAsync(user, passkey.CredentialId);
-            if (!result.Succeeded)
-            {
-                throw new InvalidOperationException(string.Join(" ", result.Errors.Select(e => e.Description)));
-            }
+            IdentityResults.ThrowIfFailed(await users.RemovePasskeyAsync(user, passkey.CredentialId));
         }
         return passkeys.Count;
     }

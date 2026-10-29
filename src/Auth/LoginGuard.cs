@@ -122,7 +122,7 @@ public sealed class LoginGuard(ClaushhDbContext db, UserManager<IdentityUser> us
             var duration = LockoutDuration(lockouts);
             user.AccessFailedCount = 0;
             user.LockoutEnd = clock.GetUtcNow() + duration;
-            ThrowIfFailed(await users.SetAuthenticationTokenAsync(user, TotpVerifier.LoginProvider, LockoutsToken,
+            IdentityResults.ThrowIfFailed(await users.SetAuthenticationTokenAsync(user, TotpVerifier.LoginProvider, LockoutsToken,
                 lockouts.ToString(CultureInfo.InvariantCulture)));
             log.LogWarning("Account locked for {Minutes} minutes after {Failures} wrong codes, lock {Lockouts} in a row",
                 duration.TotalMinutes, MaxCodeFailures, lockouts);
@@ -136,7 +136,7 @@ public sealed class LoginGuard(ClaushhDbContext db, UserManager<IdentityUser> us
     {
         if (await LockoutsInARowAsync(user) > 0)
         {
-            ThrowIfFailed(await users.RemoveAuthenticationTokenAsync(user, TotpVerifier.LoginProvider, LockoutsToken));
+            IdentityResults.ThrowIfFailed(await users.RemoveAuthenticationTokenAsync(user, TotpVerifier.LoginProvider, LockoutsToken));
         }
         if (user.AccessFailedCount > 0)
         {
@@ -148,7 +148,7 @@ public sealed class LoginGuard(ClaushhDbContext db, UserManager<IdentityUser> us
     // `create-user --reset-totp` and `--reset-password`: shell access on the server proves more than a code.
     public async Task UnlockAsync(IdentityUser user)
     {
-        ThrowIfFailed(await users.RemoveAuthenticationTokenAsync(user, TotpVerifier.LoginProvider, LockoutsToken));
+        IdentityResults.ThrowIfFailed(await users.RemoveAuthenticationTokenAsync(user, TotpVerifier.LoginProvider, LockoutsToken));
         user.AccessFailedCount = 0;
         user.LockoutEnd = null;
         await SaveAsync(user);
@@ -185,15 +185,7 @@ public sealed class LoginGuard(ClaushhDbContext db, UserManager<IdentityUser> us
         return duration < MaxLockout ? duration : MaxLockout;
     }
 
-    private async Task SaveAsync(IdentityUser user) => ThrowIfFailed(await users.UpdateAsync(user));
-
-    private static void ThrowIfFailed(IdentityResult result)
-    {
-        if (!result.Succeeded)
-        {
-            throw new InvalidOperationException(string.Join(" ", result.Errors.Select(e => e.Description)));
-        }
-    }
+    private async Task SaveAsync(IdentityUser user) => IdentityResults.ThrowIfFailed(await users.UpdateAsync(user));
 
     private static int SecondsUntil(DateTimeOffset end, DateTimeOffset now) =>
         Math.Max(1, (int)Math.Ceiling((end - now).TotalSeconds));
