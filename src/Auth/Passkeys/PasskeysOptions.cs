@@ -1,5 +1,5 @@
 // Passkeys:ServerDomain (docs/ARCHITECTURE.md, "Backend", configuration): the portal's host name, the RP ID of every
-// passkey. Checked at start in every environment (Program.cs), so the RP ID never comes from a request's Host.
+// passkey. Checked at start in every environment (AuthModule), so the RP ID never comes from a request's Host.
 namespace Claushh.Api.Auth.Passkeys;
 
 public sealed class PasskeysOptions

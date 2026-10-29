@@ -8,17 +8,13 @@ using Claushh.Api.Files;
 using Claushh.Api.Frontend;
 using Claushh.Api.Git;
 using Claushh.Api.Web;
-using Claushh.Api.Auth.Notifications;
 using Claushh.Api.Auth.Passkeys;
 using Claushh.Api.Platform;
 using Claushh.Api.Projects;
 using Claushh.Api.Terminal;
 using Claushh.Api.Workspaces;
-using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http.Connections;
 using Microsoft.AspNetCore.HttpOverrides;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -29,77 +25,16 @@ using Microsoft.Extensions.Options;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddSingleton(TimeProvider.System);
-builder.Services.Configure<AuthSessionOptions>(builder.Configuration.GetSection("Sessions"));
 builder.Services.AddProjects(builder.Configuration);
 builder.Services.AddGit(builder.Configuration);
 builder.Services.AddFrontend(builder.Configuration);
 builder.Services.AddDbContext<ClaushhDbContext>((services, options) => options.UseNpgsql(
     services.GetRequiredService<IConfiguration>().GetConnectionString("Claushh")
     ?? throw new InvalidOperationException("ConnectionStrings:Claushh is not set (README.md, \"Running in development\").")));
-builder.Services
-    .AddIdentityCore<IdentityUser>(options =>
-    {
-        // Length instead of composition rules; TOTP is mandatory anyway (docs/PLAN.md, "Login and sessions").
-        options.Password.RequiredLength = 12;
-        options.Password.RequireDigit = false;
-        options.Password.RequireLowercase = false;
-        options.Password.RequireUppercase = false;
-        options.Password.RequireNonAlphanumeric = false;
-        // Version 3 adds Identity's passkey table (docs/PLAN.md, "Backend decisions (passkeys)").
-        options.Stores.SchemaVersion = IdentitySchemaVersions.Version3;
-    })
-    .AddEntityFrameworkStores<ClaushhDbContext>();
-
-builder.Services.AddSingleton<AuthCookies>();
-builder.Services.AddScoped<SessionService>();
-builder.Services.AddScoped<TotpVerifier>();
-builder.Services.AddScoped<LoginGuard>();
-builder.Services.AddSingleton<PasskeyCeremonies>();
-builder.Services.AddOptions<PasskeysOptions>()
-    .Bind(builder.Configuration.GetSection("Passkeys"))
-    .Validate(options => Uri.CheckHostName(options.ServerDomain) == UriHostNameType.Dns
-            && options.ServerDomain == options.ServerDomain.ToLowerInvariant(),
-        "Passkeys:ServerDomain must be the portal's lower-case host name, e.g. localhost in development (docs/ARCHITECTURE.md, \"Backend\", configuration).")
-    .ValidateOnStart();
-// Identity's passkey handler, called directly: AddIdentityCore registers none, and SignInManager would keep the
-// ceremonies in Identity's cookies, which the portal does not use (docs/PLAN.md, "Backend decisions (passkeys)").
-builder.Services.AddScoped<IPasskeyHandler<IdentityUser>, PasskeyHandler<IdentityUser>>();
-builder.Services.AddOptions<IdentityPasskeyOptions>().Configure<IOptions<PasskeysOptions>>((options, passkeys) =>
-{
-    options.ServerDomain = passkeys.Value.ServerDomain;
-    options.UserVerificationRequirement = "required";
-    // Login has no user name, so a passkey must be discoverable; the server itself does not check this.
-    options.ResidentKeyRequirement = "required";
-    // The exact origins the portal is served from, as for the hubs. This replaces Identity's own check, so it refuses a
-    // cross-origin or embedded ceremony itself.
-    options.ValidateOrigin = context => ValueTask.FromResult(!context.CrossOrigin && context.TopOrigin is null
-        && context.HttpContext.RequestServices.GetRequiredService<IOptions<HubsOptions>>().Value.AllowedOrigins
-            .Contains(context.Origin, StringComparer.Ordinal));
-});
-builder.Services.AddSingleton<AuthCleanup>();
-builder.Services.AddHostedService(services => services.GetRequiredService<AuthCleanup>());
-builder.Services.AddOptions<NotificationsOptions>()
-    .Bind(builder.Configuration.GetSection("Notifications"))
-    .Validate<IHostEnvironment>((options, environment) => options.NtfyUrl.Length > 0 || !environment.IsProduction(),
-        "Notifications:NtfyUrl must be set in Production (docs/PLAN.md, \"Deployment\").")
-    .Validate(options => options.NtfyUrl.Length == 0
-            || (Uri.TryCreate(options.NtfyUrl, UriKind.Absolute, out var url) && url.Scheme == Uri.UriSchemeHttps),
-        "Notifications:NtfyUrl must be an absolute https URL (docs/ARCHITECTURE.md, \"Backend\", configuration).")
-    .ValidateOnStart();
-// No HttpClient logs: they would write the topic URL, which is a secret.
-builder.Services.AddHttpClient(LoginNotifications.ClientName, client => client.Timeout = LoginNotifications.SendTimeout)
-    .RemoveAllLoggers();
-builder.Services.AddSingleton<LoginNotifications>();
-// Sends the queued notifications; create-user never starts the host, so it never runs this.
-builder.Services.AddHostedService(services => services.GetRequiredService<LoginNotifications>());
-builder.Services.AddScoped<CreateUserCommand>();
+builder.Services.AddAuth(builder.Configuration);
 builder.Services.AddFiles();
 builder.Services.AddScoped<WorkspaceStore>();
 builder.Services.Configure<HubsOptions>(builder.Configuration.GetSection("Hubs"));
-builder.Services.AddSingleton<HubConnections>();
-builder.Services.AddSingleton<HubSessionFilter>();
-builder.Services.AddSingleton<HubSessionSweep>();
-builder.Services.AddHostedService(services => services.GetRequiredService<HubSessionSweep>());
 // For every hub: the session on connect and on every call (docs/ARCHITECTURE.md, "Backend" → "Hubs").
 builder.Services.AddSignalR(options => options.AddFilter<HubSessionFilter>())
     // A console prompt may hold 100,000 characters; every other hub keeps the 32 KB default.
@@ -118,11 +53,7 @@ builder.Services.AddSingleton<Conversations>();
 builder.Services.AddHostedService(services => services.GetRequiredService<Conversations>());
 builder.Services.AddSingleton<ConversationCleanup>();
 builder.Services.AddHostedService(services => services.GetRequiredService<ConversationCleanup>());
-builder.Services.AddAuthentication(SessionAuthenticationHandler.SchemeName)
-    .AddScheme<AuthenticationSchemeOptions, SessionAuthenticationHandler>(SessionAuthenticationHandler.SchemeName, _ => { });
-// Closed by default: an endpoint without .AllowAnonymous() requires a session.
-builder.Services.AddAuthorizationBuilder()
-    .SetFallbackPolicy(new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build());
+builder.Services.AddSessionAuthentication();
 builder.Services.AddXsrfProtection();
 builder.Services.AddProblemDetails();
 

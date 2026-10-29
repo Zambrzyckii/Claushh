@@ -959,7 +959,7 @@ Login protection (`Auth/`):
 Passkeys (`Auth/Passkeys/`; the contract is in "Authentication" → "Passkeys"; decisions: `PLAN.md`, "Backend decisions
 (passkeys)"):
 - Identity stores them (schema version 3): table `AspNetUserPasskeys`, keyed by the credential id, the rest as JSON.
-  Its `PasskeyHandler` makes the options and checks the credentials; `Program.cs` registers it, and the endpoints
+  Its `PasskeyHandler` makes the options and checks the credentials; `AuthModule` registers it, and the endpoints
   call it directly, without `SignInManager`.
 - The RP ID is `Passkeys:ServerDomain`. A credential's origin must be one of `Hubs:AllowedOrigins`, without
   `crossOrigin` and without a top origin; user verification is required; the creation options ask for a discoverable
