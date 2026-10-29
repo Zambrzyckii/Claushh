@@ -846,7 +846,7 @@ Endpoints:
 
 Every other endpoint requires a session (`FallbackPolicy`), and so does a path that matches nothing: a missing file such
 as `/chunk-x.js` gives 401 without a session and 404 with one, never `index.html`. Every POST/PUT/PATCH/DELETE under
-`/api` needs a valid `X-XSRF-TOKEN` (filter `RequireXsrfToken` in `Auth/AuthEndpoints.cs`, 400 otherwise).
+`/api` needs a valid `X-XSRF-TOKEN` (filter `RequireXsrfToken` in `Auth/XsrfFilter.cs`, 400 otherwise).
 
 Hubs (`/hubs/*`) need a session and an Origin header equal to one of `Hubs:AllowedOrigins`: otherwise 403 with an empty
 body, also when Origin is missing. They are outside `/api`, so no XSRF token (the WebSocket upgrade is a GET; the

@@ -14,7 +14,6 @@ using Claushh.Api.Platform;
 using Claushh.Api.Projects;
 using Claushh.Api.Terminal;
 using Claushh.Api.Workspaces;
-using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http.Connections;
@@ -147,18 +146,7 @@ builder.Services.AddAuthentication(SessionAuthenticationHandler.SchemeName)
 // Closed by default: an endpoint without .AllowAnonymous() requires a session.
 builder.Services.AddAuthorizationBuilder()
     .SetFallbackPolicy(new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build());
-builder.Services.AddAntiforgery();
-builder.Services.AddOptions<AntiforgeryOptions>().Configure<AuthCookies>((options, cookies) =>
-{
-    options.HeaderName = "X-XSRF-TOKEN";
-    options.Cookie.Name = cookies.Antiforgery;
-    options.Cookie.Path = "/";
-    options.Cookie.SameSite = SameSiteMode.Strict;
-    options.Cookie.SecurePolicy = cookies.SecureRequired ? CookieSecurePolicy.Always : CookieSecurePolicy.SameAsRequest;
-    // X-Frame-Options comes from SecurityHeaders as DENY on every response; antiforgery would add SAMEORIGIN.
-    options.SuppressXFrameOptionsHeader = true;
-});
-builder.Services.AddSingleton<IAntiforgeryAdditionalDataProvider, SessionAntiforgeryData>();
+builder.Services.AddXsrfProtection();
 builder.Services.AddProblemDetails();
 
 var app = builder.Build();

@@ -29,19 +29,6 @@ public static class AuthEndpoints
         return api;
     }
 
-    // Every state-changing request needs a valid XSRF token (GET, HEAD, OPTIONS and TRACE pass through).
-    // Runs after authentication, because the token is bound to the identity.
-    public static RouteGroupBuilder RequireXsrfToken(this RouteGroupBuilder api)
-    {
-        api.AddEndpointFilter(async (context, next) =>
-        {
-            var http = context.HttpContext;
-            var antiforgery = http.RequestServices.GetRequiredService<IAntiforgery>();
-            return await antiforgery.IsRequestValidAsync(http) ? await next(context) : Results.BadRequest();
-        });
-        return api;
-    }
-
     private static IResult Me(HttpContext http, IAntiforgery antiforgery, AuthCookies cookies, SessionService sessions)
     {
         // Always a fresh token for the current identity, also on 401: the login needs it.
