@@ -1,5 +1,6 @@
 // Names and attributes of the auth cookies: the session, antiforgery and XSRF cookies, and the pending passkey login's
 // challenge (docs/ARCHITECTURE.md, "Backend").
+using Claushh.Api.Auth.Passkeys;
 using Microsoft.Extensions.Options;
 
 namespace Claushh.Api.Auth;

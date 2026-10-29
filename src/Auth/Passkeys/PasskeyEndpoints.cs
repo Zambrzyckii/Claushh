@@ -9,7 +9,7 @@ using System.Text.Json;
 using Claushh.Api.Auth.Notifications;
 using Microsoft.AspNetCore.Identity;
 
-namespace Claushh.Api.Auth;
+namespace Claushh.Api.Auth.Passkeys;
 
 public static class PasskeyEndpoints
 {

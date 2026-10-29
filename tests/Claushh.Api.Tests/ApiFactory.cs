@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
 using Claushh.Api.Auth;
+using Claushh.Api.Auth.Passkeys;
 using Claushh.Api.Claude;
 using Claushh.Api.Data;
 using Claushh.Api.Files;

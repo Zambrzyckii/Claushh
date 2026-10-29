@@ -6,7 +6,7 @@
 using System.Buffers.Text;
 using System.Security.Cryptography;
 
-namespace Claushh.Api.Auth;
+namespace Claushh.Api.Auth.Passkeys;
 
 public sealed class PasskeyCeremonies(TimeProvider clock)
 {
