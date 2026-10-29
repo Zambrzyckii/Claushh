@@ -53,10 +53,11 @@ On the server (decisions: `PLAN.md`, "Deployment decisions"):
 | `src/Program.cs` | the composition root: every registration, the middleware order, the migration at start, `create-user`, the endpoint and hub mapping, the non-dumpable hook |
 | `src/Properties/launchSettings.json` | development profile, port 5080 |
 | `src/Platform/` | Linux adapters that know nothing about the app: the libc calls (`Libc`) and the allowlisted environment of every child process (`ChildEnvironment`) |
+| `src/Projects/` | the projects directory: `Projects:Root` and its start checks, the only code that turns an API path into a path on disk (`ProjectPaths`) |
 | `src/Web/` | HTTP pipeline pieces every feature shares: the hubs' Origin check and `Hubs:AllowedOrigins` |
 | `src/Data/` | `ClaushhDbContext` (Identity tables, `Sessions`, `LoginAttempts`, `Workspaces`, and the console's `Conversations`, `ConversationEvents` and `ConsoleRules`) and the EF Core migrations, applied at startup |
 | `src/Auth/` | login and sessions: session rules, the login gate with its limits and lockout, TOTP, the auth cookies and the XSRF filter, cleanup after 90 days. `Passkeys/` (passkey ceremonies and endpoints), `Account/` (`create-user` and its command line), `Notifications/` (phone notifications of logins through ntfy), `Realtime/` (hub connections tied to their session and closed when it ends) |
-| `src/Files/` | the files API and search in files, plus code other folders use too: the projects directory and its path checks (`ProjectPaths`), the text rule |
+| `src/Files/` | the files API and search in files, plus code other folders use too: the text rule |
 | `src/Workspaces/` | workspaces, the repository list of a workspace, cloning |
 | `src/Git/` | repositories read with libgit2, the git CLI, one lock per repository, the background fetch, the git API |
 | `src/Terminal/` | the terminal: the API's own tmux server, the terminals, the `/hubs/terminal` hub, the theme API |
@@ -988,7 +989,7 @@ Notifications (`Auth/Notifications/`; decisions: `PLAN.md`, "Backend decisions (
   and the login is not affected. The notification client has no HTTP logging for the same reason.
 - Without `Notifications:NtfyUrl` nothing is queued, and one log line at start says notifications are off.
 
-Files (`Files/`; the rules the frontend can see are in "Files API contract"):
+Files (`Files/`, paths in `Projects/`; the rules the frontend can see are in "Files API contract"):
 - Every path goes through `ProjectPaths.Resolve` first (`FileEndpoints`: `400` when it returns null, before any file is
   touched); `FileStore` works on the resolved path.
 - The version is the lower-case hex SHA-256 of the file's bytes on disk (the BOM included), and `absent` when there is

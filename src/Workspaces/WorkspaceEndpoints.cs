@@ -1,9 +1,9 @@
 // Workspaces and their repositories for the Workspace panel (docs/ARCHITECTURE.md, "Workspaces and git" → "API
 // contract").
 using System.Text.Json;
-using Claushh.Api.Files;
 using Claushh.Api.Git;
 using Claushh.Api.Platform;
+using Claushh.Api.Projects;
 using Microsoft.Extensions.Options;
 
 namespace Claushh.Api.Workspaces;

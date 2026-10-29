@@ -1,7 +1,7 @@
 // The account's terminals in creation order (docs/ARCHITECTURE.md, "Backend" → "Terminal"; decisions: docs/PLAN.md,
 // "Backend decisions (stage 4)"). A singleton, because a hub instance lives for one call. Also the hosted service that
 // prepares the tmux server at start (never for create-user, which exits before the host runs) and ends it on a stop.
-using Claushh.Api.Files;
+using Claushh.Api.Projects;
 using Microsoft.AspNetCore.SignalR;
 
 namespace Claushh.Api.Terminal;

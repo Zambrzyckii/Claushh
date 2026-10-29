@@ -2,9 +2,9 @@
 // from the Workspaces table (docs/ARCHITECTURE.md, "Workspaces and git"; decisions: docs/PLAN.md, "Backend decisions
 // (stage 4)"). The file system decides which workspaces exist.
 using Claushh.Api.Data;
-using Claushh.Api.Files;
 using Claushh.Api.Git;
 using Claushh.Api.Platform;
+using Claushh.Api.Projects;
 using Microsoft.EntityFrameworkCore;
 
 namespace Claushh.Api.Workspaces;

@@ -2,7 +2,7 @@ using System.Net;
 using System.Text.Json;
 using Claushh.Api.Claude;
 using Claushh.Api.Data;
-using Claushh.Api.Files;
+using Claushh.Api.Projects;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.DependencyInjection;
 

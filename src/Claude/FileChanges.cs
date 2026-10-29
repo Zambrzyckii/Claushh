@@ -2,8 +2,8 @@
 // decisions (stage 3)"): an edit's counts from the CLI's own diff, the files an edit or a command changed relative to
 // the projects directory, and the cap on a step's output.
 using System.Text.Json;
-using Claushh.Api.Files;
 using Claushh.Api.Git;
+using Claushh.Api.Projects;
 
 namespace Claushh.Api.Claude;
 

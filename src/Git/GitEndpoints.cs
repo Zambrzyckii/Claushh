@@ -1,6 +1,6 @@
 // The git API for the explorer's badges, the status bar, the diff view and Pull / Push (docs/ARCHITECTURE.md,
 // "Workspaces and git" → "API contract").
-using Claushh.Api.Files;
+using Claushh.Api.Projects;
 using Microsoft.Extensions.Options;
 
 namespace Claushh.Api.Git;

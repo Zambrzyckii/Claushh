@@ -9,8 +9,8 @@ using System.Collections.Concurrent;
 using System.ComponentModel;
 using System.Text;
 using System.Text.Json;
-using Claushh.Api.Files;
 using Claushh.Api.Git;
+using Claushh.Api.Projects;
 using Microsoft.AspNetCore.SignalR;
 
 namespace Claushh.Api.Claude;

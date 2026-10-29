@@ -1,5 +1,7 @@
 // POST /api/search (docs/ARCHITECTURE.md, "Files and editor" → "Search API contract"): a POST keeps the searched text out
 // of URLs, and so out of every proxy and access log. Every 400 comes before any file is read, and none has a body.
+using Claushh.Api.Projects;
+
 namespace Claushh.Api.Files;
 
 public static class SearchEndpoints

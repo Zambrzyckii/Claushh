@@ -7,8 +7,8 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
-using Claushh.Api.Files;
 using Claushh.Api.Platform;
+using Claushh.Api.Projects;
 using Microsoft.Extensions.Options;
 
 namespace Claushh.Api.Claude;

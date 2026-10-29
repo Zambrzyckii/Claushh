@@ -7,6 +7,7 @@
 using System.Diagnostics;
 using System.Text.RegularExpressions;
 using Claushh.Api.Git;
+using Claushh.Api.Projects;
 using Microsoft.Extensions.FileSystemGlobbing;
 
 namespace Claushh.Api.Files;

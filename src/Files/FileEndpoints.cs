@@ -1,4 +1,6 @@
 // The files API for the explorer and the editor (docs/ARCHITECTURE.md, "Files and editor" → "Files API contract").
+using Claushh.Api.Projects;
+
 namespace Claushh.Api.Files;
 
 public static class FileEndpoints

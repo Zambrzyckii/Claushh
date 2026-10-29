@@ -1,4 +1,4 @@
-using Claushh.Api.Files;
+using Claushh.Api.Projects;
 using Claushh.Api.Terminal;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.SignalR.Client;

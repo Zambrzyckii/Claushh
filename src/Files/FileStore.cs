@@ -2,6 +2,7 @@
 // half-written file (docs/ARCHITECTURE.md, "Files and editor"; decisions: docs/PLAN.md, "Backend decisions (stage 2)").
 using System.Security.Cryptography;
 using System.Text;
+using Claushh.Api.Projects;
 
 namespace Claushh.Api.Files;
 

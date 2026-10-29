@@ -4,6 +4,7 @@
 // opened for one call (for IgnoreRules, one search's walk) and disposed, never shared between threads.
 using Claushh.Api.Files;
 using Claushh.Api.Platform;
+using Claushh.Api.Projects;
 using LibGit2Sharp;
 
 namespace Claushh.Api.Git;

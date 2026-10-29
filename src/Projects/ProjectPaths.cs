@@ -5,7 +5,7 @@
 using Claushh.Api.Platform;
 using Microsoft.Extensions.Options;
 
-namespace Claushh.Api.Files;
+namespace Claushh.Api.Projects;
 
 // Missing: the name is free in an existing directory (a save may create it). NotFound: nothing is there, or a directory
 // on the way cannot be searched.

@@ -1,5 +1,5 @@
 // The projects directory the portal works in (docs/ARCHITECTURE.md, "Backend", configuration).
-namespace Claushh.Api.Files;
+namespace Claushh.Api.Projects;
 
 public sealed class ProjectsOptions
 {
