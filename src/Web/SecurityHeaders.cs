@@ -1,7 +1,7 @@
 // The headers of docs/ARCHITECTURE.md, "Security headers", that go on every response, and Cache-Control: no-store on every
 // /api response. The page's CSP comes from FrontendFiles. Registered before the error handler and authorization
 // (Program.cs), so their 401, the Origin check's 403 and the error handler's 500 get the headers too.
-namespace Claushh.Api.Frontend;
+namespace Claushh.Api.Web;
 
 public static class SecurityHeaders
 {

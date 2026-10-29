@@ -54,14 +54,14 @@ On the server (decisions: `PLAN.md`, "Deployment decisions"):
 | `src/Properties/launchSettings.json` | development profile, port 5080 |
 | `src/Platform/` | Linux adapters that know nothing about the app: the libc calls (`Libc`) and the allowlisted environment of every child process (`ChildEnvironment`) |
 | `src/Projects/` | the projects directory: `Projects:Root` and its start checks, the only code that turns an API path into a path on disk (`ProjectPaths`), the text rule with the 5 MB limit (`TextRule`) |
-| `src/Web/` | HTTP pipeline pieces every feature shares: the hubs' Origin check and `Hubs:AllowedOrigins` |
+| `src/Web/` | HTTP pipeline pieces every feature shares: the security headers, the `404` for paths that start with `//`, the hubs' Origin check and `Hubs:AllowedOrigins` |
 | `src/Data/` | `ClaushhDbContext` (Identity tables, `Sessions`, `LoginAttempts`, `Workspaces`, and the console's `Conversations`, `ConversationEvents` and `ConsoleRules`) and the EF Core migrations, applied at startup |
 | `src/Auth/` | login and sessions: session rules, the login gate with its limits and lockout, TOTP, the auth cookies and the XSRF filter, cleanup after 90 days. `Passkeys/` (passkey ceremonies and endpoints), `Account/` (`create-user` and its command line), `Notifications/` (phone notifications of logins through ntfy), `Realtime/` (hub connections tied to their session and closed when it ends) |
 | `src/Files/` | the files API and search in files |
 | `src/Workspaces/` | workspaces, the repository list of a workspace, cloning |
 | `src/Git/` | repositories read with libgit2, the git CLI, one lock per repository, the background fetch, the git API |
 | `src/Terminal/` | the terminal: the API's own tmux server, the terminals, the `/hubs/terminal` hub, the theme API |
-| `src/Frontend/` | serving the built frontend, and the security headers of every response |
+| `src/Frontend/` | serving the built frontend (`Frontend:Root`) |
 | `src/Claude/` | the console: the claude CLI, conversations, their processes and event log, the `/hubs/console` hub. Not `Console/`, whose namespace would hide `System.Console` |
 | `dotnet-tools.json` | local .NET tools: `dotnet-ef` (`dotnet tool restore`) |
 | `tests/Claushh.Api.Tests/` | backend integration tests: xUnit, the API in memory (`WebApplicationFactory`), PostgreSQL 17 from Testcontainers (`ApiFactory`) |
@@ -347,7 +347,7 @@ the portal in a frame of a foreign page (clickjacking).
 - `main.ts` does not start the app inside a frame (`window.top !== window.self`). This is only a safeguard in case the
   `frame-ancestors` header is missing.
 
-Backend requirements, as the API sends them (`Frontend/`). The mock in `web/e2e/mock-api/` sends a subset: the
+Backend requirements, as the API sends them (`Web/SecurityHeaders.cs`, `Frontend/`). The mock in `web/e2e/mock-api/` sends a subset: the
 `X-Frame-Options` and the CSP only with `index.html`, and no `Cache-Control` on the other files. The e2e tests check in
 every test that the page reports no CSP violations.
 - `index.html` (also as the fallback for the app's paths): a `Content-Security-Policy` header with the policy of its
@@ -853,7 +853,7 @@ body, also when Origin is missing. They are outside `/api`, so no XSRF token (th
 Origin check and the `SameSite=Strict` cookie cover cross-site requests). An unknown path under `/hubs` gives 401
 without a session and 404 with one, never `index.html`.
 
-Every response has the headers of "Security headers" (`Frontend/SecurityHeaders.cs`), and all `/api/*` responses have
+Every response has the headers of "Security headers" (`Web/SecurityHeaders.cs`), and all `/api/*` responses have
 `Cache-Control: no-store`. An unknown `/api/*` path (also `/api` itself) gives 401 without a session and 404 with one,
 never `index.html`. Unhandled errors give 500 as `application/problem+json`, without details outside Development.
 
@@ -893,7 +893,7 @@ Frontend (`Frontend/`; decisions: `PLAN.md`, "Backend decisions (stage 1, part C
 - Endpoint matching (`UseRouting`) runs before the files, so `/api` and `/hubs` paths never get a file or the page. A
   missing file is 401 or 404 like any unknown path. Without the key there is no frontend: development uses `ng serve`.
 - A path that starts with `//` is `404` with an empty body, with or without a session, before routing and the files
-  (`FrontendFiles.UseDoubleSlashNotFound`), also without `Frontend:Root`.
+  (`DoubleSlashNotFound.UseDoubleSlashNotFound` in `Web/`), also without `Frontend:Root`.
 - Content types come from the framework's list, except `.ttf` as `font/ttf` and `.woff` as `font/woff` (`.woff2` is `font/woff2` and `.svg` `image/svg+xml` already); unknown types are not served. `index.html`
   is `no-store`, every other file `no-cache` (revalidated with its ETag).
 - `SecurityHeaders` sets the headers of "Security headers" on every response; the CSP goes only with the page.
