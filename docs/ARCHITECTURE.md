@@ -54,7 +54,7 @@ On the server (decisions: `PLAN.md`, "Deployment decisions"):
 | `src/Properties/launchSettings.json` | development profile, port 5080 |
 | `src/Platform/` | Linux adapters that know nothing about the app: the libc calls (`Libc`) and the allowlisted environment of every child process (`ChildEnvironment`) |
 | `src/Projects/` | the projects directory: `Projects:Root` and its start checks, the only code that turns an API path into a path on disk (`ProjectPaths`), the text rule with the 5 MB limit (`TextRule`) |
-| `src/Web/` | HTTP pipeline pieces every feature shares: the security headers, the `404` for paths that start with `//`, the hubs' Origin check and `Hubs:AllowedOrigins` |
+| `src/Web/` | HTTP pipeline pieces every feature shares: the security headers, the `404` for paths that start with `//`, the hubs' Origin check and `Hubs:AllowedOrigins`, the JSON body reader (`JsonBody`) and the `{"message"}` body (`MessageResponse`) |
 | `src/Data/` | `ClaushhDbContext` (Identity tables, `Sessions`, `LoginAttempts`, `Workspaces`, and the console's `Conversations`, `ConversationEvents` and `ConsoleRules`) and the EF Core migrations, applied at startup |
 | `src/Auth/` | login and sessions: session rules, the login gate with its limits and lockout, TOTP, the auth cookies and the XSRF filter, cleanup after 90 days. `Passkeys/` (passkey ceremonies and endpoints), `Account/` (`create-user` and its command line), `Notifications/` (phone notifications of logins through ntfy), `Realtime/` (hub connections tied to their session and closed when it ends) |
 | `src/Files/` | the files API and search in files |

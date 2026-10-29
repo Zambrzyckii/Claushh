@@ -1,6 +1,7 @@
 // The git API for the explorer's badges, the status bar, the diff view and Pull / Push (docs/ARCHITECTURE.md,
 // "Workspaces and git" → "API contract").
 using Claushh.Api.Projects;
+using Claushh.Api.Web;
 using Microsoft.Extensions.Options;
 
 namespace Claushh.Api.Git;
@@ -8,7 +9,6 @@ namespace Claushh.Api.Git;
 public static class GitEndpoints
 {
     public sealed record ShowResponse(string Content);
-    public sealed record MessageResponse(string Message);
     public sealed record PullResponse(string Message, IReadOnlyList<string> ChangedPaths);
 
     public static RouteGroupBuilder MapGitEndpoints(this RouteGroupBuilder api)

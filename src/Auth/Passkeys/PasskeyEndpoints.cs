@@ -7,6 +7,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using Claushh.Api.Auth.Notifications;
+using Claushh.Api.Web;
 using Microsoft.AspNetCore.Identity;
 
 namespace Claushh.Api.Auth.Passkeys;
@@ -17,7 +18,6 @@ public static class PasskeyEndpoints
     public sealed record AddPasskeyRequest(JsonElement Credential, string? Name);
     public sealed record RenamePasskeyRequest(string? Name);
     public sealed record PasskeyResponse(string Id, string Name, DateTimeOffset CreatedAt, bool Synced);
-    public sealed record MessageResponse(string Message);
     public sealed record PasskeyLoginRequest(JsonElement Credential);
 
     private const int MaxPasskeys = 10;
@@ -49,7 +49,7 @@ public static class PasskeyEndpoints
         var session = SessionAuthenticationHandler.Current(http);
         var (ip, limitKey) = LoginGuard.ClientIp(http.Connection.RemoteIpAddress);
         var userAgent = http.Request.Headers.UserAgent.ToString();
-        var body = await ReadJsonAsync<ReauthenticateRequest>(http);
+        var body = await JsonBody.ReadAsync<ReauthenticateRequest>(http);
         using var gate = await guard.EnterAsync(http.RequestAborted);
         if (gate is null)
         {
@@ -117,7 +117,7 @@ public static class PasskeyEndpoints
         var session = SessionAuthenticationHandler.Current(http);
         var (ip, _) = LoginGuard.ClientIp(http.Connection.RemoteIpAddress);
         var userAgent = http.Request.Headers.UserAgent.ToString();
-        var body = await ReadJsonAsync<AddPasskeyRequest>(http);
+        var body = await JsonBody.ReadAsync<AddPasskeyRequest>(http);
         if (body is null || body.Credential.ValueKind != JsonValueKind.Object)
         {
             return Results.BadRequest(new MessageResponse(NotAdded));
@@ -171,7 +171,7 @@ public static class PasskeyEndpoints
     // The name before the id, as when adding.
     private static async Task<IResult> Rename(string id, HttpContext http, UserManager<IdentityUser> users)
     {
-        var body = await ReadJsonAsync<RenamePasskeyRequest>(http);
+        var body = await JsonBody.ReadAsync<RenamePasskeyRequest>(http);
         if (ValidName(body?.Name) is not { } name)
         {
             return Results.BadRequest(new MessageResponse(NameRule));
@@ -234,7 +234,7 @@ public static class PasskeyEndpoints
         var log = loggers.CreateLogger("Claushh.Api.Auth.PasskeyLogin");
         var (ip, limitKey) = LoginGuard.ClientIp(http.Connection.RemoteIpAddress);
         var userAgent = http.Request.Headers.UserAgent.ToString();
-        var body = await ReadJsonAsync<PasskeyLoginRequest>(http);
+        var body = await JsonBody.ReadAsync<PasskeyLoginRequest>(http);
         using var gate = await guard.EnterAsync(http.RequestAborted);
         if (gate is null)
         {
@@ -312,25 +312,6 @@ public static class PasskeyEndpoints
     {
         http.Response.Headers.RetryAfter = seconds.ToString(CultureInfo.InvariantCulture);
         return Results.StatusCode(StatusCodes.Status429TooManyRequests);
-    }
-
-    // null for a body that is missing, not JSON or of the wrong shape. Read by hand, as in AuthEndpoints.Logout: with an
-    // inferred JSON body, routing skips the endpoint for a request without a JSON content type, and the catch-all /api
-    // route would answer 404 instead.
-    private static async Task<T?> ReadJsonAsync<T>(HttpContext http) where T : class
-    {
-        if (!http.Request.HasJsonContentType())
-        {
-            return null;
-        }
-        try
-        {
-            return await http.Request.ReadFromJsonAsync<T>(http.RequestAborted);
-        }
-        catch (JsonException)
-        {
-            return null;
-        }
     }
 
     private static void ThrowIfFailed(IdentityResult result)

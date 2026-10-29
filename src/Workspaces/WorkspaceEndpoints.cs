@@ -1,9 +1,9 @@
 // Workspaces and their repositories for the Workspace panel (docs/ARCHITECTURE.md, "Workspaces and git" → "API
 // contract").
-using System.Text.Json;
 using Claushh.Api.Git;
 using Claushh.Api.Platform;
 using Claushh.Api.Projects;
+using Claushh.Api.Web;
 using Microsoft.Extensions.Options;
 
 namespace Claushh.Api.Workspaces;
@@ -11,7 +11,6 @@ namespace Claushh.Api.Workspaces;
 public static class WorkspaceEndpoints
 {
     public sealed record CreateWorkspaceRequest(string? Name);
-    public sealed record MessageResponse(string Message);
     public sealed record CloneRequest(string? Workspace, string? Url);
 
     public static RouteGroupBuilder MapWorkspaceEndpoints(this RouteGroupBuilder api)
@@ -28,7 +27,7 @@ public static class WorkspaceEndpoints
 
     private static async Task<IResult> Create(HttpContext http, WorkspaceStore workspaces)
     {
-        var body = await ReadJsonAsync<CreateWorkspaceRequest>(http);
+        var body = await JsonBody.ReadAsync<CreateWorkspaceRequest>(http);
         var result = await workspaces.CreateAsync(body?.Name, http.RequestAborted);
         return result.Status switch
         {
@@ -66,7 +65,7 @@ public static class WorkspaceEndpoints
     private static async Task<IResult> Clone(HttpContext http, WorkspaceStore workspaces, Repositories repositories,
         RepoLocks locks, GitRunner git, IOptionsMonitor<GitOptions> options)
     {
-        var body = await ReadJsonAsync<CloneRequest>(http);
+        var body = await JsonBody.ReadAsync<CloneRequest>(http);
         if (body is null || workspaces.Find(body.Workspace) is not { } workspace)
         {
             return Results.BadRequest();
@@ -133,25 +132,6 @@ public static class WorkspaceEndpoints
         if (Libc.FileType(target) == Libc.S_IFDIR)
         {
             Directory.Delete(target, recursive: true);
-        }
-    }
-
-    // null for a body that is missing, not JSON or of the wrong shape. Read by hand, as in AuthEndpoints.Logout: with an
-    // inferred JSON body, routing skips the endpoint for a request without a JSON content type, and the catch-all /api
-    // route would answer 404 instead of 400.
-    private static async Task<T?> ReadJsonAsync<T>(HttpContext http) where T : class
-    {
-        if (!http.Request.HasJsonContentType())
-        {
-            return null;
-        }
-        try
-        {
-            return await http.Request.ReadFromJsonAsync<T>(http.RequestAborted);
-        }
-        catch (JsonException)
-        {
-            return null;
         }
     }
 }
