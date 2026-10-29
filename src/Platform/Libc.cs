@@ -7,7 +7,7 @@
 using System.Runtime.InteropServices;
 using Microsoft.Win32.SafeHandles;
 
-namespace Claushh.Api.Files;
+namespace Claushh.Api.Platform;
 
 internal static class Libc
 {

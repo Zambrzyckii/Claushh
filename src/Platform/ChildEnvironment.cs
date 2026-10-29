@@ -4,7 +4,7 @@
 // and `ClaudeCli` (the console) reuse it with their own overrides.
 using System.Diagnostics;
 
-namespace Claushh.Api.Processes;
+namespace Claushh.Api.Platform;
 
 public static class ChildEnvironment
 {

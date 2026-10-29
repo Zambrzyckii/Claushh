@@ -2,6 +2,7 @@
 // It refuses everything that leads outside the projects directory or into .git, also through symlinks
 // (docs/ARCHITECTURE.md, "Files and editor"; decisions: docs/PLAN.md, "Backend decisions (stage 2)"). The files API
 // uses it, and so do workspaces, git, the terminal and the console.
+using Claushh.Api.Platform;
 using Microsoft.Extensions.Options;
 
 namespace Claushh.Api.Files;

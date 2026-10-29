@@ -3,6 +3,7 @@
 using System.Text.Json;
 using Claushh.Api.Files;
 using Claushh.Api.Git;
+using Claushh.Api.Platform;
 using Microsoft.Extensions.Options;
 
 namespace Claushh.Api.Workspaces;

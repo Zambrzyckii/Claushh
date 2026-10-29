@@ -52,14 +52,14 @@ On the server (decisions: `PLAN.md`, "Deployment decisions"):
 | `src/` | the ASP.NET Core backend: one project (`Claushh.Api.csproj`, root namespace `Claushh.Api`) with one folder per feature, and every file's namespace follows its folder |
 | `src/Program.cs` | the composition root: every registration, the middleware order, the migration at start, `create-user`, the endpoint and hub mapping, the non-dumpable hook |
 | `src/Properties/launchSettings.json` | development profile, port 5080 |
+| `src/Platform/` | Linux adapters that know nothing about the app: the libc calls (`Libc`) and the allowlisted environment of every child process (`ChildEnvironment`) |
 | `src/Web/` | HTTP pipeline pieces every feature shares: the hubs' Origin check and `Hubs:AllowedOrigins` |
 | `src/Data/` | `ClaushhDbContext` (Identity tables, `Sessions`, `LoginAttempts`, `Workspaces`, and the console's `Conversations`, `ConversationEvents` and `ConsoleRules`) and the EF Core migrations, applied at startup |
 | `src/Auth/` | login and sessions: session rules, the login gate with its limits and lockout, TOTP, the auth cookies and the XSRF filter, cleanup after 90 days. `Passkeys/` (passkey ceremonies and endpoints), `Account/` (`create-user` and its command line), `Notifications/` (phone notifications of logins through ntfy), `Realtime/` (hub connections tied to their session and closed when it ends) |
-| `src/Files/` | the files API and search in files, plus code other folders use too: the projects directory and its path checks (`ProjectPaths`), the text rule, the libc calls |
+| `src/Files/` | the files API and search in files, plus code other folders use too: the projects directory and its path checks (`ProjectPaths`), the text rule |
 | `src/Workspaces/` | workspaces, the repository list of a workspace, cloning |
 | `src/Git/` | repositories read with libgit2, the git CLI, one lock per repository, the background fetch, the git API |
 | `src/Terminal/` | the terminal: the API's own tmux server, the terminals, the `/hubs/terminal` hub, the theme API |
-| `src/Processes/` | the allowlisted environment of every child process (git, tmux, claude) |
 | `src/Frontend/` | serving the built frontend, and the security headers of every response |
 | `src/Claude/` | the console: the claude CLI, conversations, their processes and event log, the `/hubs/console` hub. Not `Console/`, whose namespace would hide `System.Console` |
 | `dotnet-tools.json` | local .NET tools: `dotnet-ef` (`dotnet tool restore`) |
@@ -843,7 +843,7 @@ Configuration:
 
 | Key | Where | Meaning |
 |---|---|---|
-| `ASPNETCORE_ENVIRONMENT` | development: `launchSettings.json` (`Development`); tests: `Testing`; server: `Production` (the unit) | the host environment: `appsettings.<environment>.json` and the Production rules (`Notifications:NtfyUrl` required; the process made non-dumpable once the host has started, `Files/Libc.cs`) |
+| `ASPNETCORE_ENVIRONMENT` | development: `launchSettings.json` (`Development`); tests: `Testing`; server: `Production` (the unit) | the host environment: `appsettings.<environment>.json` and the Production rules (`Notifications:NtfyUrl` required; the process made non-dumpable once the host has started, `Platform/Libc.cs`) |
 | `ASPNETCORE_URLS` | development: `launchSettings.json` (`http://localhost:5080`); server: `http://127.0.0.1:5090` (the unit) | where Kestrel listens; on the server only loopback, where `cloudflared` connects |
 | `AllowedHosts` | `appsettings.json` (`*`); server: `<domain>` in `/etc/claushh/claushh.env` | the Host header values the API answers (host filtering; another Host gets 400); local requests on the server send `Host: <domain>` |
 | `Logging:Console:FormatterName` | not set; server: `systemd` (the unit) | the console log format; `systemd` writes one line per message with its syslog level, for the journal |
@@ -1049,7 +1049,7 @@ Workspaces and git (`Workspaces/`, `Git/`):
   trim (not .NET's), code points (not UTF-16 characters), and İ lowercased as JavaScript does.
 - The `git` CLI runs only for the network and its local steps (`GitRunner`): without a shell (`ArgumentList`), stdin
   closed, in the repository (the workspace for a clone), always with `-c core.fsmonitor=false`. Its environment is
-  built by `Processes/ChildEnvironment`: not the API's whole environment (a denylist would miss whatever variable the
+  built by `Platform/ChildEnvironment`: not the API's whole environment (a denylist would miss whatever variable the
   API's own process picks up next), but an allowlist (`HOME`, `USER`, `LOGNAME`, `SHELL`, `PATH`, `LANG`, `LANGUAGE`,
   every `LC_*`, `TZ`, `LANG=C.UTF-8` added when none of `LANG`/`LC_ALL`/`LC_CTYPE` is set), then `GitRunner`'s own
   overrides: `GIT_ALLOW_PROTOCOL=https` (git then allows only https and reads no protocol rule from its configuration
@@ -1120,7 +1120,7 @@ Terminal (`Terminal/`; the contract is in "Terminal"):
   Without tmux 3.7, or without `Terminal:SocketDirectory` and `XDG_RUNTIME_DIR`, the error log says so,
   `ListTerminals` is empty and the other methods answer "Terminal unavailable"; the rest of the API works.
 - Every tmux process gets only HOME, USER, LOGNAME, SHELL, PATH, LANG, LANGUAGE, LC_* and TZ of the API's environment
-  (`Processes/ChildEnvironment`), `LANG=C.UTF-8` when no locale variable is set, `COLORTERM=truecolor`, then
+  (`Platform/ChildEnvironment`), `LANG=C.UTF-8` when no locale variable is set, `COLORTERM=truecolor`, then
   `Terminal:Environment`: none of the API's own variables reach tmux or the shell (the connection string,
   `ASPNETCORE_*`, `DOTNET_*`, `CLAUDECODE*`); the login shell's profile may still set its own, e.g. `DOTNET_ROOT`. The
   shell is the login shell from SHELL and runs as the API's user.
@@ -1207,7 +1207,7 @@ Console (`Claude/`; the contract is in "Console"; decisions: `PLAN.md`, "Backend
   "cleanupPeriodDays":90}`, plus `apiKeyHelper` with `Console:ApiKeyFile`. `--restricted` ignores the user, project and
   local settings files, so a cloned repository's `.claude/` settings (hooks, `env`, `apiKeyHelper`, allow rules) are
   not used, and with `--strict-mcp-config` neither is its `.mcp.json`.
-- The process's environment: the allowlist of `Processes/ChildEnvironment`, then `XDG_CONFIG_HOME`, `XDG_RUNTIME_DIR`
+- The process's environment: the allowlist of `Platform/ChildEnvironment`, then `XDG_CONFIG_HOME`, `XDG_RUNTIME_DIR`
   and `DBUS_SESSION_BUS_ADDRESS` when the API has them (as for git, so `git push` in a step reaches the credential
   helper), `CLAUDE_CONFIG_DIR`, `DISABLE_UPDATES=1`, `DISABLE_AUTOUPDATER=1`, `TERM=dumb`, then `Console:Environment`.
   The API's own variables (the connection string, `ANTHROPIC_API_KEY`, `CLAUDECODE*`) never reach the CLI.

@@ -4,6 +4,7 @@
 // parse error's message (it would quote the file) is returned or logged.
 using System.Text.Json;
 using Claushh.Api.Files;
+using Claushh.Api.Platform;
 
 namespace Claushh.Api.Terminal;
 

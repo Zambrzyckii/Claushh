@@ -3,6 +3,7 @@
 // whose .git is a real directory and which libgit2 opens; anything else is not listed and is a 404. Repositories are
 // opened for one call (for IgnoreRules, one search's walk) and disposed, never shared between threads.
 using Claushh.Api.Files;
+using Claushh.Api.Platform;
 using LibGit2Sharp;
 
 namespace Claushh.Api.Git;
