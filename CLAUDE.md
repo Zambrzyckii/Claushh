@@ -16,10 +16,12 @@ In this repository documentation has priority. It should let you find your way a
 
 ## Commits
 
-- **Do not make commits on your own.** After finishing a change, propose a commit name
-  and wait for approval. The name in English, a short sentence in the imperative mood,
-  **without prefixes** such as `feat:`, `docs:`, `fix(api):` (e.g. `add TOTP login`).
-- Commit only after explicit permission, with exactly the approved message.
+- Work on a feature branch, never directly on `main`. Commit on your own after each finished and verified step, and
+  push once the whole task is done.
+- A commit message is one imperative English sentence of 3 to 8 words with a capital first letter, no period, no body
+  and no prefix such as `feat:`, `docs:` or `fix(api):` (e.g. `Add TOTP login`).
+- Commits, branch names and pull requests carry no AI markers, such as a `Co-Authored-By` line or a "Generated with"
+  footer.
 
 ## Tests
 
