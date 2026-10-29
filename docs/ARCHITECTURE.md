@@ -1201,11 +1201,11 @@ Console (`Claude/`; the contract is in "Console"; decisions: `PLAN.md`, "Backend
 - Tables `Conversations` (`Id`, `ProjectPath`, `StartedAt`, `LastEventAt`, `Resumable`; index `ProjectPath` +
   `StartedAt`), `ConversationEvents` (`ConversationId` with cascade, `Seq`, `Json` as text; key on both) and
   `ConsoleRules` (`ProjectPath`, `Rule`, `CreatedAt`; key on both).
-- Every event is stored, then sent to all console connections, under the conversation's lock, so every connection and
-  a replay see one order. `Json` is the event as it was sent (text, not `jsonb`). Text deltas are sent at once and
-  stored as one row per `messageId`, written before the next other event; `GetConversation` returns the project's
-  latest conversation (by `StartedAt`) with its rows and the text still open. A failed insert is logged and the event
-  is still sent.
+- Every event is stored, then sent to all console connections, by `EventWriter`, under the conversation's lock, so
+  every connection and a replay see one order. `Json` is the event as it was sent (text, not `jsonb`). Text deltas are
+  sent at once and stored as one row per `messageId`, written before the next other event; `GetConversation` returns the
+  project's latest conversation (by `StartedAt`) with its rows and the text still open. A failed insert is logged and
+  the event is still sent.
 - At start (a hosted service, so `create-user` never runs it) the API creates `Console:ConfigDirectory` with mode
   0700. A `Console:ApiKeyFile` that is not an existing file, that lies in the projects directory as written or with
   symlinks resolved (its directory or the file itself), or whose mode has a group or other bit makes the console

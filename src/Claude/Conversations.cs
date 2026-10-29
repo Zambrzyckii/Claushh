@@ -7,7 +7,6 @@
 // (never for create-user, which exits before the host runs).
 using System.Collections.Concurrent;
 using System.ComponentModel;
-using System.Text;
 using System.Text.Json;
 using Claushh.Api.Git;
 using Claushh.Api.Projects;
@@ -19,7 +18,7 @@ namespace Claushh.Api.Claude;
 public sealed record ConversationSnapshot(string? ConversationId, IReadOnlyList<JsonElement> Events);
 
 public sealed class Conversations(ClaudeCli cli, ConversationLog store, ProjectPaths paths, Repositories repositories,
-    IHubContext<ConsoleHub> hub, TimeProvider clock, ILogger<Conversations> log) : IHostedService
+    EventWriter events, TimeProvider clock, ILogger<Conversations> log) : IHostedService
 {
     public const string InvalidPath = "Invalid path";
     public const string InvalidFile = "Invalid file";
@@ -145,7 +144,7 @@ public sealed class Conversations(ClaudeCli cli, ConversationLog store, ProjectP
         try
         {
             state.NextSeq = 1;
-            await EmitAsync(state, ConsoleEvents.Conversation(state.Key, row.ProjectPath, row.StartedAt));
+            await events.EmitAsync(state, ConsoleEvents.Conversation(state.Key, row.ProjectPath, row.StartedAt));
         }
         finally
         {
@@ -203,8 +202,8 @@ public sealed class Conversations(ClaudeCli cli, ConversationLog store, ProjectP
                 }
                 state.Turn = new Turn(state.WorkingDirectory) { Before = before };
                 opened = true;
-                await EmitAsync(state, ConsoleEvents.Prompt(state.Key, text, note?.File));
-                await EmitAsync(state, ConsoleEvents.Status(state.Key, "working"));
+                await events.EmitAsync(state, ConsoleEvents.Prompt(state.Key, text, note?.File));
+                await events.EmitAsync(state, ConsoleEvents.Status(state.Key, "working"));
             }
             finally
             {
@@ -297,10 +296,10 @@ public sealed class Conversations(ClaudeCli cli, ConversationLog store, ProjectP
             turn.Pending.Remove(requestId);
             pending = found;
             process = state.Process;
-            await EmitAsync(state, ConsoleEvents.Resolved(state.Key, requestId, decision));
+            await events.EmitAsync(state, ConsoleEvents.Resolved(state.Key, requestId, decision));
             if (turn.Pending.Count == 0)
             {
-                await EmitAsync(state, ConsoleEvents.Status(state.Key, "working"));
+                await events.EmitAsync(state, ConsoleEvents.Status(state.Key, "working"));
             }
         }
         finally
@@ -374,17 +373,17 @@ public sealed class Conversations(ClaudeCli cli, ConversationLog store, ProjectP
                 await state.Lock.WaitAsync();
                 try
                 {
-                    var events = (await store.EventsAsync(id)).Select(Parse).ToList();
-                    var answered = events.Where(e => StreamJson.Str(e, "type") == "permission-resolved")
+                    var stored = (await store.EventsAsync(id)).Select(Parse).ToList();
+                    var answered = stored.Where(e => StreamJson.Str(e, "type") == "permission-resolved")
                         .Select(e => StreamJson.Str(e, "requestId")).ToHashSet();
-                    foreach (var question in events.Where(e => StreamJson.Str(e, "type") == "permission").Select(e => StreamJson.Str(e, "requestId")))
+                    foreach (var question in stored.Where(e => StreamJson.Str(e, "type") == "permission").Select(e => StreamJson.Str(e, "requestId")))
                     {
                         if (question is not null && !answered.Contains(question))
                         {
-                            await EmitAsync(state, ConsoleEvents.Resolved(state.Key, question, "deny"));
+                            await events.EmitAsync(state, ConsoleEvents.Resolved(state.Key, question, "deny"));
                         }
                     }
-                    await EmitAsync(state, ConsoleEvents.Status(state.Key, "error", StoppedMidTurn));
+                    await events.EmitAsync(state, ConsoleEvents.Status(state.Key, "error", StoppedMidTurn));
                 }
                 finally
                 {
@@ -440,7 +439,7 @@ public sealed class Conversations(ClaudeCli cli, ConversationLog store, ProjectP
                 await state.Lock.WaitAsync();
                 try
                 {
-                    await EmitAsync(state, ConsoleEvents.Status(state.Key, "error", ResumeFailed));
+                    await events.EmitAsync(state, ConsoleEvents.Status(state.Key, "error", ResumeFailed));
                 }
                 finally
                 {
@@ -667,8 +666,8 @@ public sealed class Conversations(ClaudeCli cli, ConversationLog store, ProjectP
         var (rule, alwaysRule) = PermissionRequests.Rule(request);
         var requestId = Guid.NewGuid().ToString("D");
         turn.Pending[requestId] = new PendingPermission(cliRequestId, tool, input, rule, alwaysRule);
-        await EmitAsync(state, ConsoleEvents.Permission(state.Key, requestId, PermissionRequests.Description(tool, input, turn.Directory), alwaysRule));
-        await EmitAsync(state, ConsoleEvents.Status(state.Key, "waiting"));
+        await events.EmitAsync(state, ConsoleEvents.Permission(state.Key, requestId, PermissionRequests.Description(tool, input, turn.Directory), alwaysRule));
+        await events.EmitAsync(state, ConsoleEvents.Status(state.Key, "waiting"));
     }
 
     // The CLI no longer needs an answer (control_cancel_request): the question ends as denied.
@@ -681,10 +680,10 @@ public sealed class Conversations(ClaudeCli cli, ConversationLog store, ProjectP
         foreach (var requestId in turn.Pending.Where(entry => entry.Value.CliRequestId == cliRequestId).Select(entry => entry.Key).ToList())
         {
             turn.Pending.Remove(requestId);
-            await EmitAsync(state, ConsoleEvents.Resolved(state.Key, requestId, "deny"));
+            await events.EmitAsync(state, ConsoleEvents.Resolved(state.Key, requestId, "deny"));
             if (turn.Pending.Count == 0 && !turn.Interrupting)
             {
-                await EmitAsync(state, ConsoleEvents.Status(state.Key, "working"));
+                await events.EmitAsync(state, ConsoleEvents.Status(state.Key, "working"));
             }
         }
     }
@@ -713,8 +712,8 @@ public sealed class Conversations(ClaudeCli cli, ConversationLog store, ProjectP
         {
             return;
         }
-        await EmitAsync(state, ConsoleEvents.Step(state.Key, id, "other", StreamJson.Target(tool.Name, tool.Input, turn.Directory)));
-        await EmitAsync(state, ConsoleEvents.StepOutput(state.Key, id,
+        await events.EmitAsync(state, ConsoleEvents.Step(state.Key, id, "other", StreamJson.Target(tool.Name, tool.Input, turn.Directory)));
+        await events.EmitAsync(state, ConsoleEvents.StepOutput(state.Key, id,
             StreamJson.Str(line, "message") ?? StreamJson.Str(line, "decision_reason") ?? "", true));
     }
 
@@ -735,7 +734,7 @@ public sealed class Conversations(ClaudeCli cli, ConversationLog store, ProjectP
             && StreamJson.Str(delta, "type") == "text_delta" && StreamJson.Str(delta, "text") is { Length: > 0 } text)
         {
             var index = StreamJson.Get(streamEvent, "index") is { ValueKind: JsonValueKind.Number } number ? number.GetInt32() : 0;
-            await EmitAsync(state, ConsoleEvents.Text(state.Key, $"{turn.MessageId}:{index}", text));
+            await events.EmitAsync(state, ConsoleEvents.Text(state.Key, $"{turn.MessageId}:{index}", text));
         }
     }
 
@@ -775,7 +774,7 @@ public sealed class Conversations(ClaudeCli cli, ConversationLog store, ProjectP
             }
             foreach (var e in StepOf(state, turn, id, tool, kind, block, structured))
             {
-                await EmitAsync(state, e);
+                await events.EmitAsync(state, e);
             }
         }
     }
@@ -818,7 +817,7 @@ public sealed class Conversations(ClaudeCli cli, ConversationLog store, ProjectP
         if (turn.RanCommand && turn.Before is { } before
             && FileChanges.Changed(before, FileChanges.Status(repositories, state.ProjectPath)) is { Count: > 0 } changed)
         {
-            await EmitAsync(state, ConsoleEvents.FilesChanged(state.Key, changed));
+            await events.EmitAsync(state, ConsoleEvents.FilesChanged(state.Key, changed));
         }
         await EndTurnAsync(state, status);
     }
@@ -830,7 +829,7 @@ public sealed class Conversations(ClaudeCli cli, ConversationLog store, ProjectP
         {
             await DenyPendingAsync(state, turn);
         }
-        await EmitAsync(state, status);
+        await events.EmitAsync(state, status);
         state.Turn = null;
         state.Busy = false;
         state.LastUsed = clock.GetUtcNow();
@@ -841,7 +840,7 @@ public sealed class Conversations(ClaudeCli cli, ConversationLog store, ProjectP
         foreach (var requestId in turn.Pending.Keys.ToList())
         {
             turn.Pending.Remove(requestId);
-            await EmitAsync(state, ConsoleEvents.Resolved(state.Key, requestId, "deny"));
+            await events.EmitAsync(state, ConsoleEvents.Resolved(state.Key, requestId, "deny"));
         }
     }
 
@@ -938,60 +937,6 @@ public sealed class Conversations(ClaudeCli cli, ConversationLog store, ProjectP
 
     // A prompt's open file as the prompt event names it, and the note's text for the CLI.
     private sealed record FileNote(PromptFile File, string Text);
-
-    // Stores an event and sends it to every console connection; the caller holds the conversation's lock. Text deltas
-    // are sent at once but stored as one row per messageId, written before the next other event.
-    private async Task EmitAsync(ConversationState state, JsonElement e)
-    {
-        if (e.GetProperty("type").GetString() == "text")
-        {
-            var messageId = e.GetProperty("messageId").GetString()!;
-            if (state.OpenText is not { } open || open.MessageId != messageId)
-            {
-                await FlushTextAsync(state);
-                state.OpenText = (messageId, new StringBuilder());
-            }
-            state.OpenText.Value.Text.Append(e.GetProperty("delta").GetString());
-        }
-        else
-        {
-            await FlushTextAsync(state);
-            await StoreAsync(state, e);
-        }
-        try
-        {
-            await hub.Clients.All.SendAsync("ConsoleEvent", e);
-        }
-        catch (Exception ex)
-        {
-            log.LogWarning(ex, "Sending an event of console conversation {Conversation} failed", state.Key);
-        }
-    }
-
-    private async Task FlushTextAsync(ConversationState state)
-    {
-        if (state.OpenText is { } open)
-        {
-            state.OpenText = null;
-            await StoreAsync(state, ConsoleEvents.Text(state.Key, open.MessageId, open.Text.ToString()));
-        }
-    }
-
-    // A failed insert is logged and the event is still sent.
-    private async Task StoreAsync(ConversationState state, JsonElement e)
-    {
-        try
-        {
-            state.NextSeq ??= await store.NextSeqAsync(state.Id);
-            var seq = state.NextSeq.Value;
-            state.NextSeq = seq + 1;
-            await store.AppendAsync(state.Id, seq, e.GetRawText());
-        }
-        catch (Exception ex)
-        {
-            log.LogError(ex, "Storing an event of console conversation {Conversation} failed; it was still sent", state.Key);
-        }
-    }
 
     private static JsonElement Parse(string json)
     {
