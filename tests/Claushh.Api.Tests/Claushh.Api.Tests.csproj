@@ -14,7 +14,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../../src/Claushh.Api/Claushh.Api.csproj" />
+    <ProjectReference Include="../../src/Claushh.Api.csproj" />
     <!-- The fake claude CLI: a referenced Exe, so its apphost lands next to the tests (ApiFactory, Console:ClaudePath). -->
     <ProjectReference Include="../Claushh.FakeClaude/Claushh.FakeClaude.csproj" />
   </ItemGroup>

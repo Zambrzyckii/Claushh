@@ -36,11 +36,11 @@ cp deploy/.env.example deploy/.env    # fill in the password and a free POSTGRES
 docker compose -p claushh-dev -f deploy/docker-compose.yml --env-file deploy/.env up -d
 
 # backend: http://localhost:5080/api/health
-dotnet user-secrets set --project src/Claushh.Api ConnectionStrings:Claushh \
+dotnet user-secrets set --project src ConnectionStrings:Claushh \
   "Host=localhost;Port=<POSTGRES_PORT>;Database=claushh;Username=claushh;Password=<POSTGRES_PASSWORD from deploy/.env>"
-dotnet user-secrets set --project src/Claushh.Api Projects:Root <directory>    # the projects directory of the portal
-dotnet run --project src/Claushh.Api -- create-user    # once: the account and its TOTP key
-dotnet run --project src/Claushh.Api
+dotnet user-secrets set --project src Projects:Root <directory>    # the projects directory of the portal
+dotnet run --project src -- create-user    # once: the account and its TOTP key
+dotnet run --project src
 
 # frontend: http://localhost:4200
 cd web
@@ -85,7 +85,7 @@ Cloning, fetching and pulling a public repository needs no credential helper in 
 credentials (also for a public repository); the server's GitHub token is set up in "Deployment", step 8.
 
 Login notifications (ntfy) are off in development unless `Notifications:NtfyUrl` is set
-(`dotnet user-secrets set --project src/Claushh.Api Notifications:NtfyUrl https://ntfy.sh/<your topic>`, and optionally
+(`dotnet user-secrets set --project src Notifications:NtfyUrl https://ntfy.sh/<your topic>`, and optionally
 `Notifications:NtfyToken`); on the server the API does not start without it.
 
 Passkeys work at `http://localhost:4200` and `http://localhost:5080`, not at `127.0.0.1`: their RP ID is
@@ -103,8 +103,8 @@ origin):
 
 ```bash
 npm --prefix web run build    # the build in web/dist/web/browser
-dotnet user-secrets set --project src/Claushh.Api Frontend:Root <absolute path>/web/dist/web/browser
-dotnet run --project src/Claushh.Api
+dotnet user-secrets set --project src Frontend:Root <absolute path>/web/dist/web/browser
+dotnet run --project src
 ```
 
 Then open `http://localhost:5080`, which is already one of the hubs' allowed origins (`appsettings.Development.json`).
