@@ -54,7 +54,7 @@ On the server (decisions: `PLAN.md`, "Deployment decisions"):
 | `src/Properties/launchSettings.json` | development profile, port 5080 |
 | `src/Web/` | HTTP pipeline pieces every feature shares: the hubs' Origin check and `Hubs:AllowedOrigins` |
 | `src/Data/` | `ClaushhDbContext` (Identity tables, `Sessions`, `LoginAttempts`, `Workspaces`, and the console's `Conversations`, `ConversationEvents` and `ConsoleRules`) and the EF Core migrations, applied at startup |
-| `src/Auth/` | login and sessions: session rules, the login gate with its limits and lockout, TOTP, the auth cookies and the XSRF filter, `create-user`, cleanup after 90 days. `Passkeys/` (passkey ceremonies and endpoints), `Notifications/` (phone notifications of logins through ntfy), `Realtime/` (hub connections tied to their session and closed when it ends) |
+| `src/Auth/` | login and sessions: session rules, the login gate with its limits and lockout, TOTP, the auth cookies and the XSRF filter, cleanup after 90 days. `Passkeys/` (passkey ceremonies and endpoints), `Account/` (`create-user` and its command line), `Notifications/` (phone notifications of logins through ntfy), `Realtime/` (hub connections tied to their session and closed when it ends) |
 | `src/Files/` | the files API and search in files, plus code other folders use too: the projects directory and its path checks (`ProjectPaths`), the text rule, the libc calls |
 | `src/Workspaces/` | workspaces, the repository list of a workspace, cloning |
 | `src/Git/` | repositories read with libgit2, the git CLI, one lock per repository, the background fetch, the git API |

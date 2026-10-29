@@ -5,6 +5,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Claushh.Api.Auth;
+using Claushh.Api.Auth.Account;
 using Claushh.Api.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -159,7 +160,7 @@ public sealed class PasskeyLoginTests(ApiFactory api) : ApiTest(api)
         await RegisterAsync();
         await using (var scope = Api.Services.CreateAsyncScope())
         {
-            var terminal = new ScriptedTerminal(Api, _ => "a long enough password", _ => "a long enough password");
+            var terminal = new ScriptedCommandLine(Api, _ => "a long enough password", _ => "a long enough password");
             Assert.Equal(0, await scope.ServiceProvider.GetRequiredService<CreateUserCommand>()
                 .ResetPasswordAsync(terminal, CancellationToken.None));
         }

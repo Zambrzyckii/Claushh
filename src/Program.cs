@@ -1,5 +1,6 @@
 // API entry point. Stages and decisions: docs/PLAN.md; endpoints, configuration and commands: docs/ARCHITECTURE.md, "Backend".
 using Claushh.Api.Auth;
+using Claushh.Api.Auth.Account;
 using Claushh.Api.Auth.Realtime;
 using Claushh.Api.Claude;
 using Claushh.Api.Data;
@@ -177,8 +178,8 @@ if (args is ["create-user", .. var flags])
     await using var scope = app.Services.CreateAsyncScope();
     var command = scope.ServiceProvider.GetRequiredService<CreateUserCommand>();
     return flags is ["--reset-password"]
-        ? await command.ResetPasswordAsync(ConsoleTerminal.Instance, CancellationToken.None)
-        : await command.RunAsync(flags is ["--reset-totp"], ConsoleTerminal.Instance, CancellationToken.None);
+        ? await command.ResetPasswordAsync(SystemCommandLine.Instance, CancellationToken.None)
+        : await command.RunAsync(flags is ["--reset-totp"], SystemCommandLine.Instance, CancellationToken.None);
 }
 
 // The built frontend (docs/ARCHITECTURE.md, "Backend" → "Frontend"); null when Frontend:Root is empty. Read here, after

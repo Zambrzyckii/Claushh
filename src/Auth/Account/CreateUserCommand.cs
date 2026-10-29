@@ -1,26 +1,18 @@
 // `create-user`, `create-user --reset-totp` and `create-user --reset-password`: the only way to create the single
 // account or replace its TOTP key or its password; both resets also end every session, clear the lockout and remove
 // every passkey. There is no registration endpoint (docs/ARCHITECTURE.md, "Backend", commands).
-using System.Text;
 using Claushh.Api.Data;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
-namespace Claushh.Api.Auth;
-
-public interface ITerminal
-{
-    string? ReadLine();
-    string? ReadSecret();
-    void WriteLine(string text);
-}
+namespace Claushh.Api.Auth.Account;
 
 public sealed class CreateUserCommand(ClaushhDbContext db, UserManager<IdentityUser> users, SessionService sessions, TotpVerifier totp, LoginGuard guard)
 {
     private const int CodeAttempts = 3;
 
     // One transaction: wrong codes or an interruption leave the database as it was.
-    public async Task<int> RunAsync(bool resetTotp, ITerminal terminal, CancellationToken ct)
+    public async Task<int> RunAsync(bool resetTotp, ICommandLine terminal, CancellationToken ct)
     {
         await using var transaction = await db.Database.BeginTransactionAsync(ct);
         var existing = await users.Users.FirstOrDefaultAsync(ct);
@@ -66,7 +58,7 @@ public sealed class CreateUserCommand(ClaushhDbContext db, UserManager<IdentityU
     // `create-user --reset-password`: a leaked password. Shell access on the server proves more than the old password,
     // so only the new one is asked for. It is read before the transaction starts, so a change of the account while the
     // owner types does not refuse the reset. One transaction, like RunAsync.
-    public async Task<int> ResetPasswordAsync(ITerminal terminal, CancellationToken ct)
+    public async Task<int> ResetPasswordAsync(ICommandLine terminal, CancellationToken ct)
     {
         if (!await users.Users.AnyAsync(ct))
         {
@@ -116,7 +108,7 @@ public sealed class CreateUserCommand(ClaushhDbContext db, UserManager<IdentityU
         return passkeys.Count;
     }
 
-    private async Task<IdentityUser?> CreateAccountAsync(ITerminal terminal)
+    private async Task<IdentityUser?> CreateAccountAsync(ICommandLine terminal)
     {
         terminal.WriteLine("User name:");
         var userName = terminal.ReadLine()?.Trim();
@@ -140,7 +132,7 @@ public sealed class CreateUserCommand(ClaushhDbContext db, UserManager<IdentityU
 
     // TOTP is switched on only after a code from the app matches, so a mistyped key cannot lock the owner out.
     // Null when it is on, otherwise the message to print; the caller then commits nothing.
-    private async Task<string?> EnrollTotpAsync(IdentityUser user, ITerminal terminal)
+    private async Task<string?> EnrollTotpAsync(IdentityUser user, ICommandLine terminal)
     {
         var reset = await users.ResetAuthenticatorKeyAsync(user);
         if (!reset.Succeeded)
@@ -172,44 +164,9 @@ public sealed class CreateUserCommand(ClaushhDbContext db, UserManager<IdentityU
             ? "The account changed while the command ran. Nothing was changed; run the command again."
             : $"{string.Join(" ", result.Errors.Select(e => e.Description))} Nothing was changed.";
 
-    private static int Fail(ITerminal terminal, string message)
+    private static int Fail(ICommandLine terminal, string message)
     {
         terminal.WriteLine(message);
         return 1;
-    }
-}
-
-public sealed class ConsoleTerminal : ITerminal
-{
-    public static readonly ConsoleTerminal Instance = new();
-
-    public string? ReadLine() => Console.ReadLine();
-
-    public void WriteLine(string text) => Console.WriteLine(text);
-
-    // Without echo, so the password does not stay on the screen or in the terminal's scrollback.
-    public string? ReadSecret()
-    {
-        var secret = new StringBuilder();
-        while (true)
-        {
-            var key = Console.ReadKey(intercept: true);
-            if (key.Key == ConsoleKey.Enter)
-            {
-                Console.WriteLine();
-                return secret.ToString();
-            }
-            if (key.Key == ConsoleKey.Backspace)
-            {
-                if (secret.Length > 0)
-                {
-                    secret.Length--;
-                }
-            }
-            else if (!char.IsControl(key.KeyChar))
-            {
-                secret.Append(key.KeyChar);
-            }
-        }
     }
 }

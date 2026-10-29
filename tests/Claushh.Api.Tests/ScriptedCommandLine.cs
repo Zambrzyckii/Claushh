@@ -1,12 +1,12 @@
-using Claushh.Api.Auth;
+using Claushh.Api.Auth.Account;
 
 namespace Claushh.Api.Tests;
 
 // Answers the command's questions in order. An answer is computed when asked, so it can use what was printed before
 // (the TOTP key).
-public sealed class ScriptedTerminal(ApiFactory api, params Func<ScriptedTerminal, string?>[] answers) : ITerminal
+public sealed class ScriptedCommandLine(ApiFactory api, params Func<ScriptedCommandLine, string?>[] answers) : ICommandLine
 {
-    private readonly Queue<Func<ScriptedTerminal, string?>> _answers = new(answers);
+    private readonly Queue<Func<ScriptedCommandLine, string?>> _answers = new(answers);
 
     public List<string> Output { get; } = [];
 
