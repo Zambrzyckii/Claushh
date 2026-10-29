@@ -48,17 +48,17 @@ public sealed class Repositories(ProjectPaths paths, ILogger<Repositories> log)
 {
     private const string GitDirectory = ".git";
 
-    // The repository at an API path "<workspace>/<repository>": null for a bad path (400), Kind NotFound for a valid
-    // path that is not a repository (404), otherwise its directory.
-    public ProjectPath? Find(string? relative)
+    // The repository at an API path "<workspace>/<repository>": Invalid for a bad path (400), NotFound for a valid path
+    // that is not a repository (404), otherwise Found with its directory.
+    public LookupResult Find(string? relative)
     {
         if (relative is null || relative.Split('/').Length != 2 || paths.Resolve(relative) is not { } directory)
         {
-            return null;
+            return new LookupResult(LookupStatus.Invalid);
         }
         return IsCandidate(directory) && Open(directory, (_, found) => found) is not null
-            ? directory
-            : new ProjectPath(relative, "", PathKind.NotFound);
+            ? new LookupResult(LookupStatus.Found, directory)
+            : new LookupResult(LookupStatus.NotFound);
     }
 
     // The repositories directly in a workspace, by name: ordinal, ignoring case.

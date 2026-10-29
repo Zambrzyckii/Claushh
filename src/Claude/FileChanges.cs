@@ -48,7 +48,7 @@ internal static class FileChanges
     {
         try
         {
-            if (repositories.Find(projectPath) is not { Kind: PathKind.Directory } repo || repositories.Status(repo) is not { } repoStatus)
+            if (repositories.Find(projectPath) is not { Status: LookupStatus.Found, Path: { } repo } || repositories.Status(repo) is not { } repoStatus)
             {
                 return null;
             }

@@ -20,15 +20,17 @@ public sealed class WorkspaceStore(ProjectPaths paths, Repositories repositories
     // Workspaces are created one at a time in this process: the check of the name, mkdir and the row never interleave.
     private static readonly SemaphoreSlim CreateGate = new(1, 1);
 
-    // The workspace at an API path (one segment): null for a bad path (400), Kind NotFound for a valid path that is not
-    // a workspace (404), otherwise its directory.
-    public ProjectPath? Find(string? relative)
+    // The workspace at an API path (one segment): Invalid for a bad path (400), NotFound for a valid path that is not a
+    // workspace (404), otherwise Found with its directory.
+    public LookupResult Find(string? relative)
     {
         if (relative is not { Length: > 0 } || relative.Contains('/') || paths.Resolve(relative) is not { } directory)
         {
-            return null;
+            return new LookupResult(LookupStatus.Invalid);
         }
-        return IsWorkspace(directory) ? directory : new ProjectPath(relative, "", PathKind.NotFound);
+        return IsWorkspace(directory)
+            ? new LookupResult(LookupStatus.Found, directory)
+            : new LookupResult(LookupStatus.NotFound);
     }
 
     // The workspaces with a row in creation order, then the directories made outside the portal by name (ordinal,

@@ -15,6 +15,12 @@ public enum PathKind { Directory, File, Other, Missing, NotFound }
 // name, for NotFound empty.
 public sealed record ProjectPath(string Relative, string FullPath, PathKind Kind);
 
+// A lookup of a workspace or a repository by its API path: Invalid for a bad path (400), NotFound for a valid path that
+// is not one (404), Found with its directory.
+public enum LookupStatus { Found, Invalid, NotFound }
+
+public sealed record LookupResult(LookupStatus Status, ProjectPath? Path = null);
+
 public sealed class ProjectPaths(IOptions<ProjectsOptions> options)
 {
     private const string Git = ".git";

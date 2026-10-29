@@ -41,13 +41,10 @@ public static class WorkspaceEndpoints
     // in the background for the panel's next refresh.
     private static IResult Repos(string? workspace, WorkspaceStore workspaces, Repositories repositories, BackgroundFetch fetch)
     {
-        if (workspaces.Find(workspace) is not { } directory)
+        var lookup = workspaces.Find(workspace);
+        if (lookup is not { Status: LookupStatus.Found, Path: { } directory })
         {
-            return Results.BadRequest();
-        }
-        if (directory.Kind != PathKind.Directory)
-        {
-            return Results.NotFound();
+            return lookup.Status == LookupStatus.Invalid ? Results.BadRequest() : Results.NotFound();
         }
         var entries = repositories.List(directory);
         foreach (var entry in entries)
@@ -66,13 +63,14 @@ public static class WorkspaceEndpoints
         RepoLocks locks, GitRunner git, IOptionsMonitor<GitOptions> options)
     {
         var body = await JsonBody.ReadAsync<CloneRequest>(http);
-        if (body is null || workspaces.Find(body.Workspace) is not { } workspace)
+        if (body is null)
         {
             return Results.BadRequest();
         }
-        if (workspace.Kind != PathKind.Directory)
+        var lookup = workspaces.Find(body.Workspace);
+        if (lookup is not { Status: LookupStatus.Found, Path: { } workspace })
         {
-            return Results.NotFound();
+            return lookup.Status == LookupStatus.Invalid ? Results.BadRequest() : Results.NotFound();
         }
         if (!CloneUrl.IsValid(body.Url))
         {
@@ -121,7 +119,7 @@ public static class WorkspaceEndpoints
             return Results.Json(new MessageResponse(e.ResponseMessage), statusCode: StatusCodes.Status502BadGateway);
         }
         // A clone must pass what a repository is, like any other.
-        return repositories.Find($"{workspace.Relative}/{name}") is { Kind: PathKind.Directory } repository
+        return repositories.Find($"{workspace.Relative}/{name}") is { Status: LookupStatus.Found, Path: { } repository }
             ? Results.Json(repositories.Summary(repository), statusCode: StatusCodes.Status201Created)
             : throw new InvalidOperationException($"The clone {workspace.Relative}/{name} is not a repository the portal can read.");
     }

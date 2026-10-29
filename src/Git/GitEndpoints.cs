@@ -23,24 +23,25 @@ public static class GitEndpoints
 
     private static IResult Status(string? repo, Repositories repositories)
     {
-        if (repositories.Find(repo) is not { } repository)
+        return repositories.Find(repo) switch
         {
-            return Results.BadRequest();
-        }
-        return repository.Kind == PathKind.Directory && repositories.Status(repository) is { } status
-            ? Results.Ok(status)
-            : Results.NotFound();
+            { Status: LookupStatus.Invalid } => Results.BadRequest(),
+            { Status: LookupStatus.Found, Path: { } repository } when repositories.Status(repository) is { } status
+                => Results.Ok(status),
+            _ => Results.NotFound(),
+        };
     }
 
     // `path` must be a valid path inside `repo`; it is looked up in HEAD, so a file deleted on disk still has content.
     private static IResult Show(string? repo, string? path, Repositories repositories, ProjectPaths paths)
     {
-        if (repositories.Find(repo) is not { } repository || path is null
-            || !path.StartsWith(repository.Relative + "/", StringComparison.Ordinal) || paths.Resolve(path) is null)
+        var lookup = repositories.Find(repo);
+        if (lookup.Status == LookupStatus.Invalid || path is null
+            || !path.StartsWith(repo + "/", StringComparison.Ordinal) || paths.Resolve(path) is null)
         {
             return Results.BadRequest();
         }
-        if (repository.Kind != PathKind.Directory)
+        if (lookup is not { Status: LookupStatus.Found, Path: { } repository })
         {
             return Results.NotFound();
         }
@@ -59,13 +60,10 @@ public static class GitEndpoints
     private static async Task<IResult> Pull(string? repo, HttpContext http, Repositories repositories, RepoLocks locks,
         GitRunner git, IOptionsMonitor<GitOptions> options)
     {
-        if (repositories.Find(repo) is not { } repository)
+        var lookup = repositories.Find(repo);
+        if (lookup is not { Status: LookupStatus.Found, Path: { } repository })
         {
-            return Results.BadRequest();
-        }
-        if (repository.Kind != PathKind.Directory)
-        {
-            return Results.NotFound();
+            return lookup.Status == LookupStatus.Invalid ? Results.BadRequest() : Results.NotFound();
         }
         using var deadline = new GitDeadline(options.CurrentValue.NetworkTimeout, http.RequestAborted);
         try
@@ -113,13 +111,10 @@ public static class GitEndpoints
     private static async Task<IResult> Push(string? repo, HttpContext http, Repositories repositories, RepoLocks locks,
         GitRunner git, IOptionsMonitor<GitOptions> options)
     {
-        if (repositories.Find(repo) is not { } repository)
+        var lookup = repositories.Find(repo);
+        if (lookup is not { Status: LookupStatus.Found, Path: { } repository })
         {
-            return Results.BadRequest();
-        }
-        if (repository.Kind != PathKind.Directory)
-        {
-            return Results.NotFound();
+            return lookup.Status == LookupStatus.Invalid ? Results.BadRequest() : Results.NotFound();
         }
         using var deadline = new GitDeadline(options.CurrentValue.NetworkTimeout, http.RequestAborted);
         try

@@ -85,7 +85,7 @@ public sealed class FileSearch(ProjectPaths paths, Repositories repositories, Se
         var run = new SearchRun(paths, repositories, limits, root, pattern, include, exclude, aborted);
         var parts = root.Relative.Split('/');
         // A root inside a repository takes its rules; repositories below the root are found on the way.
-        using (var ignores = parts.Length >= 2 && repositories.Find($"{parts[0]}/{parts[1]}") is { Kind: PathKind.Directory } repo
+        using (var ignores = parts.Length >= 2 && repositories.Find($"{parts[0]}/{parts[1]}") is { Status: LookupStatus.Found, Path: { } repo }
                    ? repositories.Ignores(repo)
                    : null)
         {
@@ -142,7 +142,7 @@ public sealed class FileSearch(ProjectPaths paths, Repositories repositories, Se
                          && ignores?.IsIgnored(entry.Relative, directory: true) != true)
                 {
                     // A repository directly in a workspace brings its own rules.
-                    if (entry.Relative.Split('/').Length == 2 && repositories.Find(entry.Relative) is { Kind: PathKind.Directory } repo)
+                    if (entry.Relative.Split('/').Length == 2 && repositories.Find(entry.Relative) is { Status: LookupStatus.Found, Path: { } repo })
                     {
                         using var own = repositories.Ignores(repo);
                         Walk(entry, own);
