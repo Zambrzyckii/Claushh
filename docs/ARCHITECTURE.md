@@ -49,7 +49,7 @@ On the server (decisions: `PLAN.md`, "Deployment decisions"):
 |---|---|
 | `Claushh.slnx` | .NET solution (XML format) |
 | `Directory.Build.props` | shared settings for the .NET projects: `net10.0`, nullable, warnings as errors |
-| `src/` | the ASP.NET Core backend: one project (`Claushh.Api.csproj`, root namespace `Claushh.Api`) with one folder per feature, and every file's namespace follows its folder |
+| `src/` | the ASP.NET Core backend: one project (`Claushh.Api.csproj`, root namespace `Claushh.Api`) with one folder per feature, and every file's namespace follows its folder. Each feature registers its services in its `<Name>Module.cs` |
 | `src/Program.cs` | the composition root: the features' registrations in a fixed order, the shared host services (time, database, SignalR, authentication, XSRF, problem details), the middleware order, the migration at start, `create-user`, the endpoint and hub mapping, the non-dumpable hook |
 | `src/Properties/launchSettings.json` | development profile, port 5080 |
 | `src/Platform/` | Linux adapters that know nothing about the app: the libc calls (`Libc`) and the allowlisted environment of every child process (`ChildEnvironment`) |

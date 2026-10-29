@@ -33,26 +33,14 @@ builder.Services.AddDbContext<ClaushhDbContext>((services, options) => options.U
     ?? throw new InvalidOperationException("ConnectionStrings:Claushh is not set (README.md, \"Running in development\").")));
 builder.Services.AddAuth(builder.Configuration);
 builder.Services.AddFiles();
-builder.Services.AddScoped<WorkspaceStore>();
+builder.Services.AddWorkspaces();
 builder.Services.Configure<HubsOptions>(builder.Configuration.GetSection("Hubs"));
 // For every hub: the session on connect and on every call (docs/ARCHITECTURE.md, "Backend" → "Hubs").
 builder.Services.AddSignalR(options => options.AddFilter<HubSessionFilter>())
     // A console prompt may hold 100,000 characters; every other hub keeps the 32 KB default.
     .AddHubOptions<ConsoleHub>(options => options.MaximumReceiveMessageSize = ConsoleHub.MaxMessage);
-builder.Services.Configure<TerminalOptions>(builder.Configuration.GetSection("Terminal"));
-builder.Services.AddSingleton<TmuxServer>();
-builder.Services.AddSingleton<Terminals>();
-// Prepares the tmux server at start and ends it on a stop; create-user never starts the host, so it never runs this.
-builder.Services.AddHostedService(services => services.GetRequiredService<Terminals>());
-builder.Services.Configure<ConsoleOptions>(builder.Configuration.GetSection("Console"));
-builder.Services.AddSingleton<ClaudeCli>();
-builder.Services.AddSingleton<ConversationLog>();
-builder.Services.AddSingleton<Conversations>();
-// Prepares the claude CLI's config directory and ends turns left open at start, closes idle processes, stops them all
-// on a stop; create-user never starts the host, so it never runs this.
-builder.Services.AddHostedService(services => services.GetRequiredService<Conversations>());
-builder.Services.AddSingleton<ConversationCleanup>();
-builder.Services.AddHostedService(services => services.GetRequiredService<ConversationCleanup>());
+builder.Services.AddTerminal(builder.Configuration);
+builder.Services.AddConsole(builder.Configuration);
 builder.Services.AddSessionAuthentication();
 builder.Services.AddXsrfProtection();
 builder.Services.AddProblemDetails();
