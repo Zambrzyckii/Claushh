@@ -26,6 +26,21 @@ public sealed class HubSessionSweep(HubConnections connections, IServiceScopeFac
         }
     }
 
+    public async Task CloseAfterRevocationAsync(string failureMessage)
+    {
+        // Its hub connections close now, not at the next sweep; also when the client has gone meanwhile. A failure
+        // here must not turn the already-committed revocation into a 500, or skip expiring the cookies: the 5 s timer
+        // closes the connections anyway.
+        try
+        {
+            await RunOnceAsync(CancellationToken.None);
+        }
+        catch (Exception e)
+        {
+            log.LogError(e, failureMessage);
+        }
+    }
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         using var timer = new PeriodicTimer(Interval, clock);

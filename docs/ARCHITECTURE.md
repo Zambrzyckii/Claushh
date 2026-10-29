@@ -1124,9 +1124,10 @@ Hubs (`Auth/Realtime/` and `Web/HubOrigins.cs`, shared by every hub):
   `OnConnectedAsync`) is removed from the registry right away, so it is not kept forever.
 - `HubSessionSweep` asks which registered sessions are still active (`SessionService.ActiveIdsAsync`, one query) and
   aborts the connections of the others: every 5 s (expiry, `create-user` in another process) and right after logout,
-  ending another session and revoke-others in this process. Events sent to clients are not checked, so a connection of
-  an ended session can receive them until it is aborted: at once for an end in this process, within 5 s otherwise. A
-  failure of that in-request sweep is logged and left to the 5 s timer, instead of failing the request.
+  ending another session and revoke-others in this process, which call `HubSessionSweep.CloseAfterRevocationAsync`.
+  Events sent to clients are not checked, so a connection of an ended session can receive them until it is aborted: at
+  once for an end in this process, within 5 s otherwise. A failure of that in-request sweep is logged and left to the
+  5 s timer, instead of failing the request.
 
 Terminal (`Terminal/`; the contract is in "Terminal"):
 - tmux 3.7 or later in control mode (`tmux -C`, stdin and stdout as pipes), no PTY. The API runs its own tmux server on
