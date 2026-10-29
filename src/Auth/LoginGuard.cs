@@ -20,7 +20,7 @@ public sealed class LoginGuard(ClaushhDbContext db, UserManager<IdentityUser> us
     private static readonly TimeSpan MaxLockout = TimeSpan.FromHours(24);
     private const int HistoryLength = 20;
     // Locks in a row without a successful login, stored under TotpVerifier.LoginProvider next to TotpLastStep.
-    private const string LockoutsToken = "LockoutsInARow";
+    public const string LockoutsToken = "LockoutsInARow";
 
     // One login at a time in this process: the checks and writes of parallel attempts never interleave. A login waits at
     // most 10 s for the one before it.

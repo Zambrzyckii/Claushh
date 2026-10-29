@@ -314,7 +314,7 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         await using var scope = Services.CreateAsyncScope();
         var users = scope.ServiceProvider.GetRequiredService<UserManager<IdentityUser>>();
         var owner = await users.FindByNameAsync(UserName) ?? throw new InvalidOperationException("No owner.");
-        return (owner.AccessFailedCount, owner.LockoutEnd, await users.GetAuthenticationTokenAsync(owner, "Claushh", "LockoutsInARow"));
+        return (owner.AccessFailedCount, owner.LockoutEnd, await users.GetAuthenticationTokenAsync(owner, TotpVerifier.LoginProvider, LoginGuard.LockoutsToken));
     }
 
     public async Task<int> LoginAttemptCountAsync()

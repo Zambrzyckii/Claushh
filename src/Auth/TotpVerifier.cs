@@ -11,7 +11,7 @@ namespace Claushh.Api.Auth;
 
 public sealed class TotpVerifier(UserManager<IdentityUser> users, TimeProvider clock)
 {
-    internal const string LoginProvider = "Claushh";
+    public const string LoginProvider = "Claushh";
     private const string LastStepToken = "TotpLastStep";
     private const long StepSeconds = 30;
 
