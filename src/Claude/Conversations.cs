@@ -11,7 +11,6 @@ using System.Text;
 using System.Text.Json;
 using Claushh.Api.Files;
 using Claushh.Api.Git;
-using Claushh.Api.Hubs;
 using Microsoft.AspNetCore.SignalR;
 
 namespace Claushh.Api.Claude;

@@ -1,9 +1,9 @@
 // /hubs/terminal (docs/ARCHITECTURE.md, "Terminal"): the methods check their arguments and leave the terminals to
-// Terminals, a singleton, because a hub instance lives for one call. The connection rules are the shared ones of Hubs/.
-using Claushh.Api.Terminal;
+// Terminals, a singleton, because a hub instance lives for one call. The connection rules are the ones every hub shares
+// (docs/ARCHITECTURE.md, "Backend" → "Hubs").
 using Microsoft.AspNetCore.SignalR;
 
-namespace Claushh.Api.Hubs;
+namespace Claushh.Api.Terminal;
 
 public sealed class TerminalHub(Terminals terminals) : Hub
 {

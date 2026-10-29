@@ -1,10 +1,9 @@
 // /hubs/console (docs/ARCHITECTURE.md, "Console"): the methods check their arguments and leave the conversations to
-// Conversations, a singleton, because a hub instance lives for one call. The connection rules are the shared ones of
-// Hubs/.
-using Claushh.Api.Claude;
+// Conversations, a singleton, because a hub instance lives for one call. The connection rules are the ones every hub
+// shares (docs/ARCHITECTURE.md, "Backend" → "Hubs").
 using Microsoft.AspNetCore.SignalR;
 
-namespace Claushh.Api.Hubs;
+namespace Claushh.Api.Claude;
 
 public sealed class ConsoleHub(Conversations conversations) : Hub
 {

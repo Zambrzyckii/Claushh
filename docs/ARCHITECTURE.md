@@ -57,12 +57,12 @@ On the server (decisions: `PLAN.md`, "Deployment decisions"):
 | `src/Files/` | the files API and search in files, plus code other folders use too: the projects directory and its path checks (`ProjectPaths`), the text rule, the libc calls |
 | `src/Workspaces/` | workspaces, the repository list of a workspace, cloning |
 | `src/Git/` | repositories read with libgit2, the git CLI, one lock per repository, the background fetch, the git API |
-| `src/Hubs/` | both SignalR hubs and what every hub shares: the Origin check, the session check on connect and on every call, closing the connections of ended sessions |
-| `src/Terminal/` | the terminal: the API's own tmux server, the terminals, the theme API |
+| `src/Hubs/` | what every SignalR hub shares: the Origin check, the session check on connect and on every call, closing the connections of ended sessions |
+| `src/Terminal/` | the terminal: the API's own tmux server, the terminals, the `/hubs/terminal` hub, the theme API |
 | `src/Processes/` | the allowlisted environment of every child process (git, tmux, claude) |
 | `src/Frontend/` | serving the built frontend, and the security headers of every response |
 | `src/Notifications/` | phone notifications of logins through ntfy |
-| `src/Claude/` | the console: the claude CLI, conversations, their processes and their event log. Not `Console/`, whose namespace would hide `System.Console` |
+| `src/Claude/` | the console: the claude CLI, conversations, their processes and event log, the `/hubs/console` hub. Not `Console/`, whose namespace would hide `System.Console` |
 | `dotnet-tools.json` | local .NET tools: `dotnet-ef` (`dotnet tool restore`) |
 | `tests/Claushh.Api.Tests/` | backend integration tests: xUnit, the API in memory (`WebApplicationFactory`), PostgreSQL 17 from Testcontainers (`ApiFactory`) |
 | `tests/Claushh.FakeClaude/` | a stand-in for the `claude` CLI in the backend tests: replays scripted stream-json lines and logs what the API sent; scripts are made of the recordings in `tests/Claushh.Api.Tests/ConsoleRecordings/` |
@@ -1175,7 +1175,7 @@ Terminal (`Terminal/`; the contract is in "Terminal"):
   without its exception (a JSON parse error's message quotes the file), and nothing of the file or its path is logged
   or returned.
 
-Console (`Claude/`, `Hubs/ConsoleHub.cs`; the contract is in "Console"; decisions: `PLAN.md`, "Backend decisions
+Console (`Claude/`; the contract is in "Console"; decisions: `PLAN.md`, "Backend decisions
 (stage 3)"):
 - `/hubs/console` has the shared hub rules ("Hubs"). `GetConversation` and `StartConversation` need `projectPath` to be
   a directory in the projects directory (`ProjectPaths`, as for the terminal), otherwise "Invalid path".

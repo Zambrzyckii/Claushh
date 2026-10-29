@@ -467,7 +467,7 @@ Backend decisions (stage 2):
   the server) and GET (the query in URLs).
 
 Backend decisions (stage 3):
-- The console's code lives in `Claude/` (`Claushh.Api.Claude`) and `Hubs/ConsoleHub.cs`. Rejected: `Console/`, whose
+- The console's code lives in `Claude/` (`Claushh.Api.Claude`), its hub included (`Claude/ConsoleHub.cs`). Rejected: `Console/`, whose
   namespace would hide `System.Console` in the API's own code.
 - Replay comes from the portal's own event log in PostgreSQL: every event as it was sent, in order, per conversation,
   text deltas merged per `messageId`. Rejected: reading the CLI's transcripts (an internal format that changes between
