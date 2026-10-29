@@ -688,6 +688,20 @@ Backend decisions (stage 4):
   tmux answers them. Rejected: filtering replies out of `Input` on the server (a cursor report and Ctrl+F3 are the
   same bytes) and letting xterm answer them (garbage with two tabs).
 
+Backend decisions (structure):
+- One project sliced by feature. Each folder of `src/` owns one feature (its endpoints or hub, engine, entities,
+  options and registration), next to a few shared folders and `Data/` for the one database context. Rejected: Clean
+  Architecture layers (most of the code adapts tmux, git, the claude CLI, libc and the file system, so a domain layer
+  would be nearly empty and every new interface would have one implementation) and one project per feature (only if
+  the folder boundaries start to erode).
+- The project sits directly in `src/` (`src/Claushh.Api.csproj`). Rejected: `src/Claushh.Api/`, one folder level more.
+  Accepted risk: any other project placed under `src/` would be compiled into the API unless excluded.
+- A file's namespace follows its folder, also in sub-folders (`Claushh.Api.Auth.Passkeys`) and in the tests
+  (`Claushh.Api.Tests.Auth`). Entity types and `ClaushhDbContext` keep their namespaces when files around them move,
+  so the EF Core model snapshot never changes for a move.
+- The dependency rules between the folders are kept by review (`ARCHITECTURE.md`, "Repository map"). Rejected: an
+  architecture test, which needs a package and is a unit-style test.
+
 ### Limiting damage
 
 - Everything runs as the `workspace` user without administrator privileges: the API, the terminal and the console;
