@@ -6,7 +6,7 @@ using Claushh.Api.Data;
 using Claushh.Api.Files;
 using Claushh.Api.Frontend;
 using Claushh.Api.Git;
-using Claushh.Api.Hubs;
+using Claushh.Api.Web;
 using Claushh.Api.Notifications;
 using Claushh.Api.Terminal;
 using Claushh.Api.Workspaces;

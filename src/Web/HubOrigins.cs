@@ -3,7 +3,7 @@
 // site cannot open a hub with the owner's cookie; a request without Origin is refused too.
 using Microsoft.Extensions.Options;
 
-namespace Claushh.Api.Hubs;
+namespace Claushh.Api.Web;
 
 public static class HubOrigins
 {
