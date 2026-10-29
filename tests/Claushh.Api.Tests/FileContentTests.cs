@@ -2,7 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text;
-using Claushh.Api.Files;
+using Claushh.Api.Projects;
 
 namespace Claushh.Api.Tests;
 
@@ -252,12 +252,12 @@ public sealed class FileContentTests(ApiFactory api) : ApiTest(api)
         var path = Api.WriteProjectFile("repo/win.txt", [.. Bom, (byte)'x']);
         var file = await ReadOkAsync("repo/win.txt");
 
-        var over = await SaveAsync("repo/win.txt", new string('a', FileStore.MaxBytes - 2), file.Version);
+        var over = await SaveAsync("repo/win.txt", new string('a', TextRule.MaxBytes - 2), file.Version);
 
         Assert.Equal(HttpStatusCode.RequestEntityTooLarge, over.StatusCode);
         Assert.Equal(file.Version, VersionOf(File.ReadAllBytes(path)));
-        await SaveOkAsync("repo/win.txt", new string('a', FileStore.MaxBytes - 3), file.Version);
-        Assert.Equal(FileStore.MaxBytes - 3, (await ReadOkAsync("repo/win.txt")).Content.Length);
+        await SaveOkAsync("repo/win.txt", new string('a', TextRule.MaxBytes - 3), file.Version);
+        Assert.Equal(TextRule.MaxBytes - 3, (await ReadOkAsync("repo/win.txt")).Content.Length);
     }
 
     [Fact]
@@ -266,9 +266,9 @@ public sealed class FileContentTests(ApiFactory api) : ApiTest(api)
         Api.WriteProjectFile("repo/main.c", "v1\n");
         var file = await ReadOkAsync("repo/main.c");
 
-        await SaveOkAsync("repo/main.c", new string('a', FileStore.MaxBytes), file.Version);
+        await SaveOkAsync("repo/main.c", new string('a', TextRule.MaxBytes), file.Version);
 
-        Assert.Equal(FileStore.MaxBytes, (await ReadOkAsync("repo/main.c")).Content.Length);
+        Assert.Equal(TextRule.MaxBytes, (await ReadOkAsync("repo/main.c")).Content.Length);
     }
 
     [Fact]
@@ -331,10 +331,10 @@ public sealed class FileContentTests(ApiFactory api) : ApiTest(api)
     public async Task Error_responses_have_no_body()
     {
         Api.WriteProjectFile("repo/main.c", "v1\n");
-        Api.WriteProjectFile("big/over.txt", Enumerable.Repeat((byte)'a', FileStore.MaxBytes + 1).ToArray());
+        Api.WriteProjectFile("big/over.txt", Enumerable.Repeat((byte)'a', TextRule.MaxBytes + 1).ToArray());
         Api.WriteProjectFile("bin/cp1250.txt", [0x7A, 0xB3, 0x6F]);
         var file = await ReadOkAsync("repo/main.c");
-        var tooLarge = new string('a', FileStore.MaxBytes + 1);
+        var tooLarge = new string('a', TextRule.MaxBytes + 1);
 
         (HttpStatusCode Status, HttpResponseMessage Response)[] answers =
         [

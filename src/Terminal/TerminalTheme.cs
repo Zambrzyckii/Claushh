@@ -3,8 +3,8 @@
 // Terminal:ThemeFile names, read on every request. Anything else is no theme (null). Nothing of the file, its path or a
 // parse error's message (it would quote the file) is returned or logged.
 using System.Text.Json;
-using Claushh.Api.Files;
 using Claushh.Api.Platform;
+using Claushh.Api.Projects;
 
 namespace Claushh.Api.Terminal;
 
@@ -38,7 +38,7 @@ public sealed record TerminalTheme(string Background, string Foreground, string 
         {
             file.Dispose();
         }
-        if (read > MaxBytes || FileStore.DecodeText(bytes.AsSpan(0, read)) is not { } text)
+        if (read > MaxBytes || TextRule.DecodeText(bytes.AsSpan(0, read)) is not { } text)
         {
             return null;
         }

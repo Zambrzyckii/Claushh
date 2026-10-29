@@ -17,11 +17,7 @@ public sealed record SaveResult(SaveStatus Status, string Version = "");
 
 public sealed class FileStore
 {
-    public const int MaxBytes = 5 * 1024 * 1024;
     public const string AbsentVersion = "absent";
-
-    private static readonly byte[] Bom = [0xEF, 0xBB, 0xBF];
-    private static readonly UTF8Encoding StrictUtf8 = new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
 
     // Saves of one file run one at a time; two files share a lock only when their paths hash alike.
     private readonly SemaphoreSlim[] _locks = Enumerable.Range(0, 64).Select(_ => new SemaphoreSlim(1, 1)).ToArray();
@@ -36,7 +32,7 @@ public sealed class FileStore
         try
         {
             var length = new FileInfo(file.FullPath).Length;
-            if (length > MaxBytes)
+            if (length > TextRule.MaxBytes)
             {
                 return new(ReadStatus.TooLarge);
             }
@@ -46,11 +42,11 @@ public sealed class FileStore
         {
             return new(ReadStatus.NotFound);
         }
-        if (bytes.Length > MaxBytes)
+        if (bytes.Length > TextRule.MaxBytes)
         {
             return new(ReadStatus.TooLarge);
         }
-        var text = DecodeText(bytes.Span);
+        var text = TextRule.DecodeText(bytes.Span);
         return text is null ? new(ReadStatus.NotText) : new(ReadStatus.Ok, text, VersionOf(bytes.Span));
     }
 
@@ -72,17 +68,17 @@ public sealed class FileStore
         int size;
         try
         {
-            size = StrictUtf8.GetByteCount(content);
+            size = TextRule.StrictUtf8.GetByteCount(content);
         }
         catch (EncoderFallbackException)
         {
             return new(SaveStatus.NotText);
         }
-        if (size > MaxBytes)
+        if (size > TextRule.MaxBytes)
         {
             return new(SaveStatus.TooLarge);
         }
-        var text = StrictUtf8.GetBytes(content);
+        var text = TextRule.StrictUtf8.GetBytes(content);
         var fileLock = _locks[(uint)StringComparer.Ordinal.GetHashCode(file.FullPath) % (uint)_locks.Length];
         await fileLock.WaitAsync(ct);
         try
@@ -93,8 +89,8 @@ public sealed class FileStore
             {
                 return new(SaveStatus.Conflict, currentVersion);
             }
-            byte[] bytes = current is { Bom: true } ? [.. Bom, .. text] : text;
-            if (bytes.Length > MaxBytes)
+            byte[] bytes = current is { Bom: true } ? [.. TextRule.Bom, .. text] : text;
+            if (bytes.Length > TextRule.MaxBytes)
             {
                 return new(SaveStatus.TooLarge);
             }
@@ -113,27 +109,7 @@ public sealed class FileStore
         }
     }
 
-    // What the editor shows for the bytes of a file: null for a NUL byte or invalid UTF-8, otherwise the text without a
-    // leading UTF-8 BOM. The size limit (MaxBytes) is up to the caller.
-    internal static string? DecodeText(ReadOnlySpan<byte> bytes)
-    {
-        if (bytes.Contains((byte)0))
-        {
-            return null;
-        }
-        try
-        {
-            return StrictUtf8.GetString(bytes[(HasBom(bytes) ? Bom.Length : 0)..]);
-        }
-        catch (DecoderFallbackException)
-        {
-            return null;
-        }
-    }
-
     private static string VersionOf(ReadOnlySpan<byte> bytes) => Convert.ToHexStringLower(SHA256.HashData(bytes));
-
-    private static bool HasBom(ReadOnlySpan<byte> bytes) => bytes.StartsWith(Bom);
 
     // The bytes of the file, at most MaxBytes + 1 of them: one more than the limit is enough to refuse it. The buffer has
     // the length measured a moment ago plus one byte, so a file that did not change is read into an array of its own
@@ -143,9 +119,9 @@ public sealed class FileStore
         await using var stream = File.OpenRead(path);
         var buffer = new byte[length + 1];
         var read = await stream.ReadAtLeastAsync(buffer, buffer.Length, throwOnEndOfStream: false, ct);
-        while (read == buffer.Length && read <= MaxBytes)
+        while (read == buffer.Length && read <= TextRule.MaxBytes)
         {
-            Array.Resize(ref buffer, (int)Math.Min(2L * buffer.Length, MaxBytes + 1));
+            Array.Resize(ref buffer, (int)Math.Min(2L * buffer.Length, TextRule.MaxBytes + 1));
             read += await stream.ReadAtLeastAsync(buffer.AsMemory(read), buffer.Length - read, throwOnEndOfStream: false, ct);
         }
         return buffer.AsMemory(0, read);
@@ -160,11 +136,11 @@ public sealed class FileStore
             await using var stream = File.OpenRead(path);
             // From the open file, so that the mode belongs to the bytes that are hashed.
             var mode = File.GetUnixFileMode(stream.SafeFileHandle);
-            var head = new byte[Bom.Length];
+            var head = new byte[TextRule.Bom.Length];
             var read = await stream.ReadAtLeastAsync(head, head.Length, throwOnEndOfStream: false, ct);
             stream.Position = 0;
             var hash = await SHA256.HashDataAsync(stream, ct);
-            return (Convert.ToHexStringLower(hash), read == Bom.Length && HasBom(head), mode);
+            return (Convert.ToHexStringLower(hash), read == TextRule.Bom.Length && TextRule.HasBom(head), mode);
         }
         catch (Exception e) when (e is FileNotFoundException or DirectoryNotFoundException)
         {

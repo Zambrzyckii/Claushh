@@ -191,7 +191,7 @@ public sealed class FileSearch(ProjectPaths paths, Repositories repositories, Se
                 var buffer = new byte[length + 1];
                 var read = stream.ReadAtLeast(buffer, buffer.Length, throwOnEndOfStream: false);
                 FilesRead++;
-                text = read == buffer.Length ? null : FileStore.DecodeText(buffer.AsSpan(0, read));
+                text = read == buffer.Length ? null : TextRule.DecodeText(buffer.AsSpan(0, read));
             }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException)
             {

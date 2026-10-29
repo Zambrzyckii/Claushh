@@ -2,7 +2,6 @@
 // decisions: docs/PLAN.md, "Backend decisions (stage 4)"). A repository is a real directory directly in a workspace,
 // whose .git is a real directory and which libgit2 opens; anything else is not listed and is a 404. Repositories are
 // opened for one call (for IgnoreRules, one search's walk) and disposed, never shared between threads.
-using Claushh.Api.Files;
 using Claushh.Api.Platform;
 using Claushh.Api.Projects;
 using LibGit2Sharp;
@@ -118,18 +117,18 @@ public sealed class Repositories(ProjectPaths paths, ILogger<Repositories> log)
             return new(ShowStatus.NotFound);
         }
         // Refused before it is read: the filters of a checkout add bytes (CR, the ident hash) rather than remove them.
-        if (blob.Size > FileStore.MaxBytes)
+        if (blob.Size > TextRule.MaxBytes)
         {
             return new(ShowStatus.TooLarge);
         }
         using var content = blob.GetContentStream(new FilteringOptions(inRepository));
         using var bytes = new MemoryStream();
         content.CopyTo(bytes);
-        if (bytes.Length > FileStore.MaxBytes)
+        if (bytes.Length > TextRule.MaxBytes)
         {
             return new(ShowStatus.TooLarge);
         }
-        return FileStore.DecodeText(bytes.GetBuffer().AsSpan(0, (int)bytes.Length)) is { } text
+        return TextRule.DecodeText(bytes.GetBuffer().AsSpan(0, (int)bytes.Length)) is { } text
             ? new(ShowStatus.Ok, text)
             : new(ShowStatus.NotText);
     }

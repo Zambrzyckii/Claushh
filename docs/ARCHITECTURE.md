@@ -53,11 +53,11 @@ On the server (decisions: `PLAN.md`, "Deployment decisions"):
 | `src/Program.cs` | the composition root: every registration, the middleware order, the migration at start, `create-user`, the endpoint and hub mapping, the non-dumpable hook |
 | `src/Properties/launchSettings.json` | development profile, port 5080 |
 | `src/Platform/` | Linux adapters that know nothing about the app: the libc calls (`Libc`) and the allowlisted environment of every child process (`ChildEnvironment`) |
-| `src/Projects/` | the projects directory: `Projects:Root` and its start checks, the only code that turns an API path into a path on disk (`ProjectPaths`) |
+| `src/Projects/` | the projects directory: `Projects:Root` and its start checks, the only code that turns an API path into a path on disk (`ProjectPaths`), the text rule with the 5 MB limit (`TextRule`) |
 | `src/Web/` | HTTP pipeline pieces every feature shares: the hubs' Origin check and `Hubs:AllowedOrigins` |
 | `src/Data/` | `ClaushhDbContext` (Identity tables, `Sessions`, `LoginAttempts`, `Workspaces`, and the console's `Conversations`, `ConversationEvents` and `ConsoleRules`) and the EF Core migrations, applied at startup |
 | `src/Auth/` | login and sessions: session rules, the login gate with its limits and lockout, TOTP, the auth cookies and the XSRF filter, cleanup after 90 days. `Passkeys/` (passkey ceremonies and endpoints), `Account/` (`create-user` and its command line), `Notifications/` (phone notifications of logins through ntfy), `Realtime/` (hub connections tied to their session and closed when it ends) |
-| `src/Files/` | the files API and search in files, plus code other folders use too: the text rule |
+| `src/Files/` | the files API and search in files |
 | `src/Workspaces/` | workspaces, the repository list of a workspace, cloning |
 | `src/Git/` | repositories read with libgit2, the git CLI, one lock per repository, the background fetch, the git API |
 | `src/Terminal/` | the terminal: the API's own tmux server, the terminals, the `/hubs/terminal` hub, the theme API |
@@ -161,6 +161,23 @@ On the server (decisions: `PLAN.md`, "Deployment decisions"):
 | `CLAUDE.md` | working rules for the repository (also for Claude Code): documentation in every change, commits, tests, security |
 | `.editorconfig` | UTF-8, LF, final newline, 2-space indent (4 for `*.cs`) |
 | `.gitignore` | .NET build output, `.env` files and local `appsettings.*.local.json`, editor and OS files |
+
+Dependency rules between the folders of src/, kept by review (docs/PLAN.md, "Backend decisions (structure)"):
+
+| Folder | May depend on | Must not depend on |
+|---|---|---|
+| `Platform/` | nothing in the app | anything else |
+| `Projects/` | `Platform/` | the features |
+| `Web/` | nothing in the app | the features |
+| `Data/` | the entity types of `Auth/`, `Claude/`, `Workspaces/` | anything else in those folders |
+| `Frontend/` | nothing in the app | the features |
+| `Auth/` | `Data/`, `Web/` | other features |
+| `Files/` | `Projects/`, `Platform/`, `Git/` (ignore rules for search) | hubs and endpoints of other features |
+| `Git/` | `Projects/`, `Platform/`, `Web/` | other features |
+| `Workspaces/` | `Projects/`, `Platform/`, `Git/`, `Data/`, `Web/` | hubs |
+| `Terminal/` | `Projects/`, `Platform/` | other features |
+| `Claude/` | `Projects/`, `Platform/`, `Git/`, `Data/` | `Terminal/`, `Auth/` |
+| `Program.cs` | everything | nothing, it is the composition root |
 
 ## Authentication
 
@@ -993,7 +1010,7 @@ Files (`Files/`, paths in `Projects/`; the rules the frontend can see are in "Fi
 - Every path goes through `ProjectPaths.Resolve` first (`FileEndpoints`: `400` when it returns null, before any file is
   touched); `FileStore` works on the resolved path.
 - The version is the lower-case hex SHA-256 of the file's bytes on disk (the BOM included), and `absent` when there is
-  no file. The text rule is `FileStore.DecodeText`: `null` for a NUL byte or invalid UTF-8, otherwise the text without a
+  no file. The text rule is `TextRule.DecodeText`: `null` for a NUL byte or invalid UTF-8, otherwise the text without a
   leading BOM; a save applies the same rule to the content it is given.
 - A read measures the file, refuses one over 5 MB without reading it, and reads into a buffer of its length plus one
   byte (the extra byte shows that the file has grown meanwhile, and the buffer then grows, to 5 MB plus one at most), so
@@ -1016,7 +1033,7 @@ Files (`Files/`, paths in `Projects/`; the rules the frontend can see are in "Fi
   depth. In a repository (the first two segments, as `Repositories.Find` accepts them) every directory, asked with a
   trailing `/`, and every file goes through LibGit2Sharp's `Ignore.IsPathIgnored`. A file is measured first (over 1 MiB:
   skipped), read up to one byte past that size (one that grew since is skipped) and decoded with
-  `FileStore.DecodeText`. Globs are `Microsoft.Extensions.FileSystemGlobbing` matchers (from the ASP.NET Core shared
+  `TextRule.DecodeText`. Globs are `Microsoft.Extensions.FileSystemGlobbing` matchers (from the ASP.NET Core shared
   framework), matched in memory, case-sensitive.
 - The query becomes a `Regex` with `NonBacktracking` and `CultureInvariant` (`IgnoreCase` unless `matchCase`; a literal
   through `Regex.Escape`; `wholeWord` as `\b(?:…)\b`, the pattern valid on its own). A pattern or glob .NET refuses is
@@ -1170,7 +1187,7 @@ Terminal (`Terminal/`; the contract is in "Terminal"):
   for reading with `Libc.OpenRegularFile` (`open` with `O_NONBLOCK`, so a named pipe never makes it wait; a link is
   followed), and the type is checked on the opened file (`statx` on its descriptor): anything but a regular file is
   `204`. At most 16 KiB + 1 bytes are read, never trusting the size the file reports, and more than 16 KiB is `204`.
-  The bytes are decoded as the files API decodes text (`FileStore.DecodeText`: no NUL byte, valid UTF-8, a BOM
+  The bytes are decoded as the files API decodes text (`TextRule.DecodeText`: no NUL byte, valid UTF-8, a BOM
   dropped) and parsed with `JsonDocument`; the 19 values are checked and lowered. A read or parse error is a `204`
   without its exception (a JSON parse error's message quotes the file), and nothing of the file or its path is logged
   or returned.
