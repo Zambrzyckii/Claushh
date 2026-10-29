@@ -61,9 +61,6 @@ public sealed class GitRunner(ILogger<GitRunner> log, IOptionsMonitor<GitOptions
     private const int TailBytes = 64 * 1024;
     private const int MaxMessage = 4000;
     private static readonly string[] SafetyOptions = ["-c", "core.fsmonitor=false"];
-    // Passed through from the API's own environment when set: git's config lookup and credential helpers such as
-    // libsecret need them.
-    private static readonly string[] Passthrough = ["XDG_CONFIG_HOME", "XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS"];
 
     // `git <arguments>` in `directory`, stopped when the deadline passes or, for a local step, after `stepLimit`. Throws
     // GitTimeoutException at a time limit and OperationCanceledException when the deadline was aborted. A local step
@@ -120,7 +117,7 @@ public sealed class GitRunner(ILogger<GitRunner> log, IOptionsMonitor<GitOptions
         // then Git:Environment:* (configuration, which may replace GIT_ALLOW_PROTOCOL), then git's own variables, which
         // always win.
         var overrides = new Dictionary<string, string> { ["GIT_ALLOW_PROTOCOL"] = "https" };
-        foreach (var name in Passthrough)
+        foreach (var name in ChildEnvironment.CredentialHelperVariables)
         {
             if (Environment.GetEnvironmentVariable(name) is { } value)
             {

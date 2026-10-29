@@ -11,6 +11,10 @@ public static class ChildEnvironment
     // Kept from the API's own environment when set, before `overrides` is applied.
     private static readonly string[] Passthrough = ["HOME", "USER", "LOGNAME", "SHELL", "PATH", "LANG", "LANGUAGE", "TZ"];
 
+    // Passed through when the API has them, on top of the allowlist: git's config lookup and credential helpers such as
+    // libsecret need them, also for a git push in a console step.
+    public static readonly IReadOnlyList<string> CredentialHelperVariables = ["XDG_CONFIG_HOME", "XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS"];
+
     // Clears `start.Environment` (ProcessStartInfo otherwise inherits the API's whole environment) and rebuilds it
     // from the allowlist above, every `LC_*` variable, `LANG=C.UTF-8` when neither `LANG`, `LC_ALL` nor `LC_CTYPE` is
     // set (so a child process gets a locale even on a server without one), then `overrides` (applied last, so a

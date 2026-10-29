@@ -1226,8 +1226,9 @@ Console (`Claude/`; the contract is in "Console"; decisions: `PLAN.md`, "Backend
   local settings files, so a cloned repository's `.claude/` settings (hooks, `env`, `apiKeyHelper`, allow rules) are
   not used, and with `--strict-mcp-config` neither is its `.mcp.json`.
 - The process's environment: the allowlist of `Platform/ChildEnvironment`, then `XDG_CONFIG_HOME`, `XDG_RUNTIME_DIR`
-  and `DBUS_SESSION_BUS_ADDRESS` when the API has them (as for git, so `git push` in a step reaches the credential
-  helper), `CLAUDE_CONFIG_DIR`, `DISABLE_UPDATES=1`, `DISABLE_AUTOUPDATER=1`, `TERM=dumb`, then `Console:Environment`.
+  and `DBUS_SESSION_BUS_ADDRESS` when the API has them (`ChildEnvironment.CredentialHelperVariables`, as for git, so
+  `git push` in a step reaches the credential helper), `CLAUDE_CONFIG_DIR`, `DISABLE_UPDATES=1`,
+  `DISABLE_AUTOUPDATER=1`, `TERM=dumb`, then `Console:Environment`.
   The API's own variables (the connection string, `ANTHROPIC_API_KEY`, `CLAUDECODE*`) never reach the CLI.
 - `initialize` must answer within 30 s. Before every prompt `set_model`, `set_permission_mode` and
   `apply_flag_settings {effortLevel}` are sent and each reply awaited (10 s; then "Console not responding" and the

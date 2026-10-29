@@ -19,8 +19,6 @@ public sealed partial class ClaudeCli(IOptions<ConsoleOptions> options, ProjectP
     public static readonly Version Minimum = new(2, 1, 285);
 
     private static readonly TimeSpan VersionTimeout = TimeSpan.FromSeconds(10);
-    // Passed through when the API has them, as git gets them, so that git push in a step reaches the credential helper.
-    private static readonly string[] Passthrough = ["XDG_CONFIG_HOME", "XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS"];
 
     // Any permission for the group or for others.
     private const UnixFileMode GroupOrOther = UnixFileMode.GroupRead | UnixFileMode.GroupWrite | UnixFileMode.GroupExecute
@@ -136,7 +134,7 @@ public sealed partial class ClaudeCli(IOptions<ConsoleOptions> options, ProjectP
             start.ArgumentList.Add(argument);
         }
         var overrides = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var name in Passthrough)
+        foreach (var name in ChildEnvironment.CredentialHelperVariables)
         {
             if (Environment.GetEnvironmentVariable(name) is { } value)
             {
