@@ -971,10 +971,11 @@ Passkeys (`Auth/Passkeys/`; the contract is in "Authentication" → "Passkeys"; 
 - `PasskeyCeremonies` keeps, in the API process, a registration's state per session (newer creation options replace
   it) and the sessions that re-authenticated, at most 20 sessions each, the oldest dropped. Each entry lasts 5
   minutes by `TimeProvider`, and a state is used once; a restart loses them.
-- Re-authentication runs inside the login gate: `RetryAfterAsync` (the per-IP limit and the account lock), then the
-  password and the code (`TotpVerifier`, so the code is used up). A failure is recorded like a failed login, and a
-  wrong or reused code after the right password counts towards the lockout and may start a lock with its
-  notification. A success resets the counts like a login, is not recorded and does not extend the session.
+- Re-authentication (`SignIn.ReauthenticateAsync`) runs inside the login gate: `RetryAfterAsync` (the per-IP limit and
+  the account lock), then the password and the code (`TotpVerifier`, so the code is used up). A failure is recorded
+  like a failed login, and a wrong or reused code after the right password counts towards the lockout and may start a
+  lock with its notification. A success resets the counts like a login, is not recorded and does not extend the
+  session.
 - Adding checks the body and the name, then enters the login gate: the session's state (taken, so used once), the
   limit of 10, Identity's checks (challenge, origin, RP ID hash, user presence and verification, algorithm, a
   credential id already stored) and that the state's user is the session's. `CreatedAt` is the `TimeProvider` time.

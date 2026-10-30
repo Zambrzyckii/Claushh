@@ -3,6 +3,7 @@
 // record, the lockout and the notifications in its own order, with deliberate differences. The endpoints only turn the
 // outcome into cookies, Retry-After and status codes.
 using Claushh.Api.Auth.Notifications;
+using Claushh.Api.Auth.Passkeys;
 using Microsoft.AspNetCore.Identity;
 
 namespace Claushh.Api.Auth;
@@ -14,7 +15,7 @@ public enum SignInStatus { Succeeded, Failed, TooMany }
 public sealed record SignInOutcome(SignInStatus Status, int RetryAfter = 0, string? Secret = null, bool ChallengeTaken = false);
 
 public sealed class SignIn(UserManager<IdentityUser> users, LoginGuard guard, TotpVerifier totp, SessionService sessions,
-    LoginNotifications notifications, ILoggerFactory loggers)
+    PasskeyCeremonies ceremonies, LoginNotifications notifications, ILoggerFactory loggers)
 {
     private static readonly IdentityUser DummyUser = new();
     private static string? _dummyHash;
@@ -57,6 +58,35 @@ public sealed class SignIn(UserManager<IdentityUser> users, LoginGuard guard, To
         return new SignInOutcome(SignInStatus.Succeeded, Secret: secret);
     }
 
+    public async Task<SignInOutcome> ReauthenticateAsync(LoginClient client, Session session, string? password,
+        string? totpCode, CancellationToken ct)
+    {
+        using var gate = await guard.EnterAsync(ct);
+        if (gate is null)
+        {
+            return new SignInOutcome(SignInStatus.TooMany, RetryAfter: (int)LoginGuard.GateWait.TotalSeconds);
+        }
+        if (await guard.RetryAfterAsync(client.LimitKey, ct) is { } retryAfter)
+        {
+            return new SignInOutcome(SignInStatus.TooMany, RetryAfter: retryAfter);
+        }
+        var user = await CheckPasswordByIdAsync(users, session.UserId, password, totpCode);
+        var success = user is not null && await totp.VerifyAsync(user, totpCode ?? "");
+        if (user is null || !success)
+        {
+            // Not the request's token: an attempt whose client went away is still recorded and counted.
+            await guard.RecordAsync(false, LoginMethods.Password, client.Ip, client.LimitKey, client.UserAgent, CancellationToken.None);
+            if (user is not null && await guard.CodeFailedAsync(user) is { } lockout)
+            {
+                notifications.AccountLocked(lockout, client.Ip, client.UserAgent);
+            }
+            return new SignInOutcome(SignInStatus.Failed);
+        }
+        await guard.SucceededAsync(user);
+        ceremonies.MarkFresh(session.Id);
+        return new SignInOutcome(SignInStatus.Succeeded);
+    }
+
     // The user when the fields have valid lengths, the name and password are right and TOTP is on; null otherwise.
     // An unknown user still costs one password hash, so the response time does not reveal whether the name exists.
     private static async Task<IdentityUser?> CheckPasswordAsync(UserManager<IdentityUser> users, string? userName,
@@ -73,6 +103,19 @@ public sealed class SignIn(UserManager<IdentityUser> users, LoginGuard guard, To
         {
             _dummyHash ??= users.PasswordHasher.HashPassword(DummyUser, "dummy password for timing");
             users.PasswordHasher.VerifyHashedPassword(DummyUser, _dummyHash, password);
+            return null;
+        }
+        return user.TwoFactorEnabled && await users.CheckPasswordAsync(user, password) ? user : null;
+    }
+
+    // The user when the body has a password and a 6-character code and the password is right (TOTP on); null otherwise.
+    private static async Task<IdentityUser?> CheckPasswordByIdAsync(UserManager<IdentityUser> users, string userId,
+        string? password, string? totpCode)
+    {
+        if (password is not { Length: > 0 and <= 1024 }
+            || totpCode is not { Length: 6 }
+            || await users.FindByIdAsync(userId) is not { } user)
+        {
             return null;
         }
         return user.TwoFactorEnabled && await users.CheckPasswordAsync(user, password) ? user : null;

@@ -43,36 +43,18 @@ public static class PasskeyEndpoints
     // Password and code again before a passkey is added or removed (the session is then fresh for 5 minutes), inside the
     // login gate with the login's limits. A failure is recorded like a failed login, and a wrong or reused code after the
     // right password counts towards the lockout. 403, not 401: the frontend ends the session on a 401.
-    private static async Task<IResult> Reauthenticate(HttpContext http, UserManager<IdentityUser> users, LoginGuard guard,
-        TotpVerifier totp, PasskeyCeremonies ceremonies, LoginNotifications notifications)
+    private static async Task<IResult> Reauthenticate(HttpContext http, SignIn signIn)
     {
         var session = SessionAuthenticationHandler.Current(http);
         var client = LoginClient.From(http);
         var body = await JsonBody.ReadAsync<ReauthenticateRequest>(http);
-        using var gate = await guard.EnterAsync(http.RequestAborted);
-        if (gate is null)
+        var outcome = await signIn.ReauthenticateAsync(client, session, body?.Password, body?.TotpCode, http.RequestAborted);
+        return outcome.Status switch
         {
-            return TooManyRequests(http, (int)LoginGuard.GateWait.TotalSeconds);
-        }
-        if (await guard.RetryAfterAsync(client.LimitKey, http.RequestAborted) is { } retryAfter)
-        {
-            return TooManyRequests(http, retryAfter);
-        }
-        var user = await CheckPasswordAsync(users, session.UserId, body);
-        var success = user is not null && await totp.VerifyAsync(user, body?.TotpCode ?? "");
-        if (user is null || !success)
-        {
-            // Not the request's token: an attempt whose client went away is still recorded and counted.
-            await guard.RecordAsync(false, LoginMethods.Password, client.Ip, client.LimitKey, client.UserAgent, CancellationToken.None);
-            if (user is not null && await guard.CodeFailedAsync(user) is { } lockout)
-            {
-                notifications.AccountLocked(lockout, client.Ip, client.UserAgent);
-            }
-            return Results.StatusCode(StatusCodes.Status403Forbidden);
-        }
-        await guard.SucceededAsync(user);
-        ceremonies.MarkFresh(session.Id);
-        return Results.NoContent();
+            SignInStatus.TooMany => TooManyRequests(http, outcome.RetryAfter),
+            SignInStatus.Failed => Results.StatusCode(StatusCodes.Status403Forbidden),
+            _ => Results.NoContent(),
+        };
     }
 
     private static async Task<IResult> List(HttpContext http, UserManager<IdentityUser> users)
@@ -273,18 +255,6 @@ public static class PasskeyEndpoints
     // The session's user as this request loaded it; inside the login gate, loaded after entering it.
     private static async Task<IdentityUser> OwnerAsync(UserManager<IdentityUser> users, Session session) =>
         await users.FindByIdAsync(session.UserId) ?? throw new InvalidOperationException("The session's user does not exist.");
-
-    // The user when the body has a password and a 6-character code and the password is right (TOTP on); null otherwise.
-    private static async Task<IdentityUser?> CheckPasswordAsync(UserManager<IdentityUser> users, string userId,
-        ReauthenticateRequest? body)
-    {
-        if (body is not { Password: { Length: > 0 and <= 1024 } password, TotpCode.Length: 6 }
-            || await users.FindByIdAsync(userId) is not { } user)
-        {
-            return null;
-        }
-        return user.TwoFactorEnabled && await users.CheckPasswordAsync(user, password) ? user : null;
-    }
 
     // Trimmed, 1-64 UTF-16 units, without control or format characters (names go into the phone notifications); null
     // when the name breaks the rule.
