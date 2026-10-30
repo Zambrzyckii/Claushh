@@ -1,4 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
+import { MonoTypeOperatorFunction, catchError } from 'rxjs';
 
 /**
  * Error of a workspaces, git or search API call (files have their own FileApiError).
@@ -69,4 +70,11 @@ export function toApiError(error: unknown): ApiError {
     default:
       return new ApiError('server', detail);
   }
+}
+
+/** `catchError` that rethrows every error as the client's own kind. */
+export function mapHttpError<T>(toError: (error: unknown) => Error): MonoTypeOperatorFunction<T> {
+  return catchError((error: unknown) => {
+    throw toError(error);
+  });
 }

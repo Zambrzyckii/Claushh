@@ -1,8 +1,8 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { Observable, catchError, map, throwError } from 'rxjs';
+import { Observable, map } from 'rxjs';
 
-import { readHttpFailure } from '../../core/api/api-error';
+import { mapHttpError, readHttpFailure } from '../../core/api/api-error';
 import { PasskeyCredentialJson } from '../../core/browser/webauthn';
 
 /**
@@ -48,7 +48,7 @@ export class PasskeysApi {
   list(): Observable<Passkey[]> {
     return this.http.get<Passkey[]>(PASSKEYS_API.passkeys).pipe(
       map((list) => list.map(toPasskey)),
-      catchError((e: unknown) => throwError(() => toPasskeyApiError(e)))
+      mapHttpError(toPasskeyApiError)
     );
   }
 
@@ -56,35 +56,35 @@ export class PasskeysApi {
   reauthenticate(password: string, totpCode: string): Observable<void> {
     return this.http
       .post<void>(PASSKEYS_API.reauthenticate, { password, totpCode })
-      .pipe(catchError((e: unknown) => throwError(() => toPasskeyApiError(e))));
+      .pipe(mapHttpError(toPasskeyApiError));
   }
 
   /** The WebAuthn creation options for this account; `forbidden` without a recent re-authentication. */
   creationOptions(): Observable<PublicKeyCredentialCreationOptionsJSON> {
     return this.http
       .post<PublicKeyCredentialCreationOptionsJSON>(PASSKEYS_API.creationOptions, null)
-      .pipe(catchError((e: unknown) => throwError(() => toPasskeyApiError(e))));
+      .pipe(mapHttpError(toPasskeyApiError));
   }
 
   /** Stores the new passkey; without a name the server names it after the device. */
   add(credential: PasskeyCredentialJson, name: string | null): Observable<Passkey> {
     return this.http.post<Passkey>(PASSKEYS_API.passkeys, name === null ? { credential } : { credential, name }).pipe(
       map(toPasskey),
-      catchError((e: unknown) => throwError(() => toPasskeyApiError(e)))
+      mapHttpError(toPasskeyApiError)
     );
   }
 
   rename(id: string, name: string): Observable<void> {
     return this.http
       .patch<void>(`${PASSKEYS_API.passkeys}/${encodeURIComponent(id)}`, { name })
-      .pipe(catchError((e: unknown) => throwError(() => toPasskeyApiError(e))));
+      .pipe(mapHttpError(toPasskeyApiError));
   }
 
   /** `forbidden` without a recent re-authentication. */
   remove(id: string): Observable<void> {
     return this.http
       .delete<void>(`${PASSKEYS_API.passkeys}/${encodeURIComponent(id)}`)
-      .pipe(catchError((e: unknown) => throwError(() => toPasskeyApiError(e))));
+      .pipe(mapHttpError(toPasskeyApiError));
   }
 }
 

@@ -1,8 +1,8 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { Observable, catchError, map, throwError } from 'rxjs';
+import { Observable, map } from 'rxjs';
 
-import { toApiError } from '../../core/api/api-error';
+import { mapHttpError, toApiError } from '../../core/api/api-error';
 
 /**
  * Search in files (`POST /api/search`). Contract: docs/ARCHITECTURE.md, "Files and editor" → "Search API contract". A
@@ -52,7 +52,7 @@ export class SearchApi {
         matchCount: r.matchCount ?? 0,
         limit: r.limit === 'results' || r.limit === 'time' ? r.limit : null
       })),
-      catchError((error: unknown) => throwError(() => toApiError(error)))
+      mapHttpError(toApiError)
     );
   }
 }

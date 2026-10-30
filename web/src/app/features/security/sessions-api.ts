@@ -1,8 +1,8 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { Observable, catchError, map, throwError } from 'rxjs';
+import { Observable, map } from 'rxjs';
 
-import { toApiError } from '../../core/api/api-error';
+import { mapHttpError, toApiError } from '../../core/api/api-error';
 
 /**
  * Active sessions and login history.
@@ -51,7 +51,7 @@ export class SessionsApi {
           lastActivityAt: s.lastActivityAt
         }))
       ),
-      catchError((e: unknown) => throwError(() => toApiError(e)))
+      mapHttpError(toApiError)
     );
   }
 
@@ -59,13 +59,13 @@ export class SessionsApi {
   revoke(id: string): Observable<void> {
     return this.http
       .delete<void>(`${SESSIONS_API.sessions}/${encodeURIComponent(id)}`)
-      .pipe(catchError((e: unknown) => throwError(() => toApiError(e))));
+      .pipe(mapHttpError(toApiError));
   }
 
   revokeOthers(): Observable<void> {
     return this.http
       .post<void>(SESSIONS_API.revokeOthers, null)
-      .pipe(catchError((e: unknown) => throwError(() => toApiError(e))));
+      .pipe(mapHttpError(toApiError));
   }
 
   logins(): Observable<LoginAttempt[]> {
@@ -81,7 +81,7 @@ export class SessionsApi {
           })
         )
       ),
-      catchError((e: unknown) => throwError(() => toApiError(e)))
+      mapHttpError(toApiError)
     );
   }
 }

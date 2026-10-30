@@ -1,8 +1,8 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { Observable, catchError, map, throwError } from 'rxjs';
+import { Observable, map, throwError } from 'rxjs';
 
-import { readHttpFailure } from './api-error';
+import { mapHttpError, readHttpFailure } from './api-error';
 import { isSafeRelativePath } from './project-path';
 
 /**
@@ -75,7 +75,7 @@ export class FilesApi {
     if (!isSafeRelativePath(path)) {
       return throwError(() => new FileApiError('invalid-path'));
     }
-    return request().pipe(catchError((error: unknown) => throwError(() => toFileApiError(error))));
+    return request().pipe(mapHttpError(toFileApiError));
   }
 }
 

@@ -1,8 +1,8 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { Observable, catchError, map, throwError } from 'rxjs';
+import { Observable, map, throwError } from 'rxjs';
 
-import { ApiError, toApiError } from '../../core/api/api-error';
+import { ApiError, mapHttpError, toApiError } from '../../core/api/api-error';
 import { isSafeRelativePath } from '../../core/api/project-path';
 
 /**
@@ -46,14 +46,14 @@ export class WorkspacesApi {
   list(): Observable<WorkspaceInfo[]> {
     return this.http.get<WorkspaceInfo[]>(WORKSPACES_API.workspaces).pipe(
       map((list) => list.map(toWorkspace)),
-      catchError((e: unknown) => throwError(() => toApiError(e)))
+      mapHttpError(toApiError)
     );
   }
 
   create(name: string): Observable<WorkspaceInfo> {
     return this.http.post<WorkspaceInfo>(WORKSPACES_API.workspaces, { name }).pipe(
       map(toWorkspace),
-      catchError((e: unknown) => throwError(() => toApiError(e)))
+      mapHttpError(toApiError)
     );
   }
 
@@ -65,7 +65,7 @@ export class WorkspacesApi {
       .get<RepoSummary[]>(WORKSPACES_API.repos, { params: new HttpParams().set('workspace', workspacePath) })
       .pipe(
         map((list) => list.map(toRepo)),
-        catchError((e: unknown) => throwError(() => toApiError(e)))
+        mapHttpError(toApiError)
       );
   }
 
@@ -75,7 +75,7 @@ export class WorkspacesApi {
     }
     return this.http.post<RepoSummary>(WORKSPACES_API.clone, { workspace: workspacePath, url }).pipe(
       map(toRepo),
-      catchError((e: unknown) => throwError(() => toApiError(e)))
+      mapHttpError(toApiError)
     );
   }
 }
