@@ -62,7 +62,7 @@ On the server (decisions: `PLAN.md`, "Deployment decisions"):
 | `src/Git/` | repositories read with libgit2, the git CLI, one lock per repository, the background fetch, the git API |
 | `src/Terminal/` | the terminal: the API's own tmux server, the terminals, the `/hubs/terminal` hub, the theme API |
 | `src/Frontend/` | serving the built frontend (`Frontend:Root`) |
-| `src/Claude/` | the console: the claude CLI, conversations, their processes and event log, the `/hubs/console` hub. Not `Console/`, whose namespace would hide `System.Console`. `Translation/` (the CLI's stream-json format) |
+| `src/Claude/` | the console: the claude CLI, conversations, their processes and event log, the `/hubs/console` hub. Not `Console/`, whose namespace would hide `System.Console`. `Translation/` (what the CLI's stream-json lines mean for a turn) |
 | `dotnet-tools.json` | local .NET tools: `dotnet-ef` (`dotnet tool restore`) |
 | `tests/Claushh.Api.Tests/` | backend integration tests: xUnit, the API in memory (`WebApplicationFactory`), PostgreSQL 17 from Testcontainers (`ApiFactory`). One folder per feature folder of `src/`, plus `Support/` (the shared harness) and `ConsoleRecordings/` |
 | `tests/Claushh.FakeClaude/` | a stand-in for the `claude` CLI in the backend tests: replays scripted stream-json lines and logs what the API sent; scripts are made of the recordings in `tests/Claushh.Api.Tests/ConsoleRecordings/` |
@@ -1206,6 +1206,8 @@ Console (`Claude/`; the contract is in "Console"; decisions: `PLAN.md`, "Backend
   sent at once and stored as one row per `messageId`, written before the next other event; `GetConversation` returns the
   project's latest conversation (by `StartedAt`) with its rows and the text still open. A failed insert is logged and
   the event is still sent.
+- `Translation/TurnTranslator` turns each stream-json line into events and leaves the database, git, the CLI's stdin
+  and the end of a turn to `Conversations`, which owns the lock and the processes.
 - At start (a hosted service, so `create-user` never runs it) the API creates `Console:ConfigDirectory` with mode
   0700. A `Console:ApiKeyFile` that is not an existing file, that lies in the projects directory as written or with
   symlinks resolved (its directory or the file itself), or whose mode has a group or other bit makes the console

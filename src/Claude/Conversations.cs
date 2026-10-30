@@ -19,7 +19,7 @@ namespace Claushh.Api.Claude;
 public sealed record ConversationSnapshot(string? ConversationId, IReadOnlyList<JsonElement> Events);
 
 public sealed class Conversations(ClaudeCli cli, ConversationLog store, ProjectPaths paths, Repositories repositories,
-    EventWriter events, TimeProvider clock, ILogger<Conversations> log) : IHostedService
+    EventWriter events, TurnTranslator translator, TimeProvider clock, ILogger<Conversations> log) : IHostedService
 {
     public const string InvalidPath = "Invalid path";
     public const string InvalidFile = "Invalid file";
@@ -31,7 +31,7 @@ public sealed class Conversations(ClaudeCli cli, ConversationLog store, ProjectP
     public static readonly TimeSpan IdleTimeout = TimeSpan.FromMinutes(15);
     public static readonly TimeSpan DefaultInterruptTimeout = TimeSpan.FromSeconds(10);
 
-    private const string Interrupted = "interrupted";
+    internal const string Interrupted = "interrupted";
     private const string ResumeFailed = "Could not resume the conversation. Start a new one (“New”).";
     private const string StoppedMidTurn = "The server stopped during the turn.";
     // How long a closed process may take to exit before its tree is killed; also the whole stop's limit.
@@ -604,223 +604,41 @@ public sealed class Conversations(ClaudeCli cli, ConversationLog store, ProjectP
             {
                 return;
             }
-            if (type == "control_request")
+            var outcome = await translator.HandleAsync(state, type, line, e => events.EmitAsync(state, e));
+            if (outcome.Unsupported is { } request)
             {
-                await OnControlRequestAsync(state, process, line);
+                log.LogWarning("claude sent the control request {Subtype}, which the console does not support, in conversation {Conversation}",
+                    request.Subtype, state.Key);
+                await process.ReplyErrorAsync(request.RequestId, $"Unsupported control request: {request.Subtype}");
             }
-            else if (type == "control_cancel_request")
+            if (outcome.MarkResumable)
             {
-                await OnCancelAsync(state, line);
-            }
-            else if (type == "system")
-            {
-                await OnSystemAsync(state, line);
-            }
-            else if (state.Turn is { } turn)
-            {
-                switch (type)
+                state.Resumable = true;
+                try
                 {
-                    case "stream_event":
-                        await OnStreamEventAsync(state, turn, line);
-                        break;
-                    case "assistant":
-                        OnAssistant(turn, line);
-                        break;
-                    case "user":
-                        await OnUserAsync(state, turn, line);
-                        break;
-                    case "result":
-                        await OnResultAsync(state, turn, line);
-                        break;
+                    await store.MarkResumableAsync(state.Id);
                 }
+                catch (Exception e)
+                {
+                    log.LogError(e, "Marking console conversation {Conversation} as resumable failed", state.Key);
+                }
+            }
+            if (outcome.TurnEnd is { } status)
+            {
+                // A command can change files the CLI does not report: in a project that was a repository at the prompt, every
+                // path whose git status changed since then.
+                if (outcome.StatusBefore is { } before
+                    && ChangedPaths(before, RepositoryStatus(repositories, state.ProjectPath)) is { Count: > 0 } changed)
+                {
+                    await events.EmitAsync(state, ConsoleEvents.FilesChanged(state.Key, changed));
+                }
+                await EndTurnAsync(state, status);
             }
         }
         finally
         {
             state.Lock.Release();
         }
-    }
-
-    // Every control request of the CLI is answered, or the CLI waits for ever; one the console does not support gets an
-    // error reply.
-    private async Task OnControlRequestAsync(ConversationState state, ClaudeProcess process, JsonElement line)
-    {
-        var requestId = StreamJson.Str(line, "request_id") ?? "";
-        var request = StreamJson.Get(line, "request") ?? default;
-        var subtype = StreamJson.Str(request, "subtype");
-        if (subtype == "can_use_tool" && state.Turn is { } turn)
-        {
-            await AskAsync(state, turn, requestId, request);
-            return;
-        }
-        log.LogWarning("claude sent the control request {Subtype}, which the console does not support, in conversation {Conversation}",
-            subtype, state.Key);
-        await process.ReplyErrorAsync(requestId, $"Unsupported control request: {subtype}");
-    }
-
-    // A question of the CLI: the server's own requestId, what it is for, and the one rule allow-always may save; then the
-    // conversation waits. A question has no time limit.
-    private async Task AskAsync(ConversationState state, Turn turn, string cliRequestId, JsonElement request)
-    {
-        var tool = StreamJson.Str(request, "tool_name") ?? "";
-        var input = StreamJson.Get(request, "input") ?? default;
-        var (rule, alwaysRule) = PermissionRequests.Rule(request);
-        var requestId = Guid.NewGuid().ToString("D");
-        turn.Pending[requestId] = new PendingPermission(cliRequestId, tool, input, rule, alwaysRule);
-        await events.EmitAsync(state, ConsoleEvents.Permission(state.Key, requestId, PermissionRequests.Description(tool, input, turn.Directory), alwaysRule));
-        await events.EmitAsync(state, ConsoleEvents.Status(state.Key, "waiting"));
-    }
-
-    // The CLI no longer needs an answer (control_cancel_request): the question ends as denied.
-    private async Task OnCancelAsync(ConversationState state, JsonElement line)
-    {
-        if (state.Turn is not { } turn || StreamJson.Str(line, "request_id") is not { } cliRequestId)
-        {
-            return;
-        }
-        foreach (var requestId in turn.Pending.Where(entry => entry.Value.CliRequestId == cliRequestId).Select(entry => entry.Key).ToList())
-        {
-            turn.Pending.Remove(requestId);
-            await events.EmitAsync(state, ConsoleEvents.Resolved(state.Key, requestId, "deny"));
-            if (turn.Pending.Count == 0 && !turn.Interrupting)
-            {
-                await events.EmitAsync(state, ConsoleEvents.Status(state.Key, "working"));
-            }
-        }
-    }
-
-    // init: the CLI knows the conversation's id as its session, so the next process resumes it. permission_denied: a
-    // tool the CLI refused on its own, without a question (--restricted, e.g. a file outside the directory), is a step of
-    // kind other with the CLI's reason as its error output; its tool_result then adds nothing.
-    private async Task OnSystemAsync(ConversationState state, JsonElement line)
-    {
-        var subtype = StreamJson.Str(line, "subtype");
-        if (subtype == "init" && !state.Resumable && StreamJson.Str(line, "session_id") == state.Key)
-        {
-            state.Resumable = true;
-            try
-            {
-                await store.MarkResumableAsync(state.Id);
-            }
-            catch (Exception e)
-            {
-                log.LogError(e, "Marking console conversation {Conversation} as resumable failed", state.Key);
-            }
-            return;
-        }
-        if (subtype != "permission_denied" || state.Turn is not { } turn || StreamJson.Str(line, "tool_use_id") is not { } id
-            || !turn.Tools.Remove(id, out var tool) || StreamJson.Kind(tool.Name, null) is null)
-        {
-            return;
-        }
-        await events.EmitAsync(state, ConsoleEvents.Step(state.Key, id, "other", StreamJson.Target(tool.Name, tool.Input, turn.Directory)));
-        await events.EmitAsync(state, ConsoleEvents.StepOutput(state.Key, id,
-            StreamJson.Str(line, "message") ?? StreamJson.Str(line, "decision_reason") ?? "", true));
-    }
-
-    // Text deltas of the conversation's own messages. A text block's messageId is "<message id>:<block index>", so text
-    // after a tool in the same message starts a new entry. Thinking is not shown.
-    private async Task OnStreamEventAsync(ConversationState state, Turn turn, JsonElement line)
-    {
-        if (!StreamJson.TopLevel(line) || StreamJson.Get(line, "event") is not { } streamEvent)
-        {
-            return;
-        }
-        var type = StreamJson.Str(streamEvent, "type");
-        if (type == "message_start")
-        {
-            turn.MessageId = StreamJson.Get(streamEvent, "message") is { } message ? StreamJson.Str(message, "id") ?? "" : "";
-        }
-        else if (type == "content_block_delta" && StreamJson.Get(streamEvent, "delta") is { } delta
-            && StreamJson.Str(delta, "type") == "text_delta" && StreamJson.Str(delta, "text") is { Length: > 0 } text)
-        {
-            var index = StreamJson.Get(streamEvent, "index") is { ValueKind: JsonValueKind.Number } number ? number.GetInt32() : 0;
-            await events.EmitAsync(state, ConsoleEvents.Text(state.Key, $"{turn.MessageId}:{index}", text));
-        }
-    }
-
-    // Complete tool_use blocks: what a step needs once its result arrives.
-    private static void OnAssistant(Turn turn, JsonElement line)
-    {
-        if (!StreamJson.TopLevel(line))
-        {
-            return;
-        }
-        foreach (var block in StreamJson.Content(line))
-        {
-            if (StreamJson.Str(block, "type") == "tool_use" && StreamJson.Str(block, "id") is { } id
-                && StreamJson.Str(block, "name") is { } name)
-            {
-                turn.Tools[id] = (name, StreamJson.Get(block, "input") ?? default);
-            }
-        }
-    }
-
-    // A tool_result: the step of a tool that ran; a tool that did not run (denied, refused, cancelled) has none.
-    private async Task OnUserAsync(ConversationState state, Turn turn, JsonElement line)
-    {
-        if (!StreamJson.TopLevel(line))
-        {
-            return;
-        }
-        var results = StreamJson.Content(line).Where(block => StreamJson.Str(block, "type") == "tool_result").ToList();
-        // The structured result belongs to the line; the CLI writes one tool_result per line.
-        var structured = results.Count == 1 ? StreamJson.Get(line, "tool_use_result") : null;
-        foreach (var block in results)
-        {
-            if (StreamJson.Str(block, "tool_use_id") is not { } id || !turn.Tools.Remove(id, out var tool)
-                || StreamJson.NotExecuted(line, id) || StreamJson.Kind(tool.Name, structured) is not { } kind)
-            {
-                continue;
-            }
-            foreach (var e in StepOf(state, turn, id, tool, kind, block, structured))
-            {
-                await events.EmitAsync(state, e);
-            }
-        }
-    }
-
-    // The events of a tool that ran: its step (an edit with its counts), its output (capped), and for an edit the file it
-    // changed, relative to the projects directory. A command marks the turn for the status diff at its end.
-    private IEnumerable<JsonElement> StepOf(ConversationState state, Turn turn, string id, (string Name, JsonElement Input) tool,
-        string kind, JsonElement block, JsonElement? structured)
-    {
-        var isError = StreamJson.True(block, "is_error");
-        var counts = kind is "edit" or "write" && !isError ? FileChanges.Counts(structured) : null;
-        yield return ConsoleEvents.Step(state.Key, id, kind, StreamJson.Target(tool.Name, tool.Input, turn.Directory),
-            counts?.Added, counts?.Removed);
-        foreach (var (text, error) in StreamJson.Outputs(tool.Name, block, structured))
-        {
-            yield return ConsoleEvents.StepOutput(state.Key, id, FileChanges.Cap(text), error);
-        }
-        if (tool.Name is "Edit" or "Write" or "NotebookEdit" && !isError
-            && FileChanges.Relative(structured is { } result ? StreamJson.Str(result, "filePath") : null, paths.Root) is { } changed)
-        {
-            yield return ConsoleEvents.FilesChanged(state.Key, [changed]);
-        }
-        if (tool.Name == "Bash")
-        {
-            turn.RanCommand = true;
-        }
-    }
-
-    // The end of the turn: idle, idle "interrupted" after an interrupt, or an error with the CLI's text.
-    private async Task OnResultAsync(ConversationState state, Turn turn, JsonElement line)
-    {
-        var detail = StreamJson.Str(line, "result") is { Length: > 0 } text ? text : StreamJson.Str(line, "subtype") ?? "";
-        var status = turn.Interrupting
-            ? ConsoleEvents.Status(state.Key, "idle", Interrupted)
-            : StreamJson.Str(line, "subtype") == "success" && !StreamJson.True(line, "is_error")
-                ? ConsoleEvents.Status(state.Key, "idle")
-                : ConsoleEvents.Status(state.Key, "error", "The prompt failed: " + (detail.Length <= 500 ? detail : detail[..500]));
-        // A command can change files the CLI does not report: in a project that was a repository at the prompt, every
-        // path whose git status changed since then.
-        if (turn.RanCommand && turn.Before is { } before
-            && ChangedPaths(before, RepositoryStatus(repositories, state.ProjectPath)) is { Count: > 0 } changed)
-        {
-            await events.EmitAsync(state, ConsoleEvents.FilesChanged(state.Key, changed));
-        }
-        await EndTurnAsync(state, status);
     }
 
     // Open questions end as denied, then the status; the conversation takes prompts again.
