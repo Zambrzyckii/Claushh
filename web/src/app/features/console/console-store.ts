@@ -3,7 +3,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 
 import { baseName } from '../../core/api/project-path';
 import { ProjectContext } from '../../core/project/project-context';
-import { ConsoleConnection } from '../../core/realtime/console-connection';
+import { ConsoleConnection } from './console-connection';
 import {
   ConsoleEvent,
   ConsoleOptions,
@@ -11,7 +11,7 @@ import {
   PermissionDecision,
   PromptFile,
   StepKind
-} from '../../core/realtime/console-protocol';
+} from './console-protocol';
 import { EditorStore } from '../editor/editor-store';
 
 /**

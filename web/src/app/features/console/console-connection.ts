@@ -9,9 +9,9 @@ import {
   PermissionDecision,
   SendPromptRequest
 } from './console-protocol';
-import { HubClient } from './hub-client';
+import { HubClient } from '../../core/realtime/hub-client';
 
-export type { ConnectionState } from './hub-client';
+export type { ConnectionState } from '../../core/realtime/hub-client';
 
 /**
  * SignalR connection to the console hub (`/hubs/console`). Connecting, reconnecting and session control: HubClient.

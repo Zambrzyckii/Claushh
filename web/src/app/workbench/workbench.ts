@@ -20,7 +20,7 @@ import { Dialogs } from '../core/browser/dialogs';
 import { KeyboardInset } from '../core/browser/keyboard-inset';
 import { ProjectContext } from '../core/project/project-context';
 import { RepoStatusStore } from '../core/project/repo-status';
-import { ConsoleConnection } from '../core/realtime/console-connection';
+import { ConsoleConnection } from '../features/console/console-connection';
 import { TerminalConnection } from '../features/terminal/terminal-connection';
 import { ConsolePanel } from '../features/console/console-panel';
 import { ConsoleStore } from '../features/console/console-store';

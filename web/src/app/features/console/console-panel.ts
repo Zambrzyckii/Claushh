@@ -20,7 +20,7 @@ import { DeviceLayout } from '../../core/browser/device-layout';
 import { Dialogs } from '../../core/browser/dialogs';
 import { fileIconUrl } from '../../core/icons/file-icons';
 import { ProjectContext } from '../../core/project/project-context';
-import { ConsoleEffort, ConsoleMode, ConsoleModel, PermissionDecision, PromptFile, StepKind } from '../../core/realtime/console-protocol';
+import { ConsoleEffort, ConsoleMode, ConsoleModel, PermissionDecision, PromptFile, StepKind } from './console-protocol';
 import { countLabel, formatTime } from '../../core/text/format';
 import { revealHidden } from '../../core/text/visible-text';
 import { ConsoleStore } from './console-store';
