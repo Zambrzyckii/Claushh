@@ -102,7 +102,7 @@ export function terminalOptions(phone: boolean, theme: TerminalTheme | null): IT
       foreground: theme?.foreground ?? cssToken('--text'),
       cursor: theme?.cursor ?? cssToken('--accent'),
       cursorAccent: background,
-      selectionBackground: '#2c3a52',
+      selectionBackground: cssToken('--editor-selection'),
       ...(theme ? ansiColours(theme.palette) : PORTAL_ANSI)
     }
   };

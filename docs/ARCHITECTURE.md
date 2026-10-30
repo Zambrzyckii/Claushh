@@ -79,7 +79,7 @@ On the server (decisions: `PLAN.md`, "Deployment decisions"):
 | `web/src/app/core/browser/` | the browser behind small services and functions, so tests can replace the device and the user (the reload, the bfcache guard, `confirm()` and `alert()`, WebAuthn, `DeviceLayout`, `KeyboardInset`), plus the Trusted Types policy, `isTypingElsewhere`, `cssToken` and the font checks |
 | `web/src/app/core/project/` | the open repository from `?repo=` with its "files changed" and "files saved" events and `mayHaveChanged`, the one stream the stores refresh from (`ProjectContext`), and its git status with the explorer's marks (`RepoStatusStore`, `STATUS_LETTERS`) and `branchLabel` (a branch or "(detached HEAD)") |
 | `web/src/app/core/realtime/` | the SignalR base `HubClient` (WebSocket only, reconnect, session check on disconnect) |
-| `web/src/app/core/text/` | the shared text helpers (plurals, relative time, `en-GB` dates, the wait of a `429`, the shared failure texts `tooManyAttempts`, `NO_CONNECTION` and `PASSKEYS_AT_DOMAIN_ONLY`) and `revealHidden` and `previewText` for commands to approve |
+| `web/src/app/core/text/` | the shared text helpers (plurals, relative time, `en-GB` dates, the wait of a `429`, the session countdown's `formatDuration` as "24:13" or "1:05:00", the shared failure texts `tooManyAttempts`, `NO_CONNECTION` and `PASSKEYS_AT_DOMAIN_ONLY`) and `revealHidden` and `previewText` for commands to approve |
 | `web/src/app/core/icons/` | `fileIconUrl` and `folderIconUrl` (a file's or folder's icon in `public/file-icons/`), `fileIconFor` (the icon of a path or a name) and `file-icon-map.ts`, which `scripts/file-icons.mjs` generates |
 | `web/public/file-icons/` | the shipped selection of Material Icon Theme's SVGs and its `LICENSE`, copied by `scripts/file-icons.mjs` and committed |
 | `web/scripts/` | `file-icons.mjs`, which copies the allowed icons of `material-icon-theme` and writes the map (`README.md`, "Updating the file icons") |
@@ -1295,7 +1295,7 @@ Conventions:
 - Each app feature in a separate folder `web/src/app/features/<name>/`, lazy-loaded from the routes.
 - The page after login is the workbench in `web/src/app/workbench/`, a layer above the features. `core/` imports nothing from `workbench/` or `features/`, features never import `workbench/`, and only `app.routes.ts` imports `workbench/`.
 - Colors and fonts only through the tokens of `styles.scss`, no hard-coded colors in components; the Monaco and
-  xterm themes read them through `theme.ts` (only the syntax colors, the selection and the 16 terminal colors are
+  xterm themes read them through `theme.ts` (only the syntax colors and the 16 terminal colors are
   fixed there, and the terminal takes the server's theme instead when there is one: section "Terminal"); the file-icon SVGs in `public/file-icons/` keep their theme's own colors. Buttons, inputs, focus and
   tabs come from the shared controls in `styles.scss`: `.primary`,
   `.danger`, `.icon` (an icon-only button with an `aria-label`), `.link`, `.is-on` and `aria-pressed`; a component

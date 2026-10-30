@@ -103,7 +103,7 @@ function defineTheme(monaco: Monaco): void {
       'editorLineNumber.foreground': cssToken('--text-faint'),
       'editorLineNumber.activeForeground': cssToken('--text'),
       'editorCursor.foreground': cssToken('--accent'),
-      'editor.selectionBackground': '#2c3a52',
+      'editor.selectionBackground': cssToken('--editor-selection'),
       'editorWidget.background': cssToken('--surface'),
       'editorWidget.border': cssToken('--border-strong'),
       focusBorder: cssToken('--accent')

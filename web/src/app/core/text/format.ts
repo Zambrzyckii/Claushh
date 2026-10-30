@@ -76,6 +76,16 @@ export function formatWait(seconds: number): string {
   return `${Math.ceil(seconds / 3600)} h.`;
 }
 
+/** Milliseconds as "24:13", or "1:05:00" from an hour, with the seconds rounded up. */
+export function formatDuration(ms: number): string {
+  const total = Math.ceil(ms / 1000);
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const seconds = total % 60;
+  const ss = String(seconds).padStart(2, '0');
+  return hours > 0 ? `${hours}:${String(minutes).padStart(2, '0')}:${ss}` : `${minutes}:${ss}`;
+}
+
 /** "Too many attempts. Try again in 30 s." with a wait, "Too many attempts. Try again later." without one (0 counts as none). */
 export function tooManyAttempts(retryAfterSeconds: number | null | undefined): string {
   return retryAfterSeconds
