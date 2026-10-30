@@ -1,5 +1,6 @@
 import { Component, HostListener, computed, inject, input, output, signal } from '@angular/core';
 
+import { workspaceOf } from '../core/api/project-path';
 import { AuthService } from '../core/auth/auth.service';
 import { SessionTimer } from '../core/auth/session-timer';
 import { DeviceLayout } from '../core/browser/device-layout';
@@ -36,7 +37,7 @@ export class TitleBar {
   protected readonly menuOpen = signal(false);
   /** The open repository's workspace by its display name, e.g. "Studia". */
   protected readonly workspaceName = computed(
-    () => this.workspaces.openWorkspace()?.name ?? this.project.path().split('/')[0]
+    () => this.workspaces.openWorkspace()?.name ?? workspaceOf(this.project.path())
   );
 
   protected openSecurity(): void {

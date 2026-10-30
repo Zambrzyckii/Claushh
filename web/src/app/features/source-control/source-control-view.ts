@@ -1,6 +1,6 @@
 import { Component, inject, output } from '@angular/core';
 
-import { baseName } from '../../core/api/project-path';
+import { baseName, directoryInRepo } from '../../core/api/project-path';
 import { fileIconUrl } from '../../core/icons/file-icons';
 import { RepoStatusStore, STATUS_LETTERS } from '../../core/project/repo-status';
 import { EditorStore } from '../editor/editor-store';
@@ -28,10 +28,7 @@ export class SourceControlView {
     return baseName(path);
   }
 
-  /** The file's directory inside its repository (paths start with workspace/repository). */
-  protected directory(path: string): string {
-    return path.split('/').slice(2, -1).join('/');
-  }
+  protected readonly directory = directoryInRepo;
 
   protected icon(path: string): string {
     return fileIconUrl(baseName(path));

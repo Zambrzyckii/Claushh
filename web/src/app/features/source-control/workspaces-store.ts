@@ -4,6 +4,7 @@ import { debounceTime, firstValueFrom } from 'rxjs';
 
 import { ApiError, toApiError } from '../../core/api/api-error';
 import { GitApi } from '../../core/api/git-api';
+import { workspaceOf } from '../../core/api/project-path';
 import { RepoSummary, WorkspaceInfo, WorkspacesApi } from './workspaces-api';
 import { ProjectContext } from '../../core/project/project-context';
 import { RepoStatusStore } from '../../core/project/repo-status';
@@ -51,7 +52,7 @@ export class WorkspacesStore {
   /** Workspace of the open repository (for the path in the top bar). */
   readonly openWorkspace = computed(() => {
     const repo = this.project.path();
-    const top = repo.split('/', 1)[0];
+    const top = workspaceOf(repo);
     return repo === '' ? null : (this.workspacesSignal()?.find((w) => w.path === top) ?? null);
   });
 
@@ -73,7 +74,7 @@ export class WorkspacesStore {
       const workspaces = await firstValueFrom(this.api.list());
       this.workspacesSignal.set(workspaces);
       if (!workspaces.some((w) => w.path === this.selectedSignal())) {
-        const top = this.project.path().split('/', 1)[0];
+        const top = workspaceOf(this.project.path());
         const initial = workspaces.find((w) => w.path === top) ?? workspaces[0] ?? null;
         this.selectedSignal.set(initial?.path ?? null);
         this.reposSignal.set(null);

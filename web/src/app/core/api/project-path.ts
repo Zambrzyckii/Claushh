@@ -19,3 +19,19 @@ export function isSafeRelativePath(path: string): boolean {
 export function baseName(path: string): string {
   return path.slice(path.lastIndexOf('/') + 1);
 }
+
+/** The workspace a path starts with, its first segment ('' for ''). */
+export function workspaceOf(path: string): string {
+  return path.split('/', 1)[0];
+}
+
+/** The repository a path lies in (`workspace/repo`), or null for a path less than three segments deep. */
+export function repoOf(path: string): string | null {
+  const parts = path.split('/');
+  return parts.length >= 3 ? `${parts[0]}/${parts[1]}` : null;
+}
+
+/** A file's directory inside its repository, the segments between `workspace/repo` and the name. */
+export function directoryInRepo(path: string): string {
+  return path.split('/').slice(2, -1).join('/');
+}

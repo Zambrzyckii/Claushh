@@ -4,7 +4,7 @@ import { firstValueFrom } from 'rxjs';
 
 import { FileApiError, FilesApi, fileErrorMessage } from '../../core/api/files-api';
 import { GitApi } from '../../core/api/git-api';
-import { baseName } from '../../core/api/project-path';
+import { baseName, repoOf } from '../../core/api/project-path';
 import { ProjectContext } from '../../core/project/project-context';
 
 /**
@@ -334,12 +334,6 @@ export class EditorStore {
   private patch(path: string, change: (doc: OpenDocument) => OpenDocument): void {
     this.docs.update((docs) => docs.map((d) => (d.path === path ? change(d) : d)));
   }
-}
-
-/** Repository of a file: the first two path segments (`workspace/repo`), if the file lies deeper. */
-function repoOf(path: string): string | null {
-  const parts = path.split('/');
-  return parts.length >= 3 ? `${parts[0]}/${parts[1]}` : null;
 }
 
 function isDirty(doc: OpenDocument): boolean {
