@@ -7,8 +7,8 @@ import { OpenEditors } from '../editor/open-editors';
 import { Explorer } from '../explorer/explorer';
 import { SearchStore } from '../search/search-store';
 import { SearchView } from '../search/search-view';
-import { SourceControlView } from '../workspaces/source-control-view';
-import { WorkspacesStore } from '../workspaces/workspaces-store';
+import { SourceControlView } from '../source-control/source-control-view';
+import { WorkspacesStore } from '../source-control/workspaces-store';
 import { SideView, WorkbenchState } from './workbench-state';
 
 /**

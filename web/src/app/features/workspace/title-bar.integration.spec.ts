@@ -11,7 +11,7 @@ import { DeviceLayout } from '../../core/browser/device-layout';
 import { HardNavigation } from '../../core/browser/hard-navigation';
 import { ProjectContext } from '../../core/project/project-context';
 import { RepoStatusStore } from '../../core/project/repo-status';
-import { WorkspacesStore } from '../workspaces/workspaces-store';
+import { WorkspacesStore } from '../source-control/workspaces-store';
 import { TitleBar } from './title-bar';
 import { WorkbenchState } from './workbench-state';
 

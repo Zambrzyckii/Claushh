@@ -30,7 +30,7 @@ import { SearchStore } from '../search/search-store';
 import { SecurityDialog } from '../security/security-dialog';
 import { TerminalPanel } from '../terminal/terminal-panel';
 import { TerminalStore } from '../terminal/terminal-store';
-import { WorkspacesStore } from '../workspaces/workspaces-store';
+import { WorkspacesStore } from '../source-control/workspaces-store';
 import { PhonePanes, PhoneTab } from './phone-panes';
 import { CONSOLE, PANEL, SIDE_BAR, fitPanels } from './panel-sizes';
 import { Sash } from './sash';

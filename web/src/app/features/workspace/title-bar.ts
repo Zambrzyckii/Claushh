@@ -5,7 +5,7 @@ import { SessionTimer } from '../../core/auth/session-timer';
 import { DeviceLayout } from '../../core/browser/device-layout';
 import { ProjectContext } from '../../core/project/project-context';
 import { RepoStatusStore } from '../../core/project/repo-status';
-import { WorkspacesStore } from '../workspaces/workspaces-store';
+import { WorkspacesStore } from '../source-control/workspaces-store';
 import { WorkbenchState } from './workbench-state';
 
 /**

@@ -8,7 +8,7 @@ import { ProjectContext } from '../../core/project/project-context';
 import { RepoStatusStore } from '../../core/project/repo-status';
 import { EditorStore } from '../editor/editor-store';
 import { SearchStore } from '../search/search-store';
-import { WorkspacesStore } from '../workspaces/workspaces-store';
+import { WorkspacesStore } from '../source-control/workspaces-store';
 import { SideBar } from './side-bar';
 import { WorkbenchState } from './workbench-state';
 
