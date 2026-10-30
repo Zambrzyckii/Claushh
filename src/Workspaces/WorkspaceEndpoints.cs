@@ -4,7 +4,6 @@ using Claushh.Api.Git;
 using Claushh.Api.Platform;
 using Claushh.Api.Projects;
 using Claushh.Api.Web;
-using Microsoft.Extensions.Options;
 
 namespace Claushh.Api.Workspaces;
 
@@ -60,7 +59,7 @@ public static class WorkspaceEndpoints
     // The mock's order of checks (body and workspace, URL, directory name, a free target), then git clone under the
     // target's lock, all within one Git:NetworkTimeout.
     private static async Task<IResult> Clone(HttpContext http, WorkspaceStore workspaces, Repositories repositories,
-        RepoLocks locks, GitRunner git, IOptionsMonitor<GitOptions> options)
+        RemoteOperations remote)
     {
         var body = await JsonBody.ReadAsync<CloneRequest>(http);
         if (body is null)
@@ -85,51 +84,18 @@ public static class WorkspaceEndpoints
         {
             return Results.Conflict(new MessageResponse("Directory already exists."));
         }
-        using var deadline = new GitDeadline(options.CurrentValue.NetworkTimeout, http.RequestAborted);
-        try
+        var result = await remote.CloneAsync(workspace, body.Url!, name, http.RequestAborted);
+        if (result.Status == RemoteStatus.Conflict)
         {
-            using (await locks.EnterAsync(target, deadline))
-            {
-                if (Libc.FileType(target) is not null)
-                {
-                    return Results.Conflict(new MessageResponse("Directory already exists."));
-                }
-                GitResult result;
-                try
-                {
-                    // The destination is given by name, not by the resolved target path: git's own "Cloning into '…'"
-                    // message would otherwise put the resolved projects path in a 502 response.
-                    result = await git.RunAsync(workspace.FullPath, ["clone", "--", body.Url, name], deadline);
-                }
-                catch
-                {
-                    // Killed at the time limit or because the client went away: git had no chance to clean up.
-                    RemovePartialClone(target);
-                    throw;
-                }
-                if (!result.Succeeded)
-                {
-                    RemovePartialClone(target);
-                    return Results.Json(new MessageResponse(result.Message), statusCode: StatusCodes.Status502BadGateway);
-                }
-            }
+            return Results.Conflict(new MessageResponse(result.Message));
         }
-        catch (GitTimeoutException e)
+        if (result.Status == RemoteStatus.Failed)
         {
-            return Results.Json(new MessageResponse(e.ResponseMessage), statusCode: StatusCodes.Status502BadGateway);
+            return Results.Json(new MessageResponse(result.Message), statusCode: StatusCodes.Status502BadGateway);
         }
         // A clone must pass what a repository is, like any other.
         return repositories.Find($"{workspace.Relative}/{name}") is { Status: LookupStatus.Found, Path: { } repository }
             ? Results.Json(repositories.Summary(repository), statusCode: StatusCodes.Status201Created)
             : throw new InvalidOperationException($"The clone {workspace.Relative}/{name} is not a repository the portal can read.");
-    }
-
-    // The target was free before git ran, under its lock, so whatever is there now is git's.
-    private static void RemovePartialClone(string target)
-    {
-        if (Libc.FileType(target) == Libc.S_IFDIR)
-        {
-            Directory.Delete(target, recursive: true);
-        }
     }
 }

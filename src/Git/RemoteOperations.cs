@@ -1,6 +1,7 @@
 // Git's remote operations (docs/ARCHITECTURE.md, "Workspaces and git"; decisions: docs/PLAN.md, "Backend decisions
 // (stage 4)"): pull, push and clone, each under the repository's lock and within one Git:NetworkTimeout, with git's
 // messages carried verbatim and a typed outcome that the endpoints map to status codes.
+using Claushh.Api.Platform;
 using Claushh.Api.Projects;
 using Microsoft.Extensions.Options;
 
@@ -110,6 +111,45 @@ public sealed class RemoteOperations(Repositories repositories, RepoLocks locks,
         }
     }
 
+    public async Task<RemoteResult> CloneAsync(ProjectPath workspace, string url, string name, CancellationToken aborted)
+    {
+        var target = Path.Join(workspace.FullPath, name);
+        using var deadline = new GitDeadline(options.CurrentValue.NetworkTimeout, aborted);
+        try
+        {
+            using (await locks.EnterAsync(target, deadline))
+            {
+                if (Libc.FileType(target) is not null)
+                {
+                    return new RemoteResult(RemoteStatus.Conflict, "Directory already exists.");
+                }
+                GitResult result;
+                try
+                {
+                    // The destination is given by name, not by the resolved target path: git's own "Cloning into '…'"
+                    // message would otherwise put the resolved projects path in a 502 response.
+                    result = await git.RunAsync(workspace.FullPath, ["clone", "--", url, name], deadline);
+                }
+                catch
+                {
+                    // Killed at the time limit or because the client went away: git had no chance to clean up.
+                    RemovePartialClone(target);
+                    throw;
+                }
+                if (!result.Succeeded)
+                {
+                    RemovePartialClone(target);
+                    return new RemoteResult(RemoteStatus.Failed, result.Message);
+                }
+            }
+        }
+        catch (GitTimeoutException e)
+        {
+            return new RemoteResult(RemoteStatus.Failed, e.ResponseMessage);
+        }
+        return new RemoteResult(RemoteStatus.Done);
+    }
+
     // git's own messages can repeat the repository's resolved path (e.g. a stale index.lock); the response gets the
     // API path instead, so responses never contain resolved paths.
     private static string Redacted(string message, ProjectPath repository) =>
@@ -117,4 +157,13 @@ public sealed class RemoteOperations(Repositories repositories, RepoLocks locks,
 
     // English plural: 1 commit, otherwise commits.
     private static string Commits(int count) => count == 1 ? "commit" : "commits";
+
+    // The target was free before git ran, under its lock, so whatever is there now is git's.
+    private static void RemovePartialClone(string target)
+    {
+        if (Libc.FileType(target) == Libc.S_IFDIR)
+        {
+            Directory.Delete(target, recursive: true);
+        }
+    }
 }

@@ -58,8 +58,8 @@ On the server (decisions: `PLAN.md`, "Deployment decisions"):
 | `src/Data/` | `ClaushhDbContext` (Identity tables, `Sessions`, `LoginAttempts`, `Workspaces`, and the console's `Conversations`, `ConversationEvents` and `ConsoleRules`) and the EF Core migrations, applied at startup |
 | `src/Auth/` | login and sessions: session rules, the login gate with its limits and lockout, TOTP, the auth cookies and the XSRF filter, cleanup after 90 days. `Passkeys/` (passkey ceremonies and endpoints), `Account/` (`create-user` and its command line), `Notifications/` (phone notifications of logins through ntfy), `Realtime/` (hub connections tied to their session and closed when it ends) |
 | `src/Files/` | the files API and search in files |
-| `src/Workspaces/` | workspaces, the repository list of a workspace, cloning |
-| `src/Git/` | repositories read with libgit2, the git CLI, one lock per repository, the background fetch, remote operations (pull and push), the git API |
+| `src/Workspaces/` | workspaces, the repository list of a workspace, the clone endpoint's input checks |
+| `src/Git/` | repositories read with libgit2, the git CLI, one lock per repository, the background fetch, remote operations (pull, push, clone), the git API |
 | `src/Terminal/` | the terminal: the API's own tmux server, the terminals, the `/hubs/terminal` hub, the theme API |
 | `src/Frontend/` | serving the built frontend (`Frontend:Root`) |
 | `src/Claude/` | the console: the claude CLI, conversations, their processes and event log, the `/hubs/console` hub. Not `Console/`, whose namespace would hide `System.Console`. `Translation/` (what the CLI's stream-json lines mean for a turn) |
@@ -1100,10 +1100,10 @@ Workspaces and git (`Workspaces/`, `Git/`):
   fetch holding the repository's lock stops it (its process tree is stopped as at a limit; a pull fetches anyway),
   and running fetches are stopped the same way when the API stops.
 - Clone: the checks in the mock's order (body and workspace `400`/`404`, the URL rule, the directory name, any entry at
-  the target `409`), then `git clone -- <url> <name>` under the target's lock, run in the workspace directory with
-  the destination given by name (not the resolved path), so git's own "Cloning into '…'" message never puts a
-  resolved path in a `502` response. A failure or a timeout removes the target directory if it exists and answers
-  `502`; a clone that is not a repository the portal can read is a `500`.
+  the target `409`), then `RemoteOperations.CloneAsync` runs `git clone -- <url> <name>` under the target's lock, in
+  the workspace directory with the destination given by name (not the resolved path), so git's own "Cloning into
+  '…'" message never puts a resolved path in a `502` response. A failure or a timeout removes the target directory
+  if it exists and answers `502`; a clone that is not a repository the portal can read is a `500`.
 - Pull (`RemoteOperations.PullAsync`): no upstream (also a detached HEAD) → `400`; `git fetch <remote>` (a failure →
   `502`); nothing new → "Already up to date."; `git merge --ff-only @{upstream}` (a failure → `409` with git's message);
   then `changedPaths` from `git diff --name-only --no-renames -z <old HEAD> HEAD` (on a branch that had no commits, `git
