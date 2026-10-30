@@ -101,10 +101,10 @@ export class EditorStore {
   /** Set by CodeEditor; null without a selection. */
   readonly selection = signal<LineSelection | null>(null);
 
-  private readonly project = inject(ProjectContext, { optional: true });
+  private readonly project = inject(ProjectContext);
 
   constructor() {
-    this.project?.filesChanged
+    this.project.filesChanged
       .pipe(takeUntilDestroyed(inject(DestroyRef)))
       .subscribe((paths) => this.onExternalChange(paths));
   }
@@ -313,7 +313,7 @@ export class EditorStore {
       const { version } = await firstValueFrom(this.files.write(doc.path, sent, baseVersion));
       // The content could have changed during the save. We treat as saved only the content that went to the server.
       this.patch(doc.path, (d) => ({ ...d, savedValue: sent, version, saving: false, conflict: null }));
-      this.project?.announceFilesSaved([doc.path]);
+      this.project.announceFilesSaved([doc.path]);
     } catch (error) {
       if (error instanceof FileApiError && error.kind === 'conflict') {
         this.patch(doc.path, (d) => ({

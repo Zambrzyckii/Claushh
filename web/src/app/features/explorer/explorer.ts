@@ -61,8 +61,8 @@ export class Explorer {
       });
     });
 
-    inject(ProjectContext, { optional: true })
-      ?.filesChanged.pipe(takeUntilDestroyed(inject(DestroyRef)))
+    inject(ProjectContext)
+      .filesChanged.pipe(takeUntilDestroyed(inject(DestroyRef)))
       .subscribe(() => this.refresh());
   }
 
