@@ -24,7 +24,6 @@ import { onFontsLoaded } from '../../core/browser/fonts';
 import { TerminalInfo } from './terminal-protocol';
 import { countLabel } from '../../core/text/format';
 import { previewText } from '../../core/text/visible-text';
-import { WorkbenchState } from '../../workbench/workbench-state';
 import { MAX_PENDING_INPUT, lineBreaks, sanitizePaste, withCtrl } from './terminal-input';
 import { TerminalStore } from './terminal-store';
 import { TERMINAL_FONT, loadXterm, terminalOptions } from './xterm-loader';
@@ -220,8 +219,7 @@ export class TerminalView {
   private readonly dialogs = inject(Dialogs);
   protected readonly layout = inject(DeviceLayout);
   private readonly injector = inject(Injector);
-  /** Optional: a view outside the workspace has no panels to drag. */
-  private readonly workbench = inject(WorkbenchState, { optional: true });
+  readonly resizing = input(false);
   private readonly themes = inject(TerminalThemeApi);
   private readonly host = viewChild.required<ElementRef<HTMLElement>>('host');
   private readonly cancelPasteButton = viewChild<ElementRef<HTMLButtonElement>>('cancelPasteButton');
@@ -304,7 +302,7 @@ export class TerminalView {
     // A dragged panel edge holds the terminal at its size; it fits once when the drag ends, so tmux is resized once
     // per drag (docs/ARCHITECTURE.md, "Frontend" → "Layout").
     effect(() => {
-      if (!(this.workbench?.resizing() ?? false) && this.term) {
+      if (!this.resizing() && this.term) {
         untracked(() => this.fitToContainer());
       }
     });
@@ -559,7 +557,7 @@ export class TerminalView {
   }
 
   private fitToContainer(): void {
-    if (this.workbench?.resizing()) {
+    if (this.resizing()) {
       return;
     }
     const element = this.host().nativeElement;

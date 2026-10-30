@@ -26,7 +26,7 @@
             </button>
           </div>
           <div class="bottom__content" id="panel-terminal" role="tabpanel" aria-labelledby="panel-tab-terminal">
-            <app-terminal-panel />
+            <app-terminal-panel [resizing]="state.resizing()" />
           </div>
         </section>
       }

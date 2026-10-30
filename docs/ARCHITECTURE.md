@@ -1293,7 +1293,7 @@ Conventions:
 - Standalone components, local state in `signal()`.
 - Things the whole app or two or more features use go in `web/src/app/core/` (auth, browser access, the API clients two or more features use, the SignalR base `HubClient`, the open project, shared text helpers). An API client or hub connection that one feature uses lives in that feature's folder and moves to `core/` when a second feature needs it.
 - Each app feature in a separate folder `web/src/app/features/<name>/`, lazy-loaded from the routes.
-- The page after login is the workbench in `web/src/app/workbench/`, a layer above the features. `core/` imports nothing from `workbench/` or `features/`, features never import `workbench/`, and only `app.routes.ts` imports `workbench/`. Until the shell's state is passed down as outputs and inputs, four features still read `WorkbenchState`.
+- The page after login is the workbench in `web/src/app/workbench/`, a layer above the features. `core/` imports nothing from `workbench/` or `features/`, features never import `workbench/`, and only `app.routes.ts` imports `workbench/`.
 - Colors and fonts only through the tokens of `styles.scss`, no hard-coded colors in components; the Monaco and
   xterm themes read them through `theme.ts` (only the syntax colors, the selection and the 16 terminal colors are
   fixed there, and the terminal takes the server's theme instead when there is one: section "Terminal"); the file-icon SVGs in `public/file-icons/` keep their theme's own colors. Buttons, inputs, focus and
@@ -1342,7 +1342,7 @@ Decisions: `PLAN.md`, "Frontend decisions (VS Code layout)".
   maximums. A window too narrow for the chosen widths takes the room from the console first, then from the side bar;
   a wider window gives the chosen widths back. A closed panel and the phone layout have no edge. A drag belongs to the
   pointer that started it: another finger on the strip neither moves nor ends it. While an edge is dragged
-  (`WorkbenchState.resizing`), the terminals keep their size and fit once when the drag ends, so tmux is resized once
+  (`WorkbenchState.resizing`, which the workbench passes to the terminal panel as an input), the terminals keep their size and fit once when the drag ends, so tmux is resized once
   per drag; Monaco follows at once (`automaticLayout`). An open title-bar menu covers the edges (the bar is raised
   above the workbench while it is open), so a press on one closes the menu.
 - Ctrl+Alt+B / Cmd+Option+B (VS Code's key for the secondary side bar) shows and hides the console wherever the focus

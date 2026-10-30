@@ -26,7 +26,7 @@
 
 <div class="views">
   @for (t of store.terminals(); track t.id) {
-    <app-terminal-view [terminal]="t" [class.hidden]="t.id !== store.activeId()" [attr.aria-hidden]="t.id !== store.activeId()" />
+    <app-terminal-view [terminal]="t" [resizing]="resizing()" [class.hidden]="t.id !== store.activeId()" [attr.aria-hidden]="t.id !== store.activeId()" />
   }
   @if (store.loaded() && store.terminals().length === 0) {
     <p class="empty faint">No open terminals.</p>

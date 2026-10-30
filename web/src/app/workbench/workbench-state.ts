@@ -34,7 +34,7 @@ export class WorkbenchState {
   readonly sideBarWidth = signal(SIDE_BAR.initial);
   readonly consoleWidth = signal(CONSOLE.initial);
   readonly panelHeight = signal(PANEL.initial);
-  /** True while a panel's edge is dragged: the terminals keep their size and fit once at the end (TerminalView). */
+  /** True while a panel's edge is dragged: the terminals keep their size and fit once at the end (Workbench passes it to TerminalPanel as an input). */
   readonly resizing = signal(false);
 
   constructor() {
