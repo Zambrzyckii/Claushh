@@ -2,6 +2,7 @@
 // login, re-authentication and passkey login. Each runs the gate, its limits, the credential check, the attempt
 // record, the lockout and the notifications in its own order, with deliberate differences. The endpoints only turn the
 // outcome into cookies, Retry-After and status codes.
+using System.Text.Json;
 using Claushh.Api.Auth.Notifications;
 using Claushh.Api.Auth.Passkeys;
 using Microsoft.AspNetCore.Identity;
@@ -15,7 +16,7 @@ public enum SignInStatus { Succeeded, Failed, TooMany }
 public sealed record SignInOutcome(SignInStatus Status, int RetryAfter = 0, string? Secret = null, bool ChallengeTaken = false);
 
 public sealed class SignIn(UserManager<IdentityUser> users, LoginGuard guard, TotpVerifier totp, SessionService sessions,
-    PasskeyCeremonies ceremonies, LoginNotifications notifications, ILoggerFactory loggers)
+    PasskeyCeremonies ceremonies, IPasskeyHandler<IdentityUser> passkeys, LoginNotifications notifications, ILoggerFactory loggers)
 {
     private static readonly IdentityUser DummyUser = new();
     private static string? _dummyHash;
@@ -85,6 +86,46 @@ public sealed class SignIn(UserManager<IdentityUser> users, LoginGuard guard, To
         await guard.SucceededAsync(user);
         ceremonies.MarkFresh(session.Id);
         return new SignInOutcome(SignInStatus.Succeeded);
+    }
+
+    public async Task<SignInOutcome> PasskeyAsync(HttpContext http, LoginClient client, string? challengeId,
+        JsonElement? credential)
+    {
+        var log = loggers.CreateLogger("Claushh.Api.Auth.PasskeyLogin");
+        using var gate = await guard.EnterAsync(http.RequestAborted);
+        if (gate is null)
+        {
+            // Not recorded, like every 429; the challenge stays for a retry.
+            log.LogInformation("Passkey login from {Ip} did not start within {Seconds} s", client.Ip, LoginGuard.GateWait.TotalSeconds);
+            return new SignInOutcome(SignInStatus.TooMany, RetryAfter: (int)LoginGuard.GateWait.TotalSeconds);
+        }
+        if (await guard.IpRetryAfterAsync(client.LimitKey, http.RequestAborted) is { } retryAfter)
+        {
+            return new SignInOutcome(SignInStatus.TooMany, RetryAfter: retryAfter);
+        }
+        var state = ceremonies.TakeLoginChallenge(challengeId);
+        var result = state is null || credential is not { ValueKind: JsonValueKind.Object }
+            ? null
+            : await passkeys.PerformAssertionAsync(new PasskeyAssertionContext
+            {
+                HttpContext = http,
+                CredentialJson = credential.Value.GetRawText(),
+                AssertionState = state,
+            });
+        // Not the request's token: an attempt whose client went away is still recorded and counted.
+        await guard.RecordAsync(result?.Succeeded == true, LoginMethods.Passkey, client.Ip, client.LimitKey, client.UserAgent, CancellationToken.None);
+        if (result is null || !result.Succeeded)
+        {
+            log.LogInformation("Passkey login from {Ip} failed: {Reason}", client.Ip,
+                result?.Failure?.Message ?? "no challenge or no credential");
+            return new SignInOutcome(SignInStatus.Failed, ChallengeTaken: true);
+        }
+        // The new sign count and backup state: Identity's handler leaves saving them to the caller.
+        IdentityResults.ThrowIfFailed(await users.AddOrUpdatePasskeyAsync(result.User, result.Passkey));
+        var (_, secret) = await sessions.CreateAsync(result.User, client.UserAgent, client.Ip, http.RequestAborted);
+        log.LogInformation("Passkey login of {UserName} from {Ip}", result.User.UserName, client.Ip);
+        notifications.PasskeyLoggedIn(result.Passkey.Name ?? "", client.Ip, client.UserAgent);
+        return new SignInOutcome(SignInStatus.Succeeded, Secret: secret, ChallengeTaken: true);
     }
 
     // The user when the fields have valid lengths, the name and password are right and TOTP is on; null otherwise.

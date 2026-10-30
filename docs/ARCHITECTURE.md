@@ -985,11 +985,11 @@ Passkeys (`Auth/Passkeys/`; the contract is in "Authentication" → "Passkeys"; 
 - Login: `login-options` (outside the gate, behind the per-IP limit only) asks Identity for request options without a
   user and keeps the state under a random id (32 bytes, base64url) in the challenge cookie: at most 3 pending
   challenges per address (the per-IP limit's key) and 10,000 in all, the oldest dropped; 5 minutes, used once.
-  `login` enters the gate, checks the per-IP limit, takes the challenge and expires its cookie, and lets Identity check
-  the assertion (the user from the user handle, a stored passkey, the signature, a sign count that grows unless both
-  are 0). Every attempt that gets this far is recorded with the method `passkey`. A success saves the passkey's new
-  sign count and backup state, creates the session as a password login does, and sends the passkey login
-  notification.
+  `login` (`SignIn.PasskeyAsync`) enters the gate, checks the per-IP limit, takes the challenge and expires its
+  cookie, and lets Identity check the assertion (the user from the user handle, a stored passkey, the signature, a sign
+  count that grows unless both are 0). Every attempt that gets this far is recorded with the method `passkey`. A
+  success saves the passkey's new sign count and backup state, creates the session as a password login does, and sends
+  the passkey login notification.
 
 Notifications (`Auth/Notifications/`; decisions: `PLAN.md`, "Backend decisions (stage 1, part C)"):
 - `LoginNotifications` sends a phone notification through ntfy for these events, never with the user name:

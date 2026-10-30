@@ -207,49 +207,25 @@ public static class PasskeyEndpoints
     // Anonymous: a passkey login through the login gate and the per-IP limit. Every attempt past them uses up the
     // challenge, expires its cookie and is recorded as a passkey attempt; a passkey login neither counts towards nor
     // resets the lockout. A success creates the same session as a password login.
-    private static async Task<IResult> Login(HttpContext http, UserManager<IdentityUser> users, LoginGuard guard,
-        IPasskeyHandler<IdentityUser> passkeys, PasskeyCeremonies ceremonies, SessionService sessions, AuthCookies cookies,
-        LoginNotifications notifications, ILoggerFactory loggers)
+    private static async Task<IResult> Login(HttpContext http, SignIn signIn, AuthCookies cookies)
     {
-        var log = loggers.CreateLogger("Claushh.Api.Auth.PasskeyLogin");
         var client = LoginClient.From(http);
         var body = await JsonBody.ReadAsync<PasskeyLoginRequest>(http);
-        using var gate = await guard.EnterAsync(http.RequestAborted);
-        if (gate is null)
+        var outcome = await signIn.PasskeyAsync(http, client, http.Request.Cookies[cookies.Passkey], body?.Credential);
+        if (outcome.ChallengeTaken)
         {
-            // Not recorded, like every 429; the challenge stays for a retry.
-            log.LogInformation("Passkey login from {Ip} did not start within {Seconds} s", client.Ip, LoginGuard.GateWait.TotalSeconds);
-            return TooManyRequests(http, (int)LoginGuard.GateWait.TotalSeconds);
+            cookies.ExpirePasskeyChallenge(http.Response);
         }
-        if (await guard.IpRetryAfterAsync(client.LimitKey, http.RequestAborted) is { } retryAfter)
+        switch (outcome.Status)
         {
-            return TooManyRequests(http, retryAfter);
+            case SignInStatus.TooMany:
+                return TooManyRequests(http, outcome.RetryAfter);
+            case SignInStatus.Failed:
+                return Results.Unauthorized();
+            default:
+                cookies.AppendSession(http.Response, outcome.Secret!);
+                return Results.NoContent();
         }
-        var state = ceremonies.TakeLoginChallenge(http.Request.Cookies[cookies.Passkey]);
-        cookies.ExpirePasskeyChallenge(http.Response);
-        var result = state is null || body is not { Credential.ValueKind: JsonValueKind.Object }
-            ? null
-            : await passkeys.PerformAssertionAsync(new PasskeyAssertionContext
-            {
-                HttpContext = http,
-                CredentialJson = body.Credential.GetRawText(),
-                AssertionState = state,
-            });
-        // Not the request's token: an attempt whose client went away is still recorded and counted.
-        await guard.RecordAsync(result?.Succeeded == true, LoginMethods.Passkey, client.Ip, client.LimitKey, client.UserAgent, CancellationToken.None);
-        if (result is null || !result.Succeeded)
-        {
-            log.LogInformation("Passkey login from {Ip} failed: {Reason}", client.Ip,
-                result?.Failure?.Message ?? "no challenge or no credential");
-            return Results.Unauthorized();
-        }
-        // The new sign count and backup state: Identity's handler leaves saving them to the caller.
-        IdentityResults.ThrowIfFailed(await users.AddOrUpdatePasskeyAsync(result.User, result.Passkey));
-        var (_, secret) = await sessions.CreateAsync(result.User, client.UserAgent, client.Ip, http.RequestAborted);
-        cookies.AppendSession(http.Response, secret);
-        log.LogInformation("Passkey login of {UserName} from {Ip}", result.User.UserName, client.Ip);
-        notifications.PasskeyLoggedIn(result.Passkey.Name ?? "", client.Ip, client.UserAgent);
-        return Results.NoContent();
     }
 
     // The session's user as this request loaded it; inside the login gate, loaded after entering it.
