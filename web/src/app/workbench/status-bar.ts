@@ -1,7 +1,7 @@
 import { Component, computed, inject, input } from '@angular/core';
 
 import { DeviceLayout } from '../core/browser/device-layout';
-import { RepoStatusStore } from '../core/project/repo-status';
+import { RepoStatusStore, branchLabel } from '../core/project/repo-status';
 import { countLabel } from '../core/text/format';
 import { ConsoleStore } from '../features/console/console-store';
 import { EditorStore } from '../features/editor/editor-store';
@@ -23,6 +23,7 @@ export class StatusBar {
   protected readonly layout = inject(DeviceLayout);
   protected readonly editor = inject(EditorStore);
   protected readonly repoStatus = inject(RepoStatusStore);
+  protected readonly branchLabel = branchLabel;
   private readonly console = inject(ConsoleStore);
 
   /** False on a phone's Terminal and Console tabs: the cursor and the language belong to the editor. */

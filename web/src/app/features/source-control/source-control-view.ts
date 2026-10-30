@@ -1,7 +1,7 @@
 import { Component, inject, output } from '@angular/core';
 
 import { baseName, directoryInRepo } from '../../core/api/project-path';
-import { fileIconUrl } from '../../core/icons/file-icons';
+import { fileIconFor } from '../../core/icons/file-icons';
 import { RepoStatusStore, STATUS_LETTERS } from '../../core/project/repo-status';
 import { EditorStore } from '../editor/editor-store';
 import { WorkspacesPanel } from './workspaces-panel';
@@ -24,15 +24,11 @@ export class SourceControlView {
   readonly opened = output<void>();
   protected readonly letters = STATUS_LETTERS;
 
-  protected name(path: string): string {
-    return baseName(path);
-  }
+  protected readonly name = baseName;
 
   protected readonly directory = directoryInRepo;
 
-  protected icon(path: string): string {
-    return fileIconUrl(baseName(path));
-  }
+  protected readonly icon = fileIconFor;
 
   protected async open(path: string): Promise<void> {
     this.opened.emit();

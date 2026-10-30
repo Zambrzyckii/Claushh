@@ -14,7 +14,7 @@
           <span class="codicon codicon-circle-filled" aria-hidden="true"></span>
         </button>
         <button type="button" class="open-editor__name" [title]="doc.path" (click)="activate(doc)">
-          <img class="file-icon" [src]="icon(doc)" alt="" width="16" height="16" draggable="false">
+          <img class="file-icon" [src]="icon(doc.name)" alt="" width="16" height="16" draggable="false">
           <span class="open-editor__file">{{ doc.name }}</span>
           <span class="open-editor__dir">{{ directory(doc) }}</span>
         </button>

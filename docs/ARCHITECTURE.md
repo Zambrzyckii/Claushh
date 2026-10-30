@@ -77,10 +77,10 @@ On the server (decisions: `PLAN.md`, "Deployment decisions"):
 | `web/src/app/core/auth/` | the session state, login with a password or a passkey, logout and session expiry with tab sync (`AuthService`), `authGuard` and `guestGuard`, the interceptor that ends the session on a 401 (not for `IGNORE_UNAUTHORIZED` requests and the login's own endpoints), the return address check, and the session countdown with its extension on activity (`SessionTimer`) |
 | `web/src/app/core/api/` | the HTTP clients of the API areas (files and git), the shared `ApiError` with its HTTP code mapping, the shared error reader `readHttpFailure`, the shared operator `mapHttpError`, and in `project-path.ts` the relative path rule and the helpers of the `workspace/repo/...` path shape (`workspaceOf`, `repoOf`, `directoryInRepo`) |
 | `web/src/app/core/browser/` | the browser behind small services and functions, so tests can replace the device and the user (the reload, the bfcache guard, `confirm()` and `alert()`, WebAuthn, `DeviceLayout`, `KeyboardInset`), plus the Trusted Types policy, `isTypingElsewhere`, `cssToken` and the font checks |
-| `web/src/app/core/project/` | the open repository from `?repo=` with its "files changed" and "files saved" events and `mayHaveChanged`, the one stream the stores refresh from (`ProjectContext`), and its git status with the explorer's marks (`RepoStatusStore`, `STATUS_LETTERS`) |
+| `web/src/app/core/project/` | the open repository from `?repo=` with its "files changed" and "files saved" events and `mayHaveChanged`, the one stream the stores refresh from (`ProjectContext`), and its git status with the explorer's marks (`RepoStatusStore`, `STATUS_LETTERS`) and `branchLabel` (a branch or "(detached HEAD)") |
 | `web/src/app/core/realtime/` | the SignalR base `HubClient` (WebSocket only, reconnect, session check on disconnect) |
 | `web/src/app/core/text/` | the shared text helpers (plurals, relative time, `en-GB` dates, the wait of a `429`, the shared failure texts `tooManyAttempts`, `NO_CONNECTION` and `PASSKEYS_AT_DOMAIN_ONLY`) and `revealHidden` and `previewText` for commands to approve |
-| `web/src/app/core/icons/` | `fileIconUrl` and `folderIconUrl` (a file's or folder's icon in `public/file-icons/`) and `file-icon-map.ts`, which `scripts/file-icons.mjs` generates |
+| `web/src/app/core/icons/` | `fileIconUrl` and `folderIconUrl` (a file's or folder's icon in `public/file-icons/`), `fileIconFor` (the icon of a path or a name) and `file-icon-map.ts`, which `scripts/file-icons.mjs` generates |
 | `web/public/file-icons/` | the shipped selection of Material Icon Theme's SVGs and its `LICENSE`, copied by `scripts/file-icons.mjs` and committed |
 | `web/scripts/` | `file-icons.mjs`, which copies the allowed icons of `material-icon-theme` and writes the map (`README.md`, "Updating the file icons") |
 | `web/src/app/features/` | one folder per feature with its store, its views and their integration specs |
@@ -1299,7 +1299,7 @@ Conventions:
   fixed there, and the terminal takes the server's theme instead when there is one: section "Terminal"); the file-icon SVGs in `public/file-icons/` keep their theme's own colors. Buttons, inputs, focus and
   tabs come from the shared controls in `styles.scss`: `.primary`,
   `.danger`, `.icon` (an icon-only button with an `aria-label`), `.link`, `.is-on` and `aria-pressed`; a component
-  never defines its own button base. Icons: `<span class="codicon codicon-X" aria-hidden="true">`; file and folder icons are `<img class="file-icon" [src]="fileIconUrl(name)" alt="">` from `public/file-icons/`, never inline SVG.
+  never defines its own button base. Icons: `<span class="codicon codicon-X" aria-hidden="true">`; file and folder icons are `<img class="file-icon" [src]="icon(path)" alt="">` from `public/file-icons/`, never inline SVG, with a field such as `protected readonly icon = fileIconFor` (the explorer keeps `fileIconUrl` and `folderIconUrl`).
 - Motion: the console column and the bottom panel slide with `transform` only (`animate.enter`/`animate.leave` with
   the global classes of `styles.scss`), in 200 ms and out in 150 ms (`--motion-in`, `--motion-out`). A sliding panel's
   width or height changes once, never per frame, so xterm is not refitted while it moves (a dragged edge changes it

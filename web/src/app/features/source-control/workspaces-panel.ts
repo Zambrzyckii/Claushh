@@ -2,6 +2,7 @@ import { Component, ElementRef, inject, signal, viewChild } from '@angular/core'
 
 import { RepoSummary } from './workspaces-api';
 import { ProjectContext } from '../../core/project/project-context';
+import { branchLabel } from '../../core/project/repo-status';
 import { countLabel, timeAgo } from '../../core/text/format';
 import { WorkspacesStore } from './workspaces-store';
 
@@ -19,6 +20,7 @@ import { WorkspacesStore } from './workspaces-store';
 export class WorkspacesPanel {
   protected readonly store = inject(WorkspacesStore);
   protected readonly project = inject(ProjectContext);
+  protected readonly branchLabel = branchLabel;
 
   protected readonly creating = signal(false);
   protected readonly createError = signal<string | null>(null);

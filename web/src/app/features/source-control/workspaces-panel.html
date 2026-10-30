@@ -49,7 +49,7 @@
         @for (repo of store.repos(); track repo.path) {
           <tr class="repo" [class.repo--open]="isOpen(repo)">
             <td class="repo__name">{{ repo.name }}</td>
-            <td class="mono" data-label="Branch">{{ repo.branch ?? '(detached HEAD)' }}</td>
+            <td class="mono" data-label="Branch">{{ branchLabel(repo.branch) }}</td>
             <td data-label="Status" [class.changed]="repo.changes > 0" [class.faint]="repo.changes === 0">{{ state(repo) }}</td>
             <td class="commit" data-label="Last commit" [title]="repo.lastCommit?.message ?? ''">
               @if (repo.lastCommit; as commit) {

@@ -18,7 +18,7 @@ import { FormsModule } from '@angular/forms';
 import { baseName } from '../../core/api/project-path';
 import { DeviceLayout } from '../../core/browser/device-layout';
 import { Dialogs } from '../../core/browser/dialogs';
-import { fileIconUrl } from '../../core/icons/file-icons';
+import { fileIconFor } from '../../core/icons/file-icons';
 import { ProjectContext } from '../../core/project/project-context';
 import { ConsoleEffort, ConsoleMode, ConsoleModel, PermissionDecision, PromptFile, StepKind } from './console-protocol';
 import { countLabel, formatTime } from '../../core/text/format';
@@ -146,13 +146,9 @@ export class ConsolePanel {
     return baseName(file.path) + linesOf(file);
   }
 
-  protected fileName(file: PromptFile): string {
-    return baseName(file.path);
-  }
+  protected readonly fileName = baseName;
 
-  protected fileIcon(file: PromptFile): string {
-    return fileIconUrl(baseName(file.path));
-  }
+  protected readonly fileIcon = fileIconFor;
 
   /** The line under a prompt that named a file: its path in the conversation's directory and the lines. */
   protected fileNote(file: PromptFile): string {

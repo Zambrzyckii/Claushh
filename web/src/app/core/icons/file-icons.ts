@@ -1,3 +1,4 @@
+import { baseName } from '../api/project-path';
 import { FILE_EXTENSIONS, FILE_NAMES, FOLDER_NAMES } from './file-icon-map';
 
 /**
@@ -15,6 +16,10 @@ export function fileIconUrl(name: string): string {
     icon = own(FILE_EXTENSIONS, lower.slice(dot + 1));
   }
   return `${BASE}${icon ?? 'file'}.svg`;
+}
+
+export function fileIconFor(path: string): string {
+  return fileIconUrl(baseName(path));
 }
 
 export function folderIconUrl(name: string, open: boolean): string {

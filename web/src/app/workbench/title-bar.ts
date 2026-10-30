@@ -4,7 +4,7 @@ import { workspaceOf } from '../core/api/project-path';
 import { AuthService } from '../core/auth/auth.service';
 import { DeviceLayout } from '../core/browser/device-layout';
 import { ProjectContext } from '../core/project/project-context';
-import { RepoStatusStore } from '../core/project/repo-status';
+import { RepoStatusStore, branchLabel } from '../core/project/repo-status';
 import { WorkspacesStore } from '../features/source-control/workspaces-store';
 import { SessionCountdown } from './session-countdown';
 import { WorkbenchState } from './workbench-state';
@@ -26,6 +26,7 @@ export class TitleBar {
   protected readonly state = inject(WorkbenchState);
   protected readonly project = inject(ProjectContext);
   protected readonly repoStatus = inject(RepoStatusStore);
+  protected readonly branchLabel = branchLabel;
   private readonly workspaces = inject(WorkspacesStore);
   protected readonly user = inject(AuthService).user;
 

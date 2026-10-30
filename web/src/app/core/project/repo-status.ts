@@ -16,6 +16,11 @@ export const STATUS_LETTERS: Record<GitFileStatus, string> = {
   conflicted: '!'
 };
 
+/** A branch name as shown, "(detached HEAD)" for null. */
+export function branchLabel(branch: string | null): string {
+  return branch ?? '(detached HEAD)';
+}
+
 /** Marker for a directory that contains changed files. */
 export const DIRECTORY_MARK = '•';
 

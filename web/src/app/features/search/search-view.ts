@@ -3,7 +3,7 @@ import { FormsModule } from '@angular/forms';
 
 import { baseName } from '../../core/api/project-path';
 import { SearchFile, SearchMatch, SearchResult } from './search-api';
-import { fileIconUrl } from '../../core/icons/file-icons';
+import { fileIconFor } from '../../core/icons/file-icons';
 import { ProjectContext } from '../../core/project/project-context';
 import { countLabel } from '../../core/text/format';
 import { EditorStore } from '../editor/editor-store';
@@ -58,9 +58,7 @@ export class SearchView {
     return `${countLabel(result.matchCount, 'result', 'results')} in ${countLabel(result.files.length, 'file', 'files')}`;
   }
 
-  protected name(path: string): string {
-    return baseName(path);
-  }
+  protected readonly name = baseName;
 
   /** The file's directory below the searched repository (from the projects directory without one). */
   protected directory(path: string): string {
@@ -69,9 +67,7 @@ export class SearchView {
     return inRoot.includes('/') ? inRoot.slice(0, inRoot.lastIndexOf('/')) : '';
   }
 
-  protected icon(path: string): string {
-    return fileIconUrl(baseName(path));
-  }
+  protected readonly icon = fileIconFor;
 
   /** The file's badge: its highlighted matches, at least one per line. */
   protected count(file: SearchFile): number {

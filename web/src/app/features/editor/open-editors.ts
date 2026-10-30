@@ -1,7 +1,7 @@
 import { Component, inject, model, output } from '@angular/core';
 
 import { Dialogs } from '../../core/browser/dialogs';
-import { fileIconUrl } from '../../core/icons/file-icons';
+import { fileIconFor } from '../../core/icons/file-icons';
 import { EditorStore, OpenDocument } from './editor-store';
 
 /**
@@ -26,9 +26,7 @@ export class OpenEditors {
     return doc.status === 'ready' && doc.value !== doc.savedValue;
   }
 
-  protected icon(doc: OpenDocument): string {
-    return fileIconUrl(doc.name);
-  }
+  protected readonly icon = fileIconFor;
 
   protected directory(doc: OpenDocument): string {
     return doc.path.slice(0, Math.max(0, doc.path.length - doc.name.length - 1));

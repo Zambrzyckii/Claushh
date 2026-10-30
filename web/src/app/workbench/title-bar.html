@@ -4,7 +4,7 @@
             (click)="repository.emit()">
       <span class="topbar__repo">{{ project.label() }}</span>
       @if (repoStatus.status(); as status) {
-        <span class="topbar__branch">{{ status.branch ?? '(detached HEAD)' }}</span>
+        <span class="topbar__branch">{{ branchLabel(status.branch) }}</span>
       }
     </button>
   } @else {
@@ -17,7 +17,7 @@
         <span class="topbar__sep">/</span>
         <span class="topbar__repo">{{ project.label() }}</span>
         @if (repoStatus.status(); as status) {
-          <span class="topbar__branch">{{ status.branch ?? '(detached HEAD)' }}</span>
+          <span class="topbar__branch">{{ branchLabel(status.branch) }}</span>
         }
       }
     </button>

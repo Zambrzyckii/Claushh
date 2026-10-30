@@ -1,7 +1,7 @@
 <footer class="statusbar" [class.statusbar--phone]="layout.phone()">
   <div class="statusbar__group">
     @if (repoStatus.status(); as status) {
-      <span class="statusbar__branch"><span class="codicon codicon-git-branch" aria-hidden="true"></span>{{ status.branch ?? '(detached HEAD)' }}</span>
+      <span class="statusbar__branch"><span class="codicon codicon-git-branch" aria-hidden="true"></span>{{ branchLabel(status.branch) }}</span>
       <span class="statusbar__changes" [class.statusbar__changes--dirty]="repoStatus.changeCount() > 0"><span class="codicon codicon-source-control" aria-hidden="true"></span>{{ changesLabel() }}</span>
     }
     <span><span class="codicon codicon-comment-discussion" aria-hidden="true"></span>{{ consoleStatus() }}</span>
