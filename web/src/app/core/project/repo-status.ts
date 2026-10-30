@@ -1,6 +1,6 @@
 import { DOCUMENT, DestroyRef, Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { debounceTime, firstValueFrom, fromEvent, merge } from 'rxjs';
+import { debounceTime, firstValueFrom } from 'rxjs';
 
 import { ApiError } from '../api/api-error';
 import { GitApi, GitFileStatus, GitStatus } from '../api/git-api';
@@ -70,7 +70,7 @@ export class RepoStatusStore {
     });
 
     const document = inject(DOCUMENT);
-    merge(this.project.filesChanged, this.project.filesSaved, fromEvent(document, 'visibilitychange'))
+    this.project.mayHaveChanged
       .pipe(debounceTime(300), takeUntilDestroyed(inject(DestroyRef)))
       .subscribe(() => {
         if (document.visibilityState !== 'hidden') {

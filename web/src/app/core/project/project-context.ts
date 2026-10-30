@@ -1,7 +1,7 @@
-import { Injectable, computed, inject } from '@angular/core';
+import { DOCUMENT, Injectable, computed, inject } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
-import { Subject } from 'rxjs';
+import { Observable, Subject, fromEvent, map, merge } from 'rxjs';
 
 import { baseName, isSafeRelativePath } from '../api/project-path';
 
@@ -16,6 +16,8 @@ import { baseName, isSafeRelativePath } from '../api/project-path';
  * Events:
  * - `filesChanged`: files changed outside the editor (console, pull). The explorer and the editor refresh.
  * - `filesSaved`: files saved by the editor. Only the git status refreshes (the editor already has the current content).
+ * - `mayHaveChanged`: `filesChanged`, `filesSaved` or a change of the tab's visibility. RepoStatusStore and
+ *   WorkspacesStore refresh from it after their own wait, unless the tab is hidden by then.
  *
  * Provided in the Workbench component.
  */
@@ -35,6 +37,12 @@ export class ProjectContext {
   private readonly saves = new Subject<readonly string[]>();
   readonly filesChanged = this.changes.asObservable();
   readonly filesSaved = this.saves.asObservable();
+  /** Files changed, files saved, or the tab's visibility changed. Each store debounces it and checks visibility itself. */
+  readonly mayHaveChanged: Observable<void> = merge(
+    this.filesChanged,
+    this.filesSaved,
+    fromEvent(inject(DOCUMENT), 'visibilitychange')
+  ).pipe(map(() => undefined));
 
   /** Opens a repository (or the whole projects directory for `''`) by changing the `repo` parameter in the address. */
   open(path: string): Promise<boolean> {

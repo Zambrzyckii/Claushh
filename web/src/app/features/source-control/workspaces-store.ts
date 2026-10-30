@@ -1,6 +1,6 @@
 import { DOCUMENT, DestroyRef, Injectable, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { debounceTime, firstValueFrom, fromEvent, merge } from 'rxjs';
+import { debounceTime, firstValueFrom } from 'rxjs';
 
 import { ApiError, toApiError } from '../../core/api/api-error';
 import { GitApi } from '../../core/api/git-api';
@@ -58,7 +58,7 @@ export class WorkspacesStore {
   constructor() {
     void this.load();
     const document = inject(DOCUMENT);
-    merge(this.project.filesChanged, this.project.filesSaved, fromEvent(document, 'visibilitychange'))
+    this.project.mayHaveChanged
       .pipe(debounceTime(500), takeUntilDestroyed(inject(DestroyRef)))
       .subscribe(() => {
         if (document.visibilityState !== 'hidden') {
