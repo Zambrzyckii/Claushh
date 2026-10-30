@@ -1,7 +1,8 @@
-import { HttpClient, HttpErrorResponse } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable, catchError, map, throwError } from 'rxjs';
 
+import { readHttpFailure } from '../../core/api/api-error';
 import { PasskeyCredentialJson } from '../../core/browser/webauthn';
 
 /**
@@ -39,8 +40,6 @@ export const PASSKEYS_API = {
   creationOptions: '/api/auth/passkeys/creation-options',
   reauthenticate: '/api/auth/reauthenticate'
 } as const;
-
-const MAX_DETAIL_LENGTH = 500;
 
 @Injectable({ providedIn: 'root' })
 export class PasskeysApi {
@@ -94,12 +93,12 @@ function toPasskey(p: Passkey): Passkey {
 }
 
 function toPasskeyApiError(error: unknown): PasskeyApiError {
-  if (!(error instanceof HttpErrorResponse)) {
+  const failure = readHttpFailure(error);
+  if (!failure) {
     return new PasskeyApiError('server');
   }
-  const raw = (error.error as { message?: unknown } | null)?.message;
-  const detail = typeof raw === 'string' && raw.trim() ? raw.trim().slice(0, MAX_DETAIL_LENGTH) : null;
-  switch (error.status) {
+  const detail = failure.detail;
+  switch (failure.status) {
     case 0:
       return new PasskeyApiError('network');
     case 400:
@@ -110,10 +109,8 @@ function toPasskeyApiError(error: unknown): PasskeyApiError {
       return new PasskeyApiError('not-found');
     case 409:
       return new PasskeyApiError('conflict', detail);
-    case 429: {
-      const retryAfter = Number(error.headers.get('Retry-After'));
-      return new PasskeyApiError('rate-limited', null, Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : null);
-    }
+    case 429:
+      return new PasskeyApiError('rate-limited', null, failure.retryAfterSeconds);
     default:
       return new PasskeyApiError('server');
   }

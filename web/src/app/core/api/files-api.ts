@@ -1,7 +1,8 @@
-import { HttpClient, HttpErrorResponse, HttpParams } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable, catchError, map, throwError } from 'rxjs';
 
+import { readHttpFailure } from './api-error';
 import { isSafeRelativePath } from './project-path';
 
 /**
@@ -83,10 +84,11 @@ function pathParam(path: string): HttpParams {
 }
 
 function toFileApiError(error: unknown): FileApiError {
-  if (!(error instanceof HttpErrorResponse)) {
+  const failure = readHttpFailure(error);
+  if (!failure) {
     return new FileApiError('server');
   }
-  switch (error.status) {
+  switch (failure.status) {
     case 0:
       return new FileApiError('network');
     case 400:
@@ -94,7 +96,7 @@ function toFileApiError(error: unknown): FileApiError {
     case 404:
       return new FileApiError('not-found');
     case 409: {
-      const current = (error.error as { currentVersion?: unknown } | null)?.currentVersion;
+      const current = (failure.body as { currentVersion?: unknown } | null)?.currentVersion;
       return new FileApiError('conflict', typeof current === 'string' ? current : undefined);
     }
     case 413:
