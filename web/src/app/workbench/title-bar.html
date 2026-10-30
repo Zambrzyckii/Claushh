@@ -24,13 +24,7 @@
   }
   <div class="topbar__actions">
     @if (layout.phone()) {
-      @if (sessionTimer.label(); as remaining) {
-        <span class="topbar__session" [class.topbar__session--warning]="sessionTimer.warning()" role="timer" aria-live="off"
-              [attr.aria-label]="'Session expires in ' + remaining">{{ remaining }}</span>
-        @if (sessionTimer.warning()) {
-          <button type="button" (click)="sessionTimer.extend()">Extend</button>
-        }
-      }
+      <app-session-countdown bar="topbar" />
       <button type="button" class="icon" aria-label="Menu" aria-haspopup="menu" [attr.aria-expanded]="menuOpen()"
               (click)="menuOpen.set(!menuOpen())">
         <span class="codicon codicon-kebab-vertical" aria-hidden="true"></span>

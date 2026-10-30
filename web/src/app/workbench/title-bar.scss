@@ -58,17 +58,6 @@
   &__user {
     margin-left: 8px;
   }
-
-  &__session {
-    margin-right: 6px;
-    font-size: 12px;
-    font-variant-numeric: tabular-nums;
-    color: var(--text-muted);
-
-    &--warning {
-      color: var(--warning);
-    }
-  }
 }
 
 // Phone (docs/ARCHITECTURE.md, "Frontend" → "Phone layout").

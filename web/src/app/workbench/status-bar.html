@@ -28,13 +28,7 @@
       }
     }
     @if (!layout.phone()) {
-      @if (sessionTimer.label(); as remaining) {
-        <span class="statusbar__session" [class.statusbar__session--warning]="sessionTimer.warning()" role="timer" aria-live="off"
-              [attr.aria-label]="'Session expires in ' + remaining" [title]="'Session expires in ' + remaining"><span class="codicon codicon-clock" aria-hidden="true"></span>{{ remaining }}</span>
-        @if (sessionTimer.warning()) {
-          <button type="button" class="statusbar__extend" (click)="sessionTimer.extend()">Extend</button>
-        }
-      }
+      <app-session-countdown bar="statusbar" />
     }
   </div>
 </footer>

@@ -1,0 +1,39 @@
+:host {
+  display: contents;
+}
+
+.statusbar__session,
+.statusbar__extend {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 5px;
+}
+
+.statusbar__session .codicon {
+  font-size: 14px;
+}
+
+.statusbar__session {
+  font-variant-numeric: tabular-nums;
+
+  &--warning {
+    color: var(--warning);
+  }
+}
+
+.statusbar__extend {
+  height: 18px;
+  min-height: 0;
+}
+
+.topbar__session {
+  margin-right: 6px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+
+  &--warning {
+    color: var(--warning);
+  }
+}

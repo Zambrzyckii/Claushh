@@ -1,11 +1,11 @@
 import { Component, computed, inject, input } from '@angular/core';
 
-import { SessionTimer } from '../core/auth/session-timer';
 import { DeviceLayout } from '../core/browser/device-layout';
 import { RepoStatusStore } from '../core/project/repo-status';
 import { countLabel } from '../core/text/format';
 import { ConsoleStore } from '../features/console/console-store';
 import { EditorStore } from '../features/editor/editor-store';
+import { SessionCountdown } from './session-countdown';
 
 /**
  * The status bar of both layouts (docs/ARCHITECTURE.md, "Frontend" → "Layout"), read-only: VS Code's items without their
@@ -15,6 +15,7 @@ import { EditorStore } from '../features/editor/editor-store';
  */
 @Component({
   selector: 'app-status-bar',
+  imports: [SessionCountdown],
   templateUrl: './status-bar.html',
   styleUrl: './status-bar.scss'
 })
@@ -22,7 +23,6 @@ export class StatusBar {
   protected readonly layout = inject(DeviceLayout);
   protected readonly editor = inject(EditorStore);
   protected readonly repoStatus = inject(RepoStatusStore);
-  protected readonly sessionTimer = inject(SessionTimer);
   private readonly console = inject(ConsoleStore);
 
   /** False on a phone's Terminal and Console tabs: the cursor and the language belong to the editor. */

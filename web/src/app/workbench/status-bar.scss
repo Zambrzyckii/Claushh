@@ -31,6 +31,10 @@
       gap: 4px;
       padding: 0 5px;
     }
+
+    > app-session-countdown {
+      display: contents;
+    }
   }
 
   .codicon {
@@ -40,19 +44,6 @@
   &__unsaved,
   &__changes--dirty {
     color: var(--git-modified);
-  }
-
-  &__session {
-    font-variant-numeric: tabular-nums;
-
-    &--warning {
-      color: var(--warning);
-    }
-  }
-
-  &__extend {
-    height: 18px;
-    min-height: 0;
   }
 }
 
