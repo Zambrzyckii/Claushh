@@ -62,7 +62,7 @@ On the server (decisions: `PLAN.md`, "Deployment decisions"):
 | `src/Git/` | repositories read with libgit2, the git CLI, one lock per repository, the background fetch, the git API |
 | `src/Terminal/` | the terminal: the API's own tmux server, the terminals, the `/hubs/terminal` hub, the theme API |
 | `src/Frontend/` | serving the built frontend (`Frontend:Root`) |
-| `src/Claude/` | the console: the claude CLI, conversations, their processes and event log, the `/hubs/console` hub. Not `Console/`, whose namespace would hide `System.Console` |
+| `src/Claude/` | the console: the claude CLI, conversations, their processes and event log, the `/hubs/console` hub. Not `Console/`, whose namespace would hide `System.Console`. `Translation/` (the CLI's stream-json format) |
 | `dotnet-tools.json` | local .NET tools: `dotnet-ef` (`dotnet tool restore`) |
 | `tests/Claushh.Api.Tests/` | backend integration tests: xUnit, the API in memory (`WebApplicationFactory`), PostgreSQL 17 from Testcontainers (`ApiFactory`). One folder per feature folder of `src/`, plus `Support/` (the shared harness) and `ConsoleRecordings/` |
 | `tests/Claushh.FakeClaude/` | a stand-in for the `claude` CLI in the backend tests: replays scripted stream-json lines and logs what the API sent; scripts are made of the recordings in `tests/Claushh.Api.Tests/ConsoleRecordings/` |

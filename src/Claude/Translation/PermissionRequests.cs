@@ -4,7 +4,7 @@
 // browser showed.
 using System.Text.Json;
 
-namespace Claushh.Api.Claude;
+namespace Claushh.Api.Claude.Translation;
 
 internal static class PermissionRequests
 {

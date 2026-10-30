@@ -7,6 +7,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.IO.Pipelines;
 using System.Text.Json;
+using Claushh.Api.Claude.Translation;
 using Microsoft.AspNetCore.SignalR;
 
 namespace Claushh.Api.Claude;

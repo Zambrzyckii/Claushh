@@ -2,7 +2,7 @@
 // needs, tolerant of fields that are missing or of another type.
 using System.Text.Json;
 
-namespace Claushh.Api.Claude;
+namespace Claushh.Api.Claude.Translation;
 
 internal static class StreamJson
 {

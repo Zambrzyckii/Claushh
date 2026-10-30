@@ -8,6 +8,7 @@
 using System.Collections.Concurrent;
 using System.ComponentModel;
 using System.Text.Json;
+using Claushh.Api.Claude.Translation;
 using Claushh.Api.Git;
 using Claushh.Api.Projects;
 using Microsoft.AspNetCore.SignalR;
@@ -191,7 +192,7 @@ public sealed class Conversations(ClaudeCli cli, ConversationLog store, ProjectP
             var process = await EnsureProcessAsync(state, options);
             await process.ApplyAsync(options);
             // Outside the conversation's lock (LibGit2 can take a while on a large repository), before the prompt line.
-            var before = FileChanges.Status(repositories, state.ProjectPath);
+            var before = RepositoryStatus(repositories, state.ProjectPath);
             await state.Lock.WaitAsync();
             try
             {
@@ -815,7 +816,7 @@ public sealed class Conversations(ClaudeCli cli, ConversationLog store, ProjectP
         // A command can change files the CLI does not report: in a project that was a repository at the prompt, every
         // path whose git status changed since then.
         if (turn.RanCommand && turn.Before is { } before
-            && FileChanges.Changed(before, FileChanges.Status(repositories, state.ProjectPath)) is { Count: > 0 } changed)
+            && ChangedPaths(before, RepositoryStatus(repositories, state.ProjectPath)) is { Count: > 0 } changed)
         {
             await events.EmitAsync(state, ConsoleEvents.FilesChanged(state.Key, changed));
         }
@@ -972,5 +973,39 @@ public sealed class Conversations(ClaudeCli cli, ConversationLog store, ProjectP
         {
             // What is left is killed.
         }
+    }
+
+    // The repository's status (path → state) when the project is a repository; null otherwise.
+    private static Dictionary<string, string>? RepositoryStatus(Repositories repositories, string projectPath)
+    {
+        try
+        {
+            if (repositories.Find(projectPath) is not { Status: LookupStatus.Found, Path: { } repo } || repositories.Status(repo) is not { } repoStatus)
+            {
+                return null;
+            }
+            var status = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (var file in repoStatus.Files)
+            {
+                status[file.Path] = file.Status;
+            }
+            return status;
+        }
+        catch (Exception e) when (e is LibGit2Sharp.LibGit2SharpException or IOException)
+        {
+            return null;
+        }
+    }
+
+    // The paths whose status differs between the prompt and now (new, gone or changed), in order.
+    private static List<string> ChangedPaths(Dictionary<string, string> before, Dictionary<string, string>? after)
+    {
+        if (after is null)
+        {
+            return [];
+        }
+        return [.. after.Keys.Union(before.Keys)
+            .Where(path => !before.TryGetValue(path, out var was) || !after.TryGetValue(path, out var now) || was != now)
+            .Order(StringComparer.Ordinal)];
     }
 }
