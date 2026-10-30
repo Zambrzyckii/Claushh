@@ -956,6 +956,9 @@ Login protection (`Auth/`):
   (`LoginGuard.EnterAsync`), so the checks and writes of parallel attempts never interleave; each loads what it needs
   after entering. A login waits at most 10 s for the one before it (`LoginGuard.GateWait`); then it gets `429` with
   `Retry-After: 10`, and nothing is recorded.
+- `SignIn.PasswordAsync` runs the gate, the limits, the credential check, the attempt record, the lockout and the
+  notifications of the password login in this order. `LoginGuard` keeps the rules, and `AuthEndpoints.Login` only
+  turns the outcome into the session cookie, `Retry-After` and the status code.
 
 Passkeys (`Auth/Passkeys/`; the contract is in "Authentication" → "Passkeys"; decisions: `PLAN.md`, "Backend decisions
 (passkeys)"):

@@ -35,6 +35,7 @@ public static class AuthModule
         services.AddScoped<SessionService>();
         services.AddScoped<TotpVerifier>();
         services.AddScoped<LoginGuard>();
+        services.AddScoped<SignIn>();
         services.AddSingleton<PasskeyCeremonies>();
         services.AddOptions<PasskeysOptions>()
             .Bind(configuration.GetSection("Passkeys"))

@@ -2,9 +2,7 @@
 using System.Globalization;
 using System.Text.Json;
 using Claushh.Api.Auth.Realtime;
-using Claushh.Api.Auth.Notifications;
 using Microsoft.AspNetCore.Antiforgery;
-using Microsoft.AspNetCore.Identity;
 
 namespace Claushh.Api.Auth;
 
@@ -15,9 +13,6 @@ public static class AuthEndpoints
     public sealed record LogoutRequest(string? SessionId);
     public sealed record MeResponse(string UserName, Guid SessionId, int ExpiresIn, int AbsoluteExpiresIn);
     public sealed record KeepaliveResponse(Guid SessionId, int ExpiresIn, int AbsoluteExpiresIn);
-
-    private static readonly IdentityUser DummyUser = new();
-    private static string? _dummyHash;
 
     public static RouteGroupBuilder MapAuthEndpoints(this RouteGroupBuilder api)
     {
@@ -41,48 +36,22 @@ public static class AuthEndpoints
         return Results.Ok(new MeResponse(session.User.UserName!, session.Id, expiresIn, absoluteExpiresIn));
     }
 
-    private static async Task<IResult> Login(LoginRequest body, HttpContext http, UserManager<IdentityUser> users,
-        LoginGuard guard, TotpVerifier totp, SessionService sessions, AuthCookies cookies, LoginNotifications notifications,
-        ILoggerFactory loggers)
+    private static async Task<IResult> Login(LoginRequest body, HttpContext http, SignIn signIn, AuthCookies cookies)
     {
-        var log = loggers.CreateLogger("Claushh.Api.Auth.Login");
         // After ForwardedHeaders: behind the tunnel, the address from CF-Connecting-IP.
-        var client = LoginClient.From(http);
-        using var gate = await guard.EnterAsync(http.RequestAborted);
-        if (gate is null)
+        var outcome = await signIn.PasswordAsync(LoginClient.From(http), body.UserName, body.Password, body.TotpCode,
+            http.RequestAborted);
+        switch (outcome.Status)
         {
-            // Not recorded, like every 429.
-            log.LogInformation("Login from {Ip} did not start within {Seconds} s", client.Ip, LoginGuard.GateWait.TotalSeconds);
-            http.Response.Headers.RetryAfter = LoginGuard.GateWait.TotalSeconds.ToString(CultureInfo.InvariantCulture);
-            return Results.StatusCode(StatusCodes.Status429TooManyRequests);
+            case SignInStatus.TooMany:
+                http.Response.Headers.RetryAfter = outcome.RetryAfter.ToString(CultureInfo.InvariantCulture);
+                return Results.StatusCode(StatusCodes.Status429TooManyRequests);
+            case SignInStatus.Failed:
+                return Results.Unauthorized();
+            default:
+                cookies.AppendSession(http.Response, outcome.Secret!);
+                return Results.NoContent();
         }
-        if (await guard.RetryAfterAsync(client.LimitKey, http.RequestAborted) is { } retryAfter)
-        {
-            http.Response.Headers.RetryAfter = retryAfter.ToString(CultureInfo.InvariantCulture);
-            return Results.StatusCode(StatusCodes.Status429TooManyRequests);
-        }
-        // CheckPasswordAsync returns a user only when TotpCode has 6 characters.
-        var user = await CheckPasswordAsync(users, body);
-        var success = user is not null && await totp.VerifyAsync(user, body.TotpCode!);
-        // Not the request's token: an attempt whose client went away is still recorded and counted.
-        await guard.RecordAsync(success, LoginMethods.Password, client.Ip, client.LimitKey, client.UserAgent, CancellationToken.None);
-        if (user is null || !success)
-        {
-            // The password was right: only wrong or reused codes count towards the lockout. Queuing does not wait for ntfy.
-            if (user is not null && await guard.CodeFailedAsync(user) is { } lockout)
-            {
-                notifications.AccountLocked(lockout, client.Ip, client.UserAgent);
-            }
-            // No user name: it is unvalidated input (newlines, any length, sometimes a mistyped password).
-            log.LogInformation("Failed login from {Ip}", client.Ip);
-            return Results.Unauthorized();
-        }
-        await guard.SucceededAsync(user);
-        var (_, secret) = await sessions.CreateAsync(user, client.UserAgent, client.Ip, http.RequestAborted);
-        cookies.AppendSession(http.Response, secret);
-        log.LogInformation("Login of {UserName} from {Ip}", user.UserName, client.Ip);
-        notifications.LoggedIn(client.Ip, client.UserAgent);
-        return Results.NoContent();
     }
 
     private static async Task<IResult> Keepalive(HttpContext http, SessionService sessions)
@@ -119,25 +88,5 @@ public static class AuthEndpoints
         await sweep.CloseAfterRevocationAsync("Closing hub connections after logout failed");
         cookies.ExpireAll(http.Response);
         return Results.NoContent();
-    }
-
-    // The user when the fields have valid lengths, the name and password are right and TOTP is on; null otherwise.
-    // An unknown user still costs one password hash, so the response time does not reveal whether the name exists.
-    private static async Task<IdentityUser?> CheckPasswordAsync(UserManager<IdentityUser> users, LoginRequest body)
-    {
-        if (body.UserName is not { Length: > 0 and <= 256 } userName
-            || body.Password is not { Length: > 0 and <= 1024 } password
-            || body.TotpCode is not { Length: 6 })
-        {
-            return null;
-        }
-        var user = await users.FindByNameAsync(userName);
-        if (user is null)
-        {
-            _dummyHash ??= users.PasswordHasher.HashPassword(DummyUser, "dummy password for timing");
-            users.PasswordHasher.VerifyHashedPassword(DummyUser, _dummyHash, password);
-            return null;
-        }
-        return user.TwoFactorEnabled && await users.CheckPasswordAsync(user, password) ? user : null;
     }
 }
