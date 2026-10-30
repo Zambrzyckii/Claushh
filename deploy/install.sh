@@ -35,7 +35,7 @@ build() {
   fi
   mkdir -p -- "$out"
   rm -rf -- "${out:?}/api" "${out:?}/web" "${out:?}/deploy"
-  dotnet publish "$repo/src/Claushh.Api" -c Release -r linux-x64 --self-contained true -o "$out/api"
+  dotnet publish "$repo/src" -c Release -r linux-x64 --self-contained true -o "$out/api"
   npm --prefix "$repo/web" ci
   npm --prefix "$repo/web" run build
   cp -a -- "$repo/web/dist/web/browser" "$out/web"

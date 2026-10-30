@@ -18,7 +18,7 @@ Browser (Angular, web/)
    │  HTTPS + WebSocket (SignalR)
 Cloudflare Access (one-time PIN by e-mail) + Cloudflare Tunnel    [stage 1]
    │  cloudflared on the server → http://127.0.0.1:5090
-ASP.NET Core API (src/Claushh.Api)
+ASP.NET Core API (src/)
    ├─ PostgreSQL (deploy/docker-compose.yml, localhost only; server: project claushh-prod)    [stage 1]
    ├─ files / git  → /srv/projects                              [stage 2, 4]
    ├─ terminal     → tmux in control mode (tmux -C)              [stage 4]
@@ -49,22 +49,22 @@ On the server (decisions: `PLAN.md`, "Deployment decisions"):
 |---|---|
 | `Claushh.slnx` | .NET solution (XML format) |
 | `Directory.Build.props` | shared settings for the .NET projects: `net10.0`, nullable, warnings as errors |
-| `src/Claushh.Api/` | ASP.NET Core backend |
-| `src/Claushh.Api/Program.cs` | app configuration and endpoint mapping |
-| `src/Claushh.Api/Properties/launchSettings.json` | development profile, port 5080 |
-| `src/Claushh.Api/Data/` | `ClaushhDbContext` (Identity tables, `Sessions`, `LoginAttempts`, `Workspaces`, and the console's `Conversations`, `ConversationEvents` and `ConsoleRules`) and EF Core migrations, applied at startup |
-| `src/Claushh.Api/Auth/` | login: `Session`, `AuthSessionOptions`, `AuthCookies` (cookie names), `SessionService` (the only code with session rules), `SessionAuthenticationHandler` (cookie → user, never extends), `SessionAntiforgeryData` (XSRF token bound to the session), `TotpVerifier` (TOTP codes, each accepted once), `LoginGuard` (the client address and its limit key, limit per IP, account lockout, login history), `LoginAttempt` and `LoginMethods` (`password`, `passkey`), `DeviceName` (User-Agent for storage and display), `AuthEndpoints` (`me`, `login`, `keepalive`, `logout`, XSRF filter), `SessionEndpoints` (session list, ending sessions, login history), `CreateUserCommand` (`create-user`), `AuthCleanup` (hourly deletion after 90 days), `PasskeysOptions` (`Passkeys:ServerDomain`), `PasskeyCeremonies` (passkey ceremonies in progress, in memory: login challenges, registration states, re-authenticated sessions), `PasskeyEndpoints` (`reauthenticate`, `/api/auth/passkeys/*`, the passkey login) |
-| `src/Claushh.Api/Files/` | files: `ProjectsOptions` (`Projects:Root`), `ProjectPaths` (the only code that turns an API path into a path on disk: syntax, symlinks resolved with `realpath`, `.git` refused, file types from `statx`), `Libc` (the six libc calls: `realpath`, `statx` (of a path, or of an open file), `open` (a regular file for reading that never waits on a named pipe: `OpenRegularFile`), `access`, `prctl` to make the process non-dumpable, and `kill` for SIGTERM to git's process tree), `FileStore` (reading and saving: versions, the 5 MB limit, the text rule `DecodeText`, atomic saves under a per-file lock), `FileEndpoints` (`/api/files/*`), `SearchLimits` (the search's limits), `FileSearch` (search in files: the walk, the globs, `.gitignore`, line matching and previews), `SearchEndpoints` (`POST /api/search`) |
-| `src/Claushh.Api/Workspaces/` | workspaces: `Workspace` (entity: display name and creation time), `WorkspaceNames` (the name rule and the directory made from a name), `CloneUrl` (the frontend's clone URL rule in .NET terms), `WorkspaceStore` (what a workspace is, the list in display order, creating one), `WorkspaceEndpoints` (`/api/workspaces`, `/api/repos`, `/api/repos/clone`) |
-| `src/Claushh.Api/Git/` | git: `Repositories` (what a repository is and its state, read with LibGit2Sharp: the repository list, the status, HEAD content, the `.gitignore` rules for search: `IgnoreRules`), `GitOptions` (`Git:NetworkTimeout`, `Git:Environment:*`), `GitRunner` (the git CLI: safety options, https only through `GIT_ALLOW_PROTOCOL`, environment through `ChildEnvironment`, output, time limits, stopping the process tree: SIGTERM, then a kill 1 s later), `RepoLocks` (one lock per repository), `BackgroundFetch` (the fetch after `GET /api/repos`, at most every 5 minutes per repository), `GitEndpoints` (`/api/git/*`: status, show, pull, push) |
-| `src/Claushh.Api/Hubs/` | SignalR hubs and what they share: `HubsOptions` (`Hubs:AllowedOrigins`, also for the passkey origin check), `HubOrigins` (the Origin check for `/hubs`), `HubSessionFilter` (the session on connect and on every call, never extended), `HubConnections` (open connections by session), `HubSessionSweep` (closes the connections of ended sessions every 5 s and right after a logout or revocation), `TerminalHub` (`/hubs/terminal`), `ConsoleHub` (`/hubs/console`) |
-| `src/Claushh.Api/Terminal/` | terminal: `TerminalOptions` (`Terminal:SocketDirectory`, `Terminal:Environment`, `Terminal:ThemeFile`), `TmuxServer` (the API's own tmux server: version check, socket and configuration, tmux processes with the allowlisted environment), `TmuxControlClient` (one `tmux -C`: its output read as bytes, replies matched to commands), `TerminalSession` (one terminal: output with `seq`, Attach, Input, Resize), `TerminalSnapshot` (the Attach text), `EscapeTail` (the escape sequence the output ends inside, for the snapshot), `Terminals` (the terminals in creation order, titles, the limit; prepares and ends the tmux server), `TerminalTheme` (pywal's 19 colours from `Terminal:ThemeFile`, checked and lowered, or none), `TerminalEndpoints` (`GET /api/terminal/theme`) |
-| `src/Claushh.Api/Processes/` | `ChildEnvironment` (a clean, allowlisted environment for a child process: `GitRunner`, the terminal and the console) |
-| `src/Claushh.Api/Frontend/` | the built frontend and the response headers: `FrontendOptions` (`Frontend:Root`), `FrontendFiles` (the `404` for paths that start with `//`, the files of the build, the `index.html` fallback, the CSP read from the page, cache rules), `SecurityHeaders` (the headers of every response, `no-store` on `/api`) |
-| `src/Claushh.Api/Notifications/` | phone notifications: `NotificationsOptions` (`Notifications:NtfyUrl`, `Notifications:NtfyToken`), `LoginNotifications` (the queue of login, lock and passkey messages and the background service that sends them to ntfy) |
-| `src/Claushh.Api/Claude/` | the console ("Backend" → "Console"): `ConsoleOptions` (`Console:*`), `ClaudeCli` (the claude CLI: config directory, the API key file's check, version check, allowlisted environment), `Conversation`, `ConversationEvent`, `ConsoleRule` (entities), `ConversationLog` (the console's tables), `ConsoleEvents` (the contract's events as JSON), `PromptOptions` (model, effort, mode), `PromptFile` (the open file a prompt names: its shape check and the note for the CLI), `ClaudeProcess` (one process: JSON lines, stdin under a lock, control replies, killing its tree, released after its exit), `Turn` (one turn's state), `StreamJson` (reading stream-json), `PermissionRequests` (what a question shows, its one rule, the CLI's answer), `FileChanges` (edit counts, changed files, the output cap), `ConversationCleanup` (deletion after 90 days), `Conversations` (conversations, their processes, turns and event log; checks the CLI before its first process; the hosted service that prepares the CLI's config directory, recovers, closes idle processes and stops) |
+| `src/` | the ASP.NET Core backend: one project (`Claushh.Api.csproj`, root namespace `Claushh.Api`) with one folder per feature, and every file's namespace follows its folder. Each feature registers its services in its `<Name>Module.cs` |
+| `src/Program.cs` | the composition root: the features' registrations in a fixed order, the shared host services (time, database, SignalR, authentication, XSRF, problem details), the middleware order, the migration at start, `create-user`, the endpoint and hub mapping, the non-dumpable hook |
+| `src/Properties/launchSettings.json` | development profile, port 5080 |
+| `src/Platform/` | Linux adapters that know nothing about the app: the libc calls (`Libc`) and the allowlisted environment of every child process (`ChildEnvironment`) |
+| `src/Projects/` | the projects directory: `Projects:Root` and its start checks, the only code that turns an API path into a path on disk (`ProjectPaths`), the text rule with the 5 MB limit (`TextRule`), the typed lookup result (`LookupResult`) |
+| `src/Web/` | HTTP pipeline pieces every feature shares: the security headers, the `404` for paths that start with `//`, the hubs' Origin check and `Hubs:AllowedOrigins`, the JSON body reader (`JsonBody`) and the `{"message"}` body (`MessageResponse`) |
+| `src/Data/` | `ClaushhDbContext` (Identity tables, `Sessions`, `LoginAttempts`, `Workspaces`, and the console's `Conversations`, `ConversationEvents` and `ConsoleRules`) and the EF Core migrations, applied at startup |
+| `src/Auth/` | login and sessions: session rules, the login gate with its limits and lockout, TOTP, the auth cookies and the XSRF filter, cleanup after 90 days. `Passkeys/` (passkey ceremonies and endpoints), `Account/` (`create-user` and its command line), `Notifications/` (phone notifications of logins through ntfy), `Realtime/` (hub connections tied to their session and closed when it ends) |
+| `src/Files/` | the files API and search in files |
+| `src/Workspaces/` | workspaces, the repository list of a workspace, the clone endpoint's input checks |
+| `src/Git/` | repositories read with libgit2, the git CLI, one lock per repository, the background fetch, remote operations (pull, push, clone), the git API |
+| `src/Terminal/` | the terminal: the API's own tmux server, the terminals, the `/hubs/terminal` hub, the theme API |
+| `src/Frontend/` | serving the built frontend (`Frontend:Root`) |
+| `src/Claude/` | the console: the claude CLI, conversations, their processes and event log, the `/hubs/console` hub. Not `Console/`, whose namespace would hide `System.Console`. `Translation/` (what the CLI's stream-json lines mean for a turn) |
 | `dotnet-tools.json` | local .NET tools: `dotnet-ef` (`dotnet tool restore`) |
-| `tests/Claushh.Api.Tests/` | backend integration tests: xUnit, the API in memory (`WebApplicationFactory`), PostgreSQL 17 from Testcontainers (`ApiFactory`) |
+| `tests/Claushh.Api.Tests/` | backend integration tests: xUnit, the API in memory (`WebApplicationFactory`), PostgreSQL 17 from Testcontainers (`ApiFactory`). One folder per feature folder of `src/` that has tests, plus `Support/` (the shared harness) and `ConsoleRecordings/` |
 | `tests/Claushh.FakeClaude/` | a stand-in for the `claude` CLI in the backend tests: replays scripted stream-json lines and logs what the API sent; scripts are made of the recordings in `tests/Claushh.Api.Tests/ConsoleRecordings/` |
 | `global.json` | `dotnet test` runs on Microsoft.Testing.Platform (required by xUnit v3 on the .NET 10 SDK) |
 | `web/` | Angular 21 frontend (standalone components, signals, the new `@if` syntax) |
@@ -161,6 +161,23 @@ On the server (decisions: `PLAN.md`, "Deployment decisions"):
 | `CLAUDE.md` | working rules for the repository (also for Claude Code): documentation in every change, commits, tests, security |
 | `.editorconfig` | UTF-8, LF, final newline, 2-space indent (4 for `*.cs`) |
 | `.gitignore` | .NET build output, `.env` files and local `appsettings.*.local.json`, editor and OS files |
+
+Dependency rules between the folders of src/, kept by review (docs/PLAN.md, "Backend decisions (structure)"):
+
+| Folder | May depend on | Must not depend on |
+|---|---|---|
+| `Platform/` | nothing in the app | anything else |
+| `Projects/` | `Platform/` | the features |
+| `Web/` | nothing in the app | the features |
+| `Data/` | the entity types of `Auth/`, `Claude/`, `Workspaces/` | anything else in those folders |
+| `Frontend/` | nothing in the app | the features |
+| `Auth/` | `Data/`, `Web/` | other features |
+| `Files/` | `Projects/`, `Platform/`, `Git/` (ignore rules for search) | hubs and endpoints of other features |
+| `Git/` | `Projects/`, `Platform/`, `Web/` | other features |
+| `Workspaces/` | `Projects/`, `Platform/`, `Git/`, `Data/`, `Web/` | hubs |
+| `Terminal/` | `Projects/`, `Platform/` | other features |
+| `Claude/` | `Projects/`, `Platform/`, `Git/`, `Data/` | `Terminal/`, `Auth/` |
+| `Program.cs` | everything | nothing, it is the composition root |
 
 ## Authentication
 
@@ -330,7 +347,7 @@ the portal in a frame of a foreign page (clickjacking).
 - `main.ts` does not start the app inside a frame (`window.top !== window.self`). This is only a safeguard in case the
   `frame-ancestors` header is missing.
 
-Backend requirements, as the API sends them (`Frontend/`). The mock in `web/e2e/mock-api/` sends a subset: the
+Backend requirements, as the API sends them (`Web/SecurityHeaders.cs`, `Frontend/`). The mock in `web/e2e/mock-api/` sends a subset: the
 `X-Frame-Options` and the CSP only with `index.html`, and no `Cache-Control` on the other files. The e2e tests check in
 every test that the page reports no CSP violations.
 - `index.html` (also as the fallback for the app's paths): a `Content-Security-Policy` header with the policy of its
@@ -829,14 +846,14 @@ Endpoints:
 
 Every other endpoint requires a session (`FallbackPolicy`), and so does a path that matches nothing: a missing file such
 as `/chunk-x.js` gives 401 without a session and 404 with one, never `index.html`. Every POST/PUT/PATCH/DELETE under
-`/api` needs a valid `X-XSRF-TOKEN` (filter `RequireXsrfToken` in `Auth/AuthEndpoints.cs`, 400 otherwise).
+`/api` needs a valid `X-XSRF-TOKEN` (filter `RequireXsrfToken` in `Auth/XsrfFilter.cs`, 400 otherwise).
 
 Hubs (`/hubs/*`) need a session and an Origin header equal to one of `Hubs:AllowedOrigins`: otherwise 403 with an empty
 body, also when Origin is missing. They are outside `/api`, so no XSRF token (the WebSocket upgrade is a GET; the
 Origin check and the `SameSite=Strict` cookie cover cross-site requests). An unknown path under `/hubs` gives 401
 without a session and 404 with one, never `index.html`.
 
-Every response has the headers of "Security headers" (`Frontend/SecurityHeaders.cs`), and all `/api/*` responses have
+Every response has the headers of "Security headers" (`Web/SecurityHeaders.cs`), and all `/api/*` responses have
 `Cache-Control: no-store`. An unknown `/api/*` path (also `/api` itself) gives 401 without a session and 404 with one,
 never `index.html`. Unhandled errors give 500 as `application/problem+json`, without details outside Development.
 
@@ -844,7 +861,7 @@ Configuration:
 
 | Key | Where | Meaning |
 |---|---|---|
-| `ASPNETCORE_ENVIRONMENT` | development: `launchSettings.json` (`Development`); tests: `Testing`; server: `Production` (the unit) | the host environment: `appsettings.<environment>.json` and the Production rules (`Notifications:NtfyUrl` required; the process made non-dumpable once the host has started, `Files/Libc.cs`) |
+| `ASPNETCORE_ENVIRONMENT` | development: `launchSettings.json` (`Development`); tests: `Testing`; server: `Production` (the unit) | the host environment: `appsettings.<environment>.json` and the Production rules (`Notifications:NtfyUrl` required; the process made non-dumpable once the host has started, `Platform/Libc.cs`) |
 | `ASPNETCORE_URLS` | development: `launchSettings.json` (`http://localhost:5080`); server: `http://127.0.0.1:5090` (the unit) | where Kestrel listens; on the server only loopback, where `cloudflared` connects |
 | `AllowedHosts` | `appsettings.json` (`*`); server: `<domain>` in `/etc/claushh/claushh.env` | the Host header values the API answers (host filtering; another Host gets 400); local requests on the server send `Host: <domain>` |
 | `Logging:Console:FormatterName` | not set; server: `systemd` (the unit) | the console log format; `systemd` writes one line per message with its syslog level, for the journal |
@@ -876,10 +893,10 @@ Frontend (`Frontend/`; decisions: `PLAN.md`, "Backend decisions (stage 1, part C
 - Endpoint matching (`UseRouting`) runs before the files, so `/api` and `/hubs` paths never get a file or the page. A
   missing file is 401 or 404 like any unknown path. Without the key there is no frontend: development uses `ng serve`.
 - A path that starts with `//` is `404` with an empty body, with or without a session, before routing and the files
-  (`FrontendFiles.UseDoubleSlashNotFound`), also without `Frontend:Root`.
+  (`DoubleSlashNotFound.UseDoubleSlashNotFound` in `Web/`), also without `Frontend:Root`.
 - Content types come from the framework's list, except `.ttf` as `font/ttf` and `.woff` as `font/woff` (`.woff2` is `font/woff2` and `.svg` `image/svg+xml` already); unknown types are not served. `index.html`
   is `no-store`, every other file `no-cache` (revalidated with its ETag).
-- `SecurityHeaders` sets the headers of "Security headers" on every response; the CSP goes only with the page.
+- `SecurityHeaders` (in `Web/`) sets the headers of "Security headers" on every response; the CSP goes only with the page.
   Antiforgery's own `X-Frame-Options` is suppressed.
 
 Sessions (`Auth/`):
@@ -895,7 +912,8 @@ Sessions (`Auth/`):
   set by `login-options`, expired by every `login` answer after the gate and the per-IP limit). With
   `Sessions:SecureCookies=false`: `claushh-session`, `claushh-af`, `claushh-passkey`, and `Secure` only on HTTPS.
 
-Client address (`Program.cs`, `LoginGuard.ClientIp`; decisions: `PLAN.md`, "Backend decisions (stage 1, part C)"):
+Client address (`Program.cs`, `LoginGuard.ClientIp`, `LoginClient`;
+decisions: `PLAN.md`, "Backend decisions (stage 1, part C)"):
 - `ForwardedHeaders` runs first in every environment with the framework's default trust: only a loopback peer
   (127.0.0.0/8 and `::1`, also IPv4-mapped), which on the server is the local `cloudflared`.
 - From such a peer the client address is `CF-Connecting-IP` and the scheme is `X-Forwarded-Proto`, one entry each.
@@ -938,22 +956,26 @@ Login protection (`Auth/`):
   (`LoginGuard.EnterAsync`), so the checks and writes of parallel attempts never interleave; each loads what it needs
   after entering. A login waits at most 10 s for the one before it (`LoginGuard.GateWait`); then it gets `429` with
   `Retry-After: 10`, and nothing is recorded.
+- `SignIn.PasswordAsync` runs the gate, the limits, the credential check, the attempt record, the lockout and the
+  notifications of the password login in this order. `LoginGuard` keeps the rules, and `AuthEndpoints.Login` only
+  turns the outcome into the session cookie, `Retry-After` and the status code.
 
-Passkeys (`Auth/`; the contract is in "Authentication" → "Passkeys"; decisions: `PLAN.md`, "Backend decisions
+Passkeys (`Auth/Passkeys/`; the contract is in "Authentication" → "Passkeys"; decisions: `PLAN.md`, "Backend decisions
 (passkeys)"):
 - Identity stores them (schema version 3): table `AspNetUserPasskeys`, keyed by the credential id, the rest as JSON.
-  Its `PasskeyHandler` makes the options and checks the credentials; `Program.cs` registers it, and the endpoints
-  call it directly, without `SignInManager`.
+  Its `PasskeyHandler` makes the options and checks the credentials; `AuthModule` registers it, and the endpoints and
+  `SignIn.PasskeyAsync` call it directly, without `SignInManager`.
 - The RP ID is `Passkeys:ServerDomain`. A credential's origin must be one of `Hubs:AllowedOrigins`, without
   `crossOrigin` and without a top origin; user verification is required; the creation options ask for a discoverable
   credential (the server does not check this) and no attestation.
 - `PasskeyCeremonies` keeps, in the API process, a registration's state per session (newer creation options replace
   it) and the sessions that re-authenticated, at most 20 sessions each, the oldest dropped. Each entry lasts 5
   minutes by `TimeProvider`, and a state is used once; a restart loses them.
-- Re-authentication runs inside the login gate: `RetryAfterAsync` (the per-IP limit and the account lock), then the
-  password and the code (`TotpVerifier`, so the code is used up). A failure is recorded like a failed login, and a
-  wrong or reused code after the right password counts towards the lockout and may start a lock with its
-  notification. A success resets the counts like a login, is not recorded and does not extend the session.
+- Re-authentication (`SignIn.ReauthenticateAsync`) runs inside the login gate: `RetryAfterAsync` (the per-IP limit and
+  the account lock), then the password and the code (`TotpVerifier`, so the code is used up). A failure is recorded
+  like a failed login, and a wrong or reused code after the right password counts towards the lockout and may start a
+  lock with its notification. A success resets the counts like a login, is not recorded and does not extend the
+  session.
 - Adding checks the body and the name, then enters the login gate: the session's state (taken, so used once), the
   limit of 10, Identity's checks (challenge, origin, RP ID hash, user presence and verification, algorithm, a
   credential id already stored) and that the state's user is the session's. `CreatedAt` is the `TimeProvider` time.
@@ -963,13 +985,13 @@ Passkeys (`Auth/`; the contract is in "Authentication" → "Passkeys"; decisions
 - Login: `login-options` (outside the gate, behind the per-IP limit only) asks Identity for request options without a
   user and keeps the state under a random id (32 bytes, base64url) in the challenge cookie: at most 3 pending
   challenges per address (the per-IP limit's key) and 10,000 in all, the oldest dropped; 5 minutes, used once.
-  `login` enters the gate, checks the per-IP limit, takes the challenge and expires its cookie, and lets Identity check
-  the assertion (the user from the user handle, a stored passkey, the signature, a sign count that grows unless both
-  are 0). Every attempt that gets this far is recorded with the method `passkey`. A success saves the passkey's new
-  sign count and backup state, creates the session as a password login does, and sends the passkey login
-  notification.
+  `login` (`SignIn.PasskeyAsync`) enters the gate, checks the per-IP limit, takes the challenge and lets Identity check
+  the assertion (the user from the user handle, a stored passkey, the signature, a sign count that grows unless both are
+  0). The endpoint expires the challenge cookie of every attempt that took it. Every attempt that gets this far is
+  recorded with the method `passkey`. A success saves the passkey's new sign count and backup state, creates the session
+  as a password login does, and sends the passkey login notification.
 
-Notifications (`Notifications/`; decisions: `PLAN.md`, "Backend decisions (stage 1, part C)"):
+Notifications (`Auth/Notifications/`; decisions: `PLAN.md`, "Backend decisions (stage 1, part C)"):
 - `LoginNotifications` sends a phone notification through ntfy for these events, never with the user name:
   - every successful password login: title `Claushh: login`, priority `default`, with the address, the device and
     the time in UTC;
@@ -989,11 +1011,11 @@ Notifications (`Notifications/`; decisions: `PLAN.md`, "Backend decisions (stage
   and the login is not affected. The notification client has no HTTP logging for the same reason.
 - Without `Notifications:NtfyUrl` nothing is queued, and one log line at start says notifications are off.
 
-Files (`Files/`; the rules the frontend can see are in "Files API contract"):
+Files (`Files/`, paths in `Projects/`; the rules the frontend can see are in "Files API contract"):
 - Every path goes through `ProjectPaths.Resolve` first (`FileEndpoints`: `400` when it returns null, before any file is
   touched); `FileStore` works on the resolved path.
 - The version is the lower-case hex SHA-256 of the file's bytes on disk (the BOM included), and `absent` when there is
-  no file. The text rule is `FileStore.DecodeText`: `null` for a NUL byte or invalid UTF-8, otherwise the text without a
+  no file. The text rule is `TextRule.DecodeText`: `null` for a NUL byte or invalid UTF-8, otherwise the text without a
   leading BOM; a save applies the same rule to the content it is given.
 - A read measures the file, refuses one over 5 MB without reading it, and reads into a buffer of its length plus one
   byte (the extra byte shows that the file has grown meanwhile, and the buffer then grows, to 5 MB plus one at most), so
@@ -1016,7 +1038,7 @@ Files (`Files/`; the rules the frontend can see are in "Files API contract"):
   depth. In a repository (the first two segments, as `Repositories.Find` accepts them) every directory, asked with a
   trailing `/`, and every file goes through LibGit2Sharp's `Ignore.IsPathIgnored`. A file is measured first (over 1 MiB:
   skipped), read up to one byte past that size (one that grew since is skipped) and decoded with
-  `FileStore.DecodeText`. Globs are `Microsoft.Extensions.FileSystemGlobbing` matchers (from the ASP.NET Core shared
+  `TextRule.DecodeText`. Globs are `Microsoft.Extensions.FileSystemGlobbing` matchers (from the ASP.NET Core shared
   framework), matched in memory, case-sensitive.
 - The query becomes a `Regex` with `NonBacktracking` and `CultureInvariant` (`IgnoreCase` unless `matchCase`; a literal
   through `Regex.Escape`; `wholeWord` as `\b(?:…)\b`, the pattern valid on its own). A pattern or glob .NET refuses is
@@ -1050,7 +1072,7 @@ Workspaces and git (`Workspaces/`, `Git/`):
   trim (not .NET's), code points (not UTF-16 characters), and İ lowercased as JavaScript does.
 - The `git` CLI runs only for the network and its local steps (`GitRunner`): without a shell (`ArgumentList`), stdin
   closed, in the repository (the workspace for a clone), always with `-c core.fsmonitor=false`. Its environment is
-  built by `Processes/ChildEnvironment`: not the API's whole environment (a denylist would miss whatever variable the
+  built by `Platform/ChildEnvironment`: not the API's whole environment (a denylist would miss whatever variable the
   API's own process picks up next), but an allowlist (`HOME`, `USER`, `LOGNAME`, `SHELL`, `PATH`, `LANG`, `LANGUAGE`,
   every `LC_*`, `TZ`, `LANG=C.UTF-8` added when none of `LANG`/`LC_ALL`/`LC_CTYPE` is set), then `GitRunner`'s own
   overrides: `GIT_ALLOW_PROTOCOL=https` (git then allows only https and reads no protocol rule from its configuration
@@ -1078,24 +1100,24 @@ Workspaces and git (`Workspaces/`, `Git/`):
   fetch holding the repository's lock stops it (its process tree is stopped as at a limit; a pull fetches anyway),
   and running fetches are stopped the same way when the API stops.
 - Clone: the checks in the mock's order (body and workspace `400`/`404`, the URL rule, the directory name, any entry at
-  the target `409`), then `git clone -- <url> <name>` under the target's lock, run in the workspace directory with
-  the destination given by name (not the resolved path), so git's own "Cloning into '…'" message never puts a
-  resolved path in a `502` response. A failure or a timeout removes the target directory if it exists and answers
-  `502`; a clone that is not a repository the portal can read is a `500`.
-- Pull: no upstream (also a detached HEAD) → `400`; `git fetch <remote>` (a failure → `502`); nothing new → "Already
-  up to date."; `git merge --ff-only @{upstream}` (a failure → `409` with git's message); then `changedPaths` from `git
-  diff --name-only --no-renames -z <old HEAD> HEAD` (on a branch that had no commits, `git ls-tree -r --name-only -z HEAD`).
-- Push: a detached HEAD → `400`; an upstream with nothing ahead → "Nothing to push." without the network; with an
-  upstream `git push --porcelain <remote> HEAD:<its branch>` (explicit, so `push.default` does not matter); without one
-  but with `origin`, `git push --porcelain -u origin HEAD`; neither → `400`. When ahead cannot be computed (the
-  upstream has no tip yet, e.g. a freshly cloned empty remote, or there is no common history) the shortcut is skipped
-  and the push runs regardless, so git's own porcelain output decides `200`/`409`/`502` as for any push; its success
-  message then counts HEAD's own commits, since there is nothing ahead can be compared against. A porcelain line
-  `!…[rejected]` → `409`; any other failure → `502`. A message that repeats the repository's resolved path (e.g. a
-  stale lock file) has it replaced
-  with the API path, as clone's destination name does for its own message.
+  the target `409`), then `RemoteOperations.CloneAsync` runs `git clone -- <url> <name>` under the target's lock, in
+  the workspace directory with the destination given by name (not the resolved path), so git's own "Cloning into
+  '…'" message never puts a resolved path in a `502` response. A failure or a timeout removes the target directory
+  if it exists and answers `502`; a clone that is not a repository the portal can read is a `500`.
+- Pull (`RemoteOperations.PullAsync`): no upstream (also a detached HEAD) → `400`; `git fetch <remote>` (a failure →
+  `502`); nothing new → "Already up to date."; `git merge --ff-only @{upstream}` (a failure → `409` with git's message);
+  then `changedPaths` from `git diff --name-only --no-renames -z <old HEAD> HEAD` (on a branch that had no commits, `git
+  ls-tree -r --name-only -z HEAD`).
+- Push (`RemoteOperations.PushAsync`): a detached HEAD → `400`; an upstream with nothing ahead → "Nothing to push."
+  without the network; with an upstream `git push --porcelain <remote> HEAD:<its branch>` (explicit, so `push.default`
+  does not matter); without one but with `origin`, `git push --porcelain -u origin HEAD`; neither → `400`. When ahead
+  cannot be computed (the upstream has no tip yet, e.g. a freshly cloned empty remote, or there is no common history)
+  the shortcut is skipped and the push runs regardless, so git's own porcelain output decides `200`/`409`/`502` as for
+  any push; its success message then counts HEAD's own commits, since there is nothing ahead can be compared against. A
+  porcelain line `!…[rejected]` → `409`; any other failure → `502`. A message that repeats the repository's resolved
+  path (e.g. a stale lock file) has it replaced with the API path, as clone's destination name does for its own message.
 
-Hubs (`Hubs/`, shared by every hub):
+Hubs (`Auth/Realtime/` and `Web/HubOrigins.cs`, shared by every hub):
 - SignalR with the JSON protocol, WebSocket only; the frontend skips negotiation. Detailed errors are off: a client
   sees only `HubException` texts, which are English, and the frontend shows its own texts anyway.
 - `HubOrigins` runs before authentication for every path under `/hubs`.
@@ -1107,9 +1129,10 @@ Hubs (`Hubs/`, shared by every hub):
   `OnConnectedAsync`) is removed from the registry right away, so it is not kept forever.
 - `HubSessionSweep` asks which registered sessions are still active (`SessionService.ActiveIdsAsync`, one query) and
   aborts the connections of the others: every 5 s (expiry, `create-user` in another process) and right after logout,
-  ending another session and revoke-others in this process. Events sent to clients are not checked, so a connection of
-  an ended session can receive them until it is aborted: at once for an end in this process, within 5 s otherwise. A
-  failure of that in-request sweep is logged and left to the 5 s timer, instead of failing the request.
+  ending another session and revoke-others in this process, which call `HubSessionSweep.CloseAfterRevocationAsync`.
+  Events sent to clients are not checked, so a connection of an ended session can receive them until it is aborted: at
+  once for an end in this process, within 5 s otherwise. A failure of that in-request sweep is logged and left to the
+  5 s timer, instead of failing the request.
 
 Terminal (`Terminal/`; the contract is in "Terminal"):
 - tmux 3.7 or later in control mode (`tmux -C`, stdin and stdout as pipes), no PTY. The API runs its own tmux server on
@@ -1121,7 +1144,7 @@ Terminal (`Terminal/`; the contract is in "Terminal"):
   Without tmux 3.7, or without `Terminal:SocketDirectory` and `XDG_RUNTIME_DIR`, the error log says so,
   `ListTerminals` is empty and the other methods answer "Terminal unavailable"; the rest of the API works.
 - Every tmux process gets only HOME, USER, LOGNAME, SHELL, PATH, LANG, LANGUAGE, LC_* and TZ of the API's environment
-  (`Processes/ChildEnvironment`), `LANG=C.UTF-8` when no locale variable is set, `COLORTERM=truecolor`, then
+  (`Platform/ChildEnvironment`), `LANG=C.UTF-8` when no locale variable is set, `COLORTERM=truecolor`, then
   `Terminal:Environment`: none of the API's own variables reach tmux or the shell (the connection string,
   `ASPNETCORE_*`, `DOTNET_*`, `CLAUDECODE*`); the login shell's profile may still set its own, e.g. `DOTNET_ROOT`. The
   shell is the login shell from SHELL and runs as the API's user.
@@ -1170,12 +1193,12 @@ Terminal (`Terminal/`; the contract is in "Terminal"):
   for reading with `Libc.OpenRegularFile` (`open` with `O_NONBLOCK`, so a named pipe never makes it wait; a link is
   followed), and the type is checked on the opened file (`statx` on its descriptor): anything but a regular file is
   `204`. At most 16 KiB + 1 bytes are read, never trusting the size the file reports, and more than 16 KiB is `204`.
-  The bytes are decoded as the files API decodes text (`FileStore.DecodeText`: no NUL byte, valid UTF-8, a BOM
+  The bytes are decoded as the files API decodes text (`TextRule.DecodeText`: no NUL byte, valid UTF-8, a BOM
   dropped) and parsed with `JsonDocument`; the 19 values are checked and lowered. A read or parse error is a `204`
   without its exception (a JSON parse error's message quotes the file), and nothing of the file or its path is logged
   or returned.
 
-Console (`Claude/`, `Hubs/ConsoleHub.cs`; the contract is in "Console"; decisions: `PLAN.md`, "Backend decisions
+Console (`Claude/`; the contract is in "Console"; decisions: `PLAN.md`, "Backend decisions
 (stage 3)"):
 - `/hubs/console` has the shared hub rules ("Hubs"). `GetConversation` and `StartConversation` need `projectPath` to be
   a directory in the projects directory (`ProjectPaths`, as for the terminal), otherwise "Invalid path".
@@ -1183,11 +1206,13 @@ Console (`Claude/`, `Hubs/ConsoleHub.cs`; the contract is in "Console"; decision
 - Tables `Conversations` (`Id`, `ProjectPath`, `StartedAt`, `LastEventAt`, `Resumable`; index `ProjectPath` +
   `StartedAt`), `ConversationEvents` (`ConversationId` with cascade, `Seq`, `Json` as text; key on both) and
   `ConsoleRules` (`ProjectPath`, `Rule`, `CreatedAt`; key on both).
-- Every event is stored, then sent to all console connections, under the conversation's lock, so every connection and
-  a replay see one order. `Json` is the event as it was sent (text, not `jsonb`). Text deltas are sent at once and
-  stored as one row per `messageId`, written before the next other event; `GetConversation` returns the project's
-  latest conversation (by `StartedAt`) with its rows and the text still open. A failed insert is logged and the event
-  is still sent.
+- Every event is stored, then sent to all console connections, by `EventWriter`, under the conversation's lock, so
+  every connection and a replay see one order. `Json` is the event as it was sent (text, not `jsonb`). Text deltas are
+  sent at once and stored as one row per `messageId`, written before the next other event; `GetConversation` returns the
+  project's latest conversation (by `StartedAt`) with its rows and the text still open. A failed insert is logged and
+  the event is still sent.
+- `Translation/TurnTranslator` turns each stream-json line into events and leaves the database, git, the CLI's stdin
+  and the end of a turn to `Conversations`, which owns the lock and the processes.
 - At start (a hosted service, so `create-user` never runs it) the API creates `Console:ConfigDirectory` with mode
   0700. A `Console:ApiKeyFile` that is not an existing file, that lies in the projects directory as written or with
   symlinks resolved (its directory or the file itself), or whose mode has a group or other bit makes the console
@@ -1208,9 +1233,10 @@ Console (`Claude/`, `Hubs/ConsoleHub.cs`; the contract is in "Console"; decision
   "cleanupPeriodDays":90}`, plus `apiKeyHelper` with `Console:ApiKeyFile`. `--restricted` ignores the user, project and
   local settings files, so a cloned repository's `.claude/` settings (hooks, `env`, `apiKeyHelper`, allow rules) are
   not used, and with `--strict-mcp-config` neither is its `.mcp.json`.
-- The process's environment: the allowlist of `Processes/ChildEnvironment`, then `XDG_CONFIG_HOME`, `XDG_RUNTIME_DIR`
-  and `DBUS_SESSION_BUS_ADDRESS` when the API has them (as for git, so `git push` in a step reaches the credential
-  helper), `CLAUDE_CONFIG_DIR`, `DISABLE_UPDATES=1`, `DISABLE_AUTOUPDATER=1`, `TERM=dumb`, then `Console:Environment`.
+- The process's environment: the allowlist of `Platform/ChildEnvironment`, then `XDG_CONFIG_HOME`, `XDG_RUNTIME_DIR`
+  and `DBUS_SESSION_BUS_ADDRESS` when the API has them (`ChildEnvironment.CredentialHelperVariables`, as for git, so
+  `git push` in a step reaches the credential helper), `CLAUDE_CONFIG_DIR`, `DISABLE_UPDATES=1`,
+  `DISABLE_AUTOUPDATER=1`, `TERM=dumb`, then `Console:Environment`.
   The API's own variables (the connection string, `ANTHROPIC_API_KEY`, `CLAUDECODE*`) never reach the CLI.
 - `initialize` must answer within 30 s. Before every prompt `set_model`, `set_permission_mode` and
   `apply_flag_settings {effortLevel}` are sent and each reply awaited (10 s; then "Console not responding" and the
@@ -1285,7 +1311,7 @@ Console (`Claude/`, `Hubs/ConsoleHub.cs`; the contract is in "Console"; decision
   (`ConversationCleanup`, by `TimeProvider`); the rules stay. The CLI keeps its transcripts as long
   (`cleanupPeriodDays: 90`).
 
-Commands (`dotnet run --project src/Claushh.Api -- <command>`; on the server as `workspace`, with the service's
+Commands (`dotnet run --project src -- <command>`; on the server as `workspace`, with the service's
 environment file and a terminal, through `systemd-run`: README.md, "Deployment", step 10):
 
 | Command | What it does |
@@ -1295,18 +1321,12 @@ environment file and a terminal, through `systemd-run`: README.md, "Deployment",
 | `create-user --reset-password` | a new password for the existing account (at least 12 characters, different from the current one, no echo, typed twice), all its sessions ended, its passkeys removed and the lockout cleared; the TOTP key stays |
 
 Migrations: `dotnet tool restore`, then
-`ASPNETCORE_ENVIRONMENT=Development dotnet ef migrations add <Name> --project src/Claushh.Api --output-dir Data/Migrations`.
+`ASPNETCORE_ENVIRONMENT=Development dotnet ef migrations add <Name> --project src --output-dir Data/Migrations`.
 `migrations add` does not connect to the database; without a user-secret, pass any connection string in
 `ConnectionStrings__Claushh`. The connection string can also go to the app as an argument: `dotnet ef migrations add
-<Name> --project src/Claushh.Api --output-dir Data/Migrations -- --ConnectionStrings:Claushh=Host=localhost`.
+<Name> --project src --output-dir Data/Migrations -- --ConnectionStrings:Claushh=Host=localhost`.
 
-Folders in `src/Claushh.Api/` (each is created together with the code it concerns). Existing: `Auth/` (Identity, TOTP,
-sessions), `Data/` (DbContext, migrations), `Files/` (files API and path protection), `Workspaces/` (workspaces),
-`Git/` (repositories and git), `Processes/` (a clean child environment, shared by git, the terminal and the console),
-`Hubs/` (SignalR hubs: the Origin check, the session check, the terminal and console hubs), `Terminal/` (tmux, the
-terminals), `Frontend/` (the built frontend and the security headers), `Notifications/` (phone notifications of
-logins), `Claude/` (the console: the claude CLI and its conversations; not `Console/`, whose namespace would hide
-`System.Console`).
+The folders of `src/` and what each owns are listed in "Repository map".
 
 ## Frontend
 
@@ -1429,7 +1449,7 @@ Rules: `CLAUDE.md`, section "Tests" (new code: only integration and e2e tests).
 | E2E | `cd web && npm run e2e` | build + Playwright in Chromium on `e2e/mock-api/server.mjs`, in the projects `desktop` and `phone` (Pixel 7: `phone.spec.ts`, the login, the tabs, no panel edges, the terminal's 13 px font, the drawer, Save, the terminal mounted on its first visit, the phone keys (Esc, Tab, an arrow, a sticky Ctrl, the focus kept in the terminal), the Paste key with the paste check, Send, the drawer's Source Control, the menu, Security as a sheet, the countdown, landscape, a passkey added in the Security sheet, the passkey login at 375 px, 16 px fields on a touch screen, OPEN EDITORS in the drawer without a minimap, the drawer's Search opening a result, the Console tab naming the Editor tab's file, the terminal's theme behind its padding with the keys on the portal's surface): login and sessions (including unconfirmed logout with "Back", a new tab and logging in again, embedding in a frame, Trusted Types), explorer and Monaco, console (the composer card and its chips, the open file's chip with ×, its selected lines and the line in the log, steps, options, permissions, "yes, always", interrupt, replay, multiple tabs, file changes), workspaces (opening a repo, git status, pull, push, create, clone, a conversation per repo), terminal (commands, keys, reload without duplicates, multiple terminals, `exit`, Ctrl+S, resizing, pasting with the decision panel, characters on a dropped connection without loss or duplication, also after closing the tab, queue limit, focus, OSC 8 links, no answers to terminal queries, closing a terminal that another tab already closed), session (countdown, "Extend", activity once a minute on a fake clock, expiry, also without a server response and hubs closed by the server), the Security window with a second device (a separate browser context), diff view, Monaco worker startup, the shipped fonts and icons (`look.spec`: loaded, served as `font/woff2`, the terminal's Nerd Font symbols loaded only when needed, the desktop terminal's 11 pt font and 10 px of padding, unchanged after Monaco loads its own icon font; the terminal's colours from the server's theme in xterm, behind its padding and in the prompt's ANSI colours, the paste panel on the portal's surface, the theme in place before `Attach` writes the snapshot after a reload, and the portal's colours without a theme, with a malformed file, a malformed answer or none within 3 s; the tree's file icons decoded and served as `image/svg+xml`), the console, the bottom panel and the side bar sliding in and out (`motion.spec`, also with reduced motion), the layout (`layout.spec`: the side bar keeping its tree, the panel closed at start with no terminal, the account menu, the command centre, CHANGES, OPEN EDITORS, the status bar's values, the minimap and the changes action, Ctrl+Alt+B from the editor and from the terminal, which never receives it, the panels' edges: dragged with the mouse, moved with the keyboard, a double-click, the minimums and the editor's, a narrower window, one terminal size per drag, covered by an open account menu), search in files (`search.spec`: results grouped by file with counts and highlights, a result opening the file at the match, a regular expression, whole words, no results, an unsupported pattern, one request for fast typing), passkeys with Chromium's virtual authenticator at `localhost` (`passkeys.spec`: adding after the password and code, the synced flag and a discoverable credential, renaming, removing in a new session, a refused verification that adds nothing, Esc that drops the password and code form, logging in with a passkey and its history row, a cancelled prompt without a login request, an open prompt that does not hold the login lock, an unknown passkey and the wait after three failures, the domain-name message at `127.0.0.1`), mock robustness, the file icons' type, and the contract rules that the frontend does not let through (clone URL, XSRF token bound to the identity, saving like the files API: `absent`, a missing directory, 5 MB, a NUL character, workspace, repo and path parameters, search like the backend (its `400`s, the `404` for a file, the XSRF token), the terminal theme like the backend (the `401`, the `204`s, exactly the 19 colours, a GET with a stale XSRF token), the console's paths, prompt length, options and file, the passkeys' re-authentication and login challenge). **Every test** (`fixtures.ts`) fails when the page reports a CSP or Trusted Types violation, an unhandled exception (including one caught by Angular's ErrorHandler, `console.error('ERROR', …)`) or Monaco does not create a worker |
 | Backend | `dotnet test` (needs Docker) | xUnit integration tests over HTTP (`WebApplicationFactory`, PostgreSQL 17 from Testcontainers, a test clock): login and its failures, `me`, `keepalive` and both deadlines, logout and 409, ending another session, XSRF token bound to the session, `no-store`, closed `/api/*`, the built frontend (the page for app paths with its CSP and `no-store`, file types (also the fonts) and `no-cache`, `/api` and `/hubs` paths and missing files never the page, paths that start with `//` `404` with or without a session, the security headers on every response, the start check of `Frontend:Root`), `create-user`, TOTP codes used once, the limit per IP, the client address behind Cloudflare (`CF-Connecting-IP` and `X-Forwarded-Proto` only from a loopback peer, `X-Forwarded-For` ignored, IPv6 limited per /64, IPv4-mapped peers as IPv4), the account lockout and its growth, a login that cannot start within 10 s, session list, `revoke-others`, login history, cleanup, the password reset, login notifications (content, one for the start of a lock and none for failed attempts, a failing or unreachable ntfy, the start check), passkeys (re-authentication with its limits and the lockout, fresh for 5 minutes, the creation options, adding through Identity's checks of origin, cross-origin, RP ID, user verification and a stored credential, states used once, expiring and bound to their session, names, the limit of 10 also for two adds at once, renaming, removing, the notifications, the resets of `create-user`, the start check of `Passkeys:ServerDomain`), passkey login (the options and the challenge cookie, a login with its history row, notification and saved counter, every failed assertion recorded as a passkey attempt, challenges used once and expiring, at most 3 pending per address, the per-IP limit shared with password logins, the lock refusing password logins and re-authentication but not a passkey login, a passkey login that cannot start within 10 s), the files API (listing, symlinks, `.git`, reading, saving, conflicts, re-creating a deleted file, limits, text rules, file modes, long names, two saves at once, empty error bodies, a link into a directory the API cannot search, a lone surrogate in the body), search in files (literal, case, whole word and regular expressions per line, UTF-16 columns and previews, globs, the path guard, links never followed out or into a directory, binary and large files, `node_modules` and `.gitignore` with a trailing `/`, the 2,000-match and time limits, a pathological pattern over many large files, session and XSRF token, a query that never reaches the logs), the terminal theme (the session, a GET without the XSRF token, exactly pywal's 19 colours in lower case and nothing else, `no-store`, links, a change seen by the next request, `204` without the option, for no file, a directory, a named pipe at once (also with a whole theme in it), a device, an unreadable file, a link loop, over 16 KiB (16 KiB is read), content that is not one JSON object in UTF-8, every section or value missing or not a colour, nothing of the file or its path in the logs), workspaces and git (the repository list and its order, what is and is not a repository (also a `.git` symlink), every git status (also a nested repository, and one that cannot be read), ahead and behind, HEAD content with a checkout's line endings and the files API's limits, also after the checkout's filters), workspaces (the list and its order, names and directories, creating, a stale row), cloning (every refused URL, git's own errors, the time limit against a server that never answers, only https whatever git's configuration files allow), pull and push (every answer, both paths of a rename, a branch without commits, two pulls at once, a hook that refuses, only https, no lock file left at the time limit, git's messages with the API path), the background fetch (every 5 minutes by the test clock, a list that never waits for it, a pull or push taking the repository from a fetch that hangs and ending its process tree), the hubs (session and Origin on the WebSocket, WebSockets only, connections closed at once on logout, ending a session and revoke-others, by the 5 s timer on its own, expiry and a revocation by another process, hub calls never extending the session), the terminal (opening in a directory by its real path, titles, refused paths, the limit, output seq without gaps, the allowlisted environment, exit, close, the start routine), attach and input (snapshot with CRLF, every line exactly once when attaching during output, bracketed paste restored, a batch sent twice typed once, Input only after Attach on the same connection, inputSeq after a reconnect, batch limits, UTF-8 across send-keys commands, resize limits, an exited terminal, an unknown id, calls without their argument, the history and normal screen before the switch to the alternate screen and the program's own text after it, also after a resize, a snapshot taken inside an escape sequence), the console hub (refused paths, the conversation event in every tab, the latest conversation, the stored events as sent, the config directory's mode, the API key file's place and mode, calls without their argument, session and Origin), the claude process (the command line, its directory and environment, events in contract order, replay with merged text and the open text, options before every prompt, busy and unknown conversations, prompt and option limits, prompts starting with "/", a prompt's open file (its note with the path and lines and never the content, the event and its replay, a malformed file before the lookup, a file outside the directory after the busy check, a link inside by its own path), tools the CLI refuses, unknown control requests, interrupts, also ignored ones, an exit during and after them, a process that ends, a failed resume, recovery at start, the process limit, idle processes, forgotten conversations read again, a conversation retention deleted, an old CLI, logout during a turn), the console's questions (the command and its rule, deny, allow, allow-always and the next launch's rules, a write question, unknown decisions and requests, two tabs, several suggested rules, plan approval, interrupt and exit with a question open, a withdrawn question), edit counts, files-changed for edits and for commands in a repository (none for a repository the turn made), the output cap (also for one character), 90-day retention; needs the git CLI ≥ 2.45 (`--ref-format=reftable`) |
 
-Backend tests make repositories with the git CLI (`tests/Claushh.Api.Tests/TestGit.cs`): a fixed identity and date,
+Backend tests make repositories with the git CLI (`tests/Claushh.Api.Tests/Git/TestGit.cs`): a fixed identity and date,
 `HOME` set to a temporary directory so the machine's `~/.gitconfig` stays out (libgit2's configuration search paths
 point there too), and bare repositories in a second temporary directory as remotes. `ApiFactory` writes a global git
 configuration and binds it to `Git:Environment:GIT_CONFIG_GLOBAL` (`ConfigureWebHost`), so the git the API starts
@@ -1440,7 +1460,7 @@ transport only because `ApiFactory` also sets `Git:Environment:GIT_ALLOW_PROTOCO
 ignored. `TestGit` sets `HOME` itself for the git processes it starts directly, independently of this. Tests shorten
 `Git:NetworkTimeout` with `ApiFactory.SetNetworkTimeout`. `ApiFactory.ResetAsync` stops the background fetches of
 the previous test and forgets their times (`BackgroundFetch.ResetAsync`).
-Hub tests connect with the SignalR .NET client over the in-memory server's WebSocket (`tests/Claushh.Api.Tests/TestHub.cs`):
+Hub tests connect with the SignalR .NET client over the in-memory server's WebSocket (`tests/Claushh.Api.Tests/Support/TestHub.cs`):
 WebSocket only, no negotiation, the browser's cookies and Origin: `https://localhost` (`Hubs:AllowedOrigins` in the tests).
 `ApiFactory` also writes a stand-in frontend build to a temporary `Frontend:Root`: `index.html` with a known CSP `<meta>`,
 one file of each type, and decoys under `api/` and `hubs/` that must never be served.

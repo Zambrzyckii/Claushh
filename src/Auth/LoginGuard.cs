@@ -1,0 +1,218 @@
+// Login protection (docs/ARCHITECTURE.md, "Backend", "Login protection"; decisions: docs/PLAN.md, "Login and sessions"):
+// the client address, the limit of failed attempts per address, the account lockout after wrong codes and the login
+// history. The only place with these rules. SignIn applies them to the three ways in, and the passkey endpoints use the
+// gate when a passkey is added and the per-IP limit for the login options. Time comes from TimeProvider, so tests move
+// the clock instead of waiting.
+using System.Globalization;
+using System.Net;
+using System.Net.Sockets;
+using Claushh.Api.Data;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
+
+namespace Claushh.Api.Auth;
+
+// The client of a login, re-authentication or passkey request as login protection sees it: its address and the per-IP
+// limit key (ClientIp, after ForwardedHeaders) and its raw User-Agent.
+public sealed record LoginClient(string Ip, string LimitKey, string UserAgent)
+{
+    public static LoginClient From(HttpContext http)
+    {
+        var (ip, limitKey) = LoginGuard.ClientIp(http.Connection.RemoteIpAddress);
+        return new LoginClient(ip, limitKey, http.Request.Headers.UserAgent.ToString());
+    }
+}
+
+public sealed class LoginGuard(ClaushhDbContext db, UserManager<IdentityUser> users, TimeProvider clock, ILogger<LoginGuard> log)
+{
+    private const int MaxFailuresPerIp = 10;
+    private static readonly TimeSpan IpWindow = TimeSpan.FromMinutes(15);
+    private const int MaxCodeFailures = 5;
+    private static readonly TimeSpan FirstLockout = TimeSpan.FromMinutes(15);
+    private static readonly TimeSpan MaxLockout = TimeSpan.FromHours(24);
+    private const int HistoryLength = 20;
+    // Locks in a row without a successful login, stored under TotpVerifier.LoginProvider next to TotpLastStep.
+    public const string LockoutsToken = "LockoutsInARow";
+
+    // One login at a time in this process: the checks and writes of parallel attempts never interleave. A login waits at
+    // most 10 s for the one before it.
+    private static readonly SemaphoreSlim Gate = new(1, 1);
+    public static readonly TimeSpan GateWait = TimeSpan.FromSeconds(10);
+
+    // The lease of the gate, or null when the login before it still runs after GateWait (the endpoint answers 429).
+    public async Task<IDisposable?> EnterAsync(CancellationToken ct)
+    {
+        if (!await Gate.WaitAsync(GateWait, ct))
+        {
+            return null;
+        }
+        // What the request loaded before the gate (the user of its session cookie) may be stale by now: forget it, so the
+        // checks read the rows as the previous login left them. Callers (password and passkey login, re-authentication,
+        // adding a passkey) have no unsaved changes here and load what they need after entering.
+        db.ChangeTracker.Clear();
+        return new GateLease();
+    }
+
+    // The client's address as the history, the session list and the logs show it, and the key the per-IP limit counts by:
+    // an IPv4 address (also one mapped into IPv6) as itself, an IPv6 address by its /64, since one connection usually has
+    // a whole /64 and can change the rest at will. "" for both when the server knows no address.
+    public static (string Text, string LimitKey) ClientIp(IPAddress? address)
+    {
+        if (address is null)
+        {
+            return ("", "");
+        }
+        if (address.IsIPv4MappedToIPv6)
+        {
+            address = address.MapToIPv4();
+        }
+        var text = address.ToString();
+        if (address.AddressFamily != AddressFamily.InterNetworkV6)
+        {
+            return (text, text);
+        }
+        var prefix = address.GetAddressBytes();
+        Array.Clear(prefix, 8, 8);
+        return (text, new IPAddress(prefix) + "/64");
+    }
+
+    // Whole seconds until a password login or a re-authentication may be tried again (the later end of both limits), or
+    // null when it may be tried now.
+    public async Task<int?> RetryAfterAsync(string limitKey, CancellationToken ct)
+    {
+        var now = clock.GetUtcNow();
+        var end = new[] { await IpLimitEndAsync(limitKey, now, ct), await LockoutEndAsync(now, ct) }.Max();
+        return end is { } later ? SecondsUntil(later, now) : null;
+    }
+
+    // Whole seconds until a passkey login or its options may be tried again, or null when they may be tried now.
+    // The account lockout protects the TOTP code; a passkey login checks no code, so failed assertions count only towards the per-IP limit.
+    public async Task<int?> IpRetryAfterAsync(string limitKey, CancellationToken ct)
+    {
+        var now = clock.GetUtcNow();
+        return await IpLimitEndAsync(limitKey, now, ct) is { } end ? SecondsUntil(end, now) : null;
+    }
+
+    // method: LoginMethods.Password or LoginMethods.Passkey.
+    public async Task RecordAsync(bool success, string method, string ip, string limitKey, string userAgent, CancellationToken ct)
+    {
+        db.LoginAttempts.Add(new LoginAttempt
+        {
+            At = clock.GetUtcNow(),
+            Ip = ip,
+            LimitKey = limitKey,
+            Device = DeviceName.Stored(userAgent),
+            Success = success,
+            Method = method,
+        });
+        await db.SaveChangesAsync(ct);
+    }
+
+    // The history for the security window: the last 20, newest first (Id breaks ties of the same time).
+    public Task<List<LoginAttempt>> RecentAsync(CancellationToken ct) =>
+        db.LoginAttempts
+            .OrderByDescending(a => a.At)
+            .ThenByDescending(a => a.Id)
+            .Take(HistoryLength)
+            .AsNoTracking()
+            .ToListAsync(ct);
+
+    public Task<int> DeleteAttemptsBeforeAsync(DateTimeOffset cutoff, CancellationToken ct) =>
+        db.LoginAttempts.Where(a => a.At < cutoff).ExecuteDeleteAsync(ct);
+
+    // A wrong or reused code after a correct password. The fifth locks the account and starts the count again; every
+    // lock in a row without a successful login lasts twice as long as the one before, at most MaxLockout.
+    // Identity's own lockout methods use the real clock and require LockoutEnabled, so the fields are set here.
+    // Returns the length of the lock this failure started (the login notifies the owner), or null when it started none.
+    public async Task<TimeSpan?> CodeFailedAsync(IdentityUser user)
+    {
+        TimeSpan? started = null;
+        user.AccessFailedCount++;
+        if (user.AccessFailedCount >= MaxCodeFailures)
+        {
+            var lockouts = await LockoutsInARowAsync(user) + 1;
+            var duration = LockoutDuration(lockouts);
+            user.AccessFailedCount = 0;
+            user.LockoutEnd = clock.GetUtcNow() + duration;
+            IdentityResults.ThrowIfFailed(await users.SetAuthenticationTokenAsync(user, TotpVerifier.LoginProvider, LockoutsToken,
+                lockouts.ToString(CultureInfo.InvariantCulture)));
+            log.LogWarning("Account locked for {Minutes} minutes after {Failures} wrong codes, lock {Lockouts} in a row",
+                duration.TotalMinutes, MaxCodeFailures, lockouts);
+            started = duration;
+        }
+        await SaveAsync(user);
+        return started;
+    }
+
+    public async Task SucceededAsync(IdentityUser user)
+    {
+        if (await LockoutsInARowAsync(user) > 0)
+        {
+            IdentityResults.ThrowIfFailed(await users.RemoveAuthenticationTokenAsync(user, TotpVerifier.LoginProvider, LockoutsToken));
+        }
+        if (user.AccessFailedCount > 0)
+        {
+            user.AccessFailedCount = 0;
+            await SaveAsync(user);
+        }
+    }
+
+    // `create-user --reset-totp` and `--reset-password`: shell access on the server proves more than a code.
+    public async Task UnlockAsync(IdentityUser user)
+    {
+        IdentityResults.ThrowIfFailed(await users.RemoveAuthenticationTokenAsync(user, TotpVerifier.LoginProvider, LockoutsToken));
+        user.AccessFailedCount = 0;
+        user.LockoutEnd = null;
+        await SaveAsync(user);
+    }
+
+    // When the 10th most recent failure of this key within the window leaves it; null with fewer than 10.
+    private async Task<DateTimeOffset?> IpLimitEndAsync(string limitKey, DateTimeOffset now, CancellationToken ct)
+    {
+        var windowStart = now - IpWindow;
+        var failures = await db.LoginAttempts
+            .Where(a => a.LimitKey == limitKey && !a.Success && a.At > windowStart)
+            .OrderByDescending(a => a.At)
+            .Take(MaxFailuresPerIp)
+            .Select(a => a.At)
+            .ToListAsync(ct);
+        return failures.Count == MaxFailuresPerIp ? failures[^1] + IpWindow : null;
+    }
+
+    // One account: while it is locked every password login and re-authentication is refused, whatever the name and
+    // password.
+    private Task<DateTimeOffset?> LockoutEndAsync(DateTimeOffset now, CancellationToken ct) =>
+        db.Users.Where(u => u.LockoutEnd > now).MaxAsync(u => u.LockoutEnd, ct);
+
+    private async Task<int> LockoutsInARowAsync(IdentityUser user) =>
+        int.TryParse(await users.GetAuthenticationTokenAsync(user, TotpVerifier.LoginProvider, LockoutsToken),
+            NumberStyles.None, CultureInfo.InvariantCulture, out var lockouts) ? lockouts : 0;
+
+    // 15 minutes for the first lock in a row, twice as long for each further one, at most 24 hours.
+    private static TimeSpan LockoutDuration(int lockouts)
+    {
+        // The cap on the exponent keeps TimeSpan from overflowing after many locks in a row; from the 8th lock on the
+        // result is 24 hours anyway.
+        var duration = FirstLockout * Math.Pow(2, Math.Min(lockouts - 1, 16));
+        return duration < MaxLockout ? duration : MaxLockout;
+    }
+
+    private async Task SaveAsync(IdentityUser user) => IdentityResults.ThrowIfFailed(await users.UpdateAsync(user));
+
+    private static int SecondsUntil(DateTimeOffset end, DateTimeOffset now) =>
+        Math.Max(1, (int)Math.Ceiling((end - now).TotalSeconds));
+
+    // Releases the gate once, also when it is disposed twice.
+    private sealed class GateLease : IDisposable
+    {
+        private int _released;
+
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref _released, 1) == 0)
+            {
+                Gate.Release();
+            }
+        }
+    }
+}

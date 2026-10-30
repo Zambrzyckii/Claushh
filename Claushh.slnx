@@ -1,6 +1,6 @@
 <Solution>
   <Folder Name="/src/">
-    <Project Path="src/Claushh.Api/Claushh.Api.csproj" />
+    <Project Path="src/Claushh.Api.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Claushh.Api.Tests/Claushh.Api.Tests.csproj" />

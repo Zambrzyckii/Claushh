@@ -451,7 +451,7 @@ Backend decisions (stage 2):
   the file exists after all, `absent` is a `409` with its real version. So "Overwrite with my version" re-creates a
   deleted file with the editor's content. Rejected: `404` for a deleted file (the editor could not save its text
   again) and creating through a dangling symlink (the new file would appear wherever the link points).
-- `realpath`, `statx` and `access` are called through P/Invoke (`Files/Libc.cs`), so the backend runs only on Linux,
+- `realpath`, `statx` and `access` are called through P/Invoke (`Platform/Libc.cs`), so the backend runs only on Linux,
   like the deployment. The API and test assemblies are marked `[SupportedOSPlatform("linux")]` (`Program.cs`,
   `ApiFactory.cs`), so the platform analyzer accepts the Unix-only calls such as `File.SetUnixFileMode`. Rejected: the
   attribute on `FileStore` alone (every caller would get the warning).
@@ -467,7 +467,7 @@ Backend decisions (stage 2):
   the server) and GET (the query in URLs).
 
 Backend decisions (stage 3):
-- The console's code lives in `Claude/` (`Claushh.Api.Claude`) and `Hubs/ConsoleHub.cs`. Rejected: `Console/`, whose
+- The console's code lives in `Claude/` (`Claushh.Api.Claude`), its hub included (`Claude/ConsoleHub.cs`). Rejected: `Console/`, whose
   namespace would hide `System.Console` in the API's own code.
 - Replay comes from the portal's own event log in PostgreSQL: every event as it was sent, in order, per conversation,
   text deltas merged per `messageId`. Rejected: reading the CLI's transcripts (an internal format that changes between
@@ -590,7 +590,7 @@ Backend decisions (stage 4):
   Rejected: a shell command line (quoting mistakes), disabling hooks (a pre-push hook of the owner's would silently
   not run from the panel) and `-c protocol.allow=never -c protocol.https.allow=always` (a `protocol.<name>.allow` in
   any configuration file wins over it).
-- git's environment (`Processes/ChildEnvironment`, owner's decision 2026-10-02) is built from an allowlist (`HOME`,
+- git's environment (`Platform/ChildEnvironment`, owner's decision 2026-10-02) is built from an allowlist (`HOME`,
   `USER`, `LOGNAME`, `SHELL`, `PATH`, `LANG`, `LANGUAGE`, every `LC_*`, `TZ`), not inherited and then trimmed by a
   denylist: a denylist only ever catches variables someone already thought of, and the API's own process picks up new
   ones over time (a secret from a systemd unit, a variable a future dependency reads) that a denylist would miss and
@@ -687,6 +687,20 @@ Backend decisions (stage 4):
   program once per open tab. The device attributes queries (DA1, DA2) get no answer at all: neither the view nor
   tmux answers them. Rejected: filtering replies out of `Input` on the server (a cursor report and Ctrl+F3 are the
   same bytes) and letting xterm answer them (garbage with two tabs).
+
+Backend decisions (structure):
+- One project sliced by feature. Each folder of `src/` owns one feature (its endpoints or hub, engine, entities,
+  options and registration), next to a few shared folders and `Data/` for the one database context. Rejected: Clean
+  Architecture layers (most of the code adapts tmux, git, the claude CLI, libc and the file system, so a domain layer
+  would be nearly empty and every new interface would have one implementation) and one project per feature (only if
+  the folder boundaries start to erode).
+- The project sits directly in `src/` (`src/Claushh.Api.csproj`). Rejected: `src/Claushh.Api/`, one folder level more.
+  Accepted risk: any other project placed under `src/` would be compiled into the API unless excluded.
+- A file's namespace follows its folder, also in sub-folders (`Claushh.Api.Auth.Passkeys`) and in the tests
+  (`Claushh.Api.Tests.Auth`). Entity types and `ClaushhDbContext` keep their namespaces when files around them move,
+  so the EF Core model snapshot never changes for a move.
+- The dependency rules between the folders are kept by review (`ARCHITECTURE.md`, "Repository map"). Rejected: an
+  architecture test, which needs a package and is a unit-style test.
 
 ### Limiting damage
 
@@ -862,7 +876,7 @@ Deployment decisions:
   would not test the terminal inside the service) and the tunnel first. Passkeys need a domain, so they are registered
   and tried through the tunnel (phase B), never on `127.0.0.1`.
 - In Production, once the host has started, the API makes its process non-dumpable (`prctl(PR_SET_DUMPABLE, 0)`,
-  `Files/Libc.cs`): its `/proc` files belong to root, and no process of its user can attach to it. When that fails,
+  `Platform/Libc.cs`): its `/proc` files belong to root, and no process of its user can attach to it. When that fails,
   the API logs it with its errno and ends with exit status 71 (`EX_OSERR`); the unit's `RestartPreventExitStatus=71`
   keeps systemd from starting it again, so the unit is left `failed`. Rejected: the first line of `Program.cs` (a test
   that runs the API in Production inside the test process would change that process for the rest of the run), a

@@ -1,0 +1,138 @@
+// API entry point. Stages and decisions: docs/PLAN.md; endpoints, configuration and commands: docs/ARCHITECTURE.md, "Backend".
+using Claushh.Api.Auth;
+using Claushh.Api.Auth.Account;
+using Claushh.Api.Auth.Realtime;
+using Claushh.Api.Claude;
+using Claushh.Api.Data;
+using Claushh.Api.Files;
+using Claushh.Api.Frontend;
+using Claushh.Api.Git;
+using Claushh.Api.Web;
+using Claushh.Api.Auth.Passkeys;
+using Claushh.Api.Platform;
+using Claushh.Api.Projects;
+using Claushh.Api.Terminal;
+using Claushh.Api.Workspaces;
+using Microsoft.AspNetCore.Http.Connections;
+using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.SignalR;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+
+// The backend runs only on Linux (docs/PLAN.md, "Backend decisions (stage 2)"): libc calls and Unix file modes.
+[assembly: System.Runtime.Versioning.SupportedOSPlatform("linux")]
+
+var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddProjects(builder.Configuration);
+builder.Services.AddGit(builder.Configuration);
+builder.Services.AddFrontend(builder.Configuration);
+builder.Services.AddDbContext<ClaushhDbContext>((services, options) => options.UseNpgsql(
+    services.GetRequiredService<IConfiguration>().GetConnectionString("Claushh")
+    ?? throw new InvalidOperationException("ConnectionStrings:Claushh is not set (README.md, \"Running in development\").")));
+builder.Services.AddAuth(builder.Configuration);
+builder.Services.AddFiles();
+builder.Services.AddWorkspaces();
+builder.Services.Configure<HubsOptions>(builder.Configuration.GetSection("Hubs"));
+// For every hub: the session on connect and on every call (docs/ARCHITECTURE.md, "Backend" → "Hubs").
+builder.Services.AddSignalR(options => options.AddFilter<HubSessionFilter>())
+    // A console prompt may hold 100,000 characters; every other hub keeps the 32 KB default.
+    .AddHubOptions<ConsoleHub>(options => options.MaximumReceiveMessageSize = ConsoleHub.MaxMessage);
+builder.Services.AddTerminal(builder.Configuration);
+builder.Services.AddConsole(builder.Configuration);
+builder.Services.AddSessionAuthentication();
+builder.Services.AddXsrfProtection();
+builder.Services.AddProblemDetails();
+
+var app = builder.Build();
+
+await using (var scope = app.Services.CreateAsyncScope())
+{
+    await scope.ServiceProvider.GetRequiredService<ClaushhDbContext>().Database.MigrateAsync();
+}
+
+// `dotnet run -- create-user [--reset-totp | --reset-password]`: set up the account and exit without starting the
+// HTTP server.
+if (args is ["create-user", .. var flags])
+{
+    if (flags is not ([] or ["--reset-totp"] or ["--reset-password"]))
+    {
+        Console.WriteLine("Usage: create-user [--reset-totp | --reset-password]");
+        return 2;
+    }
+    await using var scope = app.Services.CreateAsyncScope();
+    var command = scope.ServiceProvider.GetRequiredService<CreateUserCommand>();
+    return flags is ["--reset-password"]
+        ? await command.ResetPasswordAsync(SystemCommandLine.Instance, CancellationToken.None)
+        : await command.RunAsync(flags is ["--reset-totp"], SystemCommandLine.Instance, CancellationToken.None);
+}
+
+// The built frontend (docs/ARCHITECTURE.md, "Backend" → "Frontend"); null when Frontend:Root is empty. Read here, after
+// create-user, because the static files and the fallback need it when they are mapped.
+var frontend = FrontendFiles.Options(app.Services.GetRequiredService<IOptions<FrontendOptions>>().Value);
+
+// First in every environment: the client's address (CF-Connecting-IP) and scheme (X-Forwarded-Proto) as the local
+// cloudflared forwards them. The default lists trust only a loopback peer (docs/ARCHITECTURE.md, "Backend" → "Client
+// address"); never ASPNETCORE_FORWARDEDHEADERS_ENABLED, which trusts every proxy.
+app.UseForwardedHeaders(new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto,
+    ForwardedForHeaderName = "CF-Connecting-IP",
+});
+
+// Before the error handler and authorization, so their 500 and 401 and the Origin check's 403 get the headers too.
+app.UseSecurityHeaders();
+app.UseExceptionHandler();
+// Before routing and the files of the build (docs/ARCHITECTURE.md, "Backend" → "Frontend").
+app.UseDoubleSlashNotFound();
+// Explicit, so that endpoint matching runs before the static files: a request that matched /api, /hubs or the fallback
+// is never answered with a file.
+app.UseRouting();
+app.UseFrontendFiles(frontend);
+// Before authentication: a foreign or missing Origin never reaches the session lookup.
+app.UseHubOriginCheck();
+app.UseAuthentication();
+app.UseAuthorization();
+
+app.MapGet("/api/health", () => Results.Ok(new { status = "ok" })).AllowAnonymous();
+var api = app.MapGroup("/api").RequireXsrfToken();
+api.MapAuthEndpoints().MapSessionEndpoints().MapPasskeyEndpoints().MapFileEndpoints().MapSearchEndpoints().MapWorkspaceEndpoints().MapGitEndpoints().MapTerminalEndpoints();
+// Unknown /api paths: 401 without a session (fallback policy), 404 with one, never another handler's response.
+api.Map("{**path}", () => Results.NotFound());
+// WebSocket only: the frontend skips negotiation, and other transports would only add ways in.
+app.MapHub<TerminalHub>("/hubs/terminal", options => options.Transports = HttpTransportType.WebSockets)
+    .RequireAuthorization();
+// A hub message is parsed only once it is whole, so the connection's buffers hold a whole 1 MiB message.
+app.MapHub<ConsoleHub>("/hubs/console", options =>
+    {
+        options.Transports = HttpTransportType.WebSockets;
+        options.ApplicationMaxBufferSize = ConsoleHub.MaxMessage;
+        options.TransportMaxBufferSize = ConsoleHub.MaxMessage;
+    })
+    .RequireAuthorization();
+// Unknown /hubs paths: 401 without a session, 404 with one, never the page. The MapHub routes are more specific.
+app.Map("/hubs/{**path}", () => Results.NotFound());
+app.MapFrontendFallback(frontend);
+
+// Production: once the host has started, other processes of the API's user can neither read its /proc files (its
+// environment holds the secrets) nor attach to it (docs/PLAN.md, "Limiting damage"). After the start, so a test host
+// that runs Program in Production only to see it refuse is never changed. When that fails, the API logs errno and ends
+// with exit status 71 (EX_OSERR), which the unit does not restart (deploy/claushh.service, RestartPreventExitStatus=).
+const int NotDumpableFailed = 71;
+var exitCode = 0;
+if (app.Environment.IsProduction())
+{
+    app.Lifetime.ApplicationStarted.Register(() =>
+    {
+        if (!Libc.MakeNotDumpable(out var errno))
+        {
+            app.Logger.LogCritical("Making the process non-dumpable failed with errno {Errno}; stopping.", errno);
+            exitCode = NotDumpableFailed;
+            app.Lifetime.StopApplication();
+        }
+    });
+}
+
+app.Run();
+return exitCode;
