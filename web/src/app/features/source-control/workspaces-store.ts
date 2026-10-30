@@ -4,7 +4,7 @@ import { debounceTime, firstValueFrom, fromEvent, merge } from 'rxjs';
 
 import { ApiError, toApiError } from '../../core/api/api-error';
 import { GitApi } from '../../core/api/git-api';
-import { RepoSummary, WorkspaceInfo, WorkspacesApi } from '../../core/api/workspaces-api';
+import { RepoSummary, WorkspaceInfo, WorkspacesApi } from './workspaces-api';
 import { ProjectContext } from '../../core/project/project-context';
 import { RepoStatusStore } from '../../core/project/repo-status';
 import { validateCloneUrl, validateWorkspaceName } from './validation';

@@ -2,8 +2,8 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable, catchError, map, throwError } from 'rxjs';
 
-import { ApiError, toApiError } from './api-error';
-import { isSafeRelativePath } from './project-path';
+import { ApiError, toApiError } from '../../core/api/api-error';
+import { isSafeRelativePath } from '../../core/api/project-path';
 
 /**
  * Workspaces (top-level directories in the projects directory) and their repositories.

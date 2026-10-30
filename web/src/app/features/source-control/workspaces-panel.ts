@@ -1,6 +1,6 @@
 import { Component, ElementRef, inject, signal, viewChild } from '@angular/core';
 
-import { RepoSummary } from '../../core/api/workspaces-api';
+import { RepoSummary } from './workspaces-api';
 import { ProjectContext } from '../../core/project/project-context';
 import { countLabel, timeAgo } from '../../core/text/format';
 import { WorkspacesStore } from './workspaces-store';
