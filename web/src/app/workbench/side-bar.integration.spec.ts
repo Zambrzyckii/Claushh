@@ -170,6 +170,13 @@ describe('Side bar (integration)', () => {
     expect(host.state.drawerOpen()).toBe(false);
   });
 
+  it('showing Search puts the focus in its field', async () => {
+    const { root, settle, host } = await setup();
+    host.state.show('search');
+    await settle();
+    expect(document.activeElement).toBe(root.querySelector('#view-search input[aria-label="Search"]'));
+  });
+
   it("the views come in VS Code's order, and Search keeps its query and results while another view is shown", async () => {
     const { root, settle } = await setup();
     expect(Array.from(root.querySelectorAll('[role="tab"]')).map((t) => t.getAttribute('aria-label'))).toEqual([

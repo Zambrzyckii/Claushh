@@ -1,4 +1,4 @@
-import { Component, ElementRef, Injector, afterNextRender, computed, effect, inject, output, viewChild } from '@angular/core';
+import { Component, ElementRef, computed, inject, output, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
 import { baseName } from '../../core/api/project-path';
@@ -7,7 +7,6 @@ import { fileIconUrl } from '../../core/icons/file-icons';
 import { ProjectContext } from '../../core/project/project-context';
 import { countLabel } from '../../core/text/format';
 import { EditorStore } from '../editor/editor-store';
-import { WorkbenchState } from '../../workbench/workbench-state';
 import { SearchOption, SearchStore } from './search-store';
 
 /**
@@ -25,12 +24,8 @@ import { SearchOption, SearchStore } from './search-store';
 export class SearchView {
   protected readonly store = inject(SearchStore);
   private readonly editor = inject(EditorStore);
-  private readonly state = inject(WorkbenchState);
   private readonly project = inject(ProjectContext);
-  private readonly injector = inject(Injector);
   private readonly field = viewChild.required<ElementRef<HTMLInputElement>>('field');
-  /** The last focus request this view has seen; a view created later ignores the older ones. */
-  private focusSeen = this.state.searchFocus();
   /** A result was clicked and its file is being opened at the match. */
   readonly opened = output<void>();
 
@@ -44,15 +39,8 @@ export class SearchView {
     return state.status === 'error' ? state.message : '';
   });
 
-  constructor() {
-    // WorkbenchState.show('search') asks for the field: the activity bar and the phone's Search button.
-    effect(() => {
-      const request = this.state.searchFocus();
-      if (request !== this.focusSeen) {
-        this.focusSeen = request;
-        afterNextRender(() => this.field().nativeElement.focus(), { injector: this.injector });
-      }
-    });
+  focusField(): void {
+    this.field().nativeElement.focus();
   }
 
   protected pressed(option: SearchOption): boolean {

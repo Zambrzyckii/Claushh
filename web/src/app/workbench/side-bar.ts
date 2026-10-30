@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { Component, Injector, afterNextRender, effect, inject, viewChild } from '@angular/core';
 
 import { ProjectContext } from '../core/project/project-context';
 import { RepoStatusStore } from '../core/project/repo-status';
@@ -31,12 +31,27 @@ export class SideBar {
   protected readonly repoStatus = inject(RepoStatusStore);
   protected readonly search = inject(SearchStore);
   private readonly workspaces = inject(WorkspacesStore);
+  private readonly injector = inject(Injector);
+  private readonly searchView = viewChild.required(SearchView);
+  /** The last focus request this side bar has seen. A side bar created later ignores the older ones. */
+  private focusSeen = this.state.searchFocus();
 
   protected readonly views: readonly { id: SideView; label: string; icon: string }[] = [
     { id: 'explorer', label: 'Explorer', icon: 'files' },
     { id: 'search', label: 'Search', icon: 'search' },
     { id: 'scm', label: 'Source Control', icon: 'source-control' }
   ];
+
+  constructor() {
+    // WorkbenchState.show('search') asks for the field: the activity bar and the phone's Search button.
+    effect(() => {
+      const request = this.state.searchFocus();
+      if (request !== this.focusSeen) {
+        this.focusSeen = request;
+        afterNextRender(() => this.searchView().focusField(), { injector: this.injector });
+      }
+    });
+  }
 
   /** Explorer: the unsaved files (as VS Code); Source Control: the changes of the open repository; Search: none. */
   protected badge(view: SideView): number {

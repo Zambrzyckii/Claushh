@@ -24,7 +24,7 @@ export class WorkbenchState {
   readonly drawerOpen = signal(false);
   /** OPEN EDITORS in the Explorer view: collapsed at start, as in VS Code. */
   readonly openEditorsExpanded = signal(false);
-  /** Counts the requests to focus the search field (`show('search')`); SearchView acts on a new one. */
+  /** Counts the requests to focus the search field (`show('search')`); SideBar acts on a new one. */
   readonly searchFocus = signal(0);
 
   /**
