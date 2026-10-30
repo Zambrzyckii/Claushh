@@ -67,76 +67,35 @@ On the server (decisions: `PLAN.md`, "Deployment decisions"):
 | `tests/Claushh.Api.Tests/` | backend integration tests: xUnit, the API in memory (`WebApplicationFactory`), PostgreSQL 17 from Testcontainers (`ApiFactory`). One folder per feature folder of `src/` that has tests, plus `Support/` (the shared harness) and `ConsoleRecordings/` |
 | `tests/Claushh.FakeClaude/` | a stand-in for the `claude` CLI in the backend tests: replays scripted stream-json lines and logs what the API sent; scripts are made of the recordings in `tests/Claushh.Api.Tests/ConsoleRecordings/` |
 | `global.json` | `dotnet test` runs on Microsoft.Testing.Platform (required by xUnit v3 on the .NET 10 SDK) |
-| `web/` | Angular 21 frontend (standalone components, signals, the new `@if` syntax) |
+| `web/` | the Angular 21 frontend (standalone components, signals, the `@if` syntax), its build and test configuration, and the e2e tests with their mock |
 | `web/src/index.html` | start page with the Content-Security-Policy in `<meta>` (section "Security headers") |
 | `web/src/main.ts` | app startup: Trusted Types policy, and inside a frame of a foreign page the app does not start |
 | `web/src/styles.scss` | the design tokens (surfaces, text, accent, semantic colors with blue, green and purple, git colors, fonts), the shared controls (buttons, inputs, tabs, section titles, chips), the focus ring, the touch sizes and the 16 px fields of touch screens; components keep only their layout |
 | `web/src/fonts/` | the terminal's symbols font: the Regular face of JetBrainsMono Nerd Font (Nerd Fonts 3.5.1) as woff2, its `OFL.txt` and `NERD-FONTS-LICENSE.md` (Nerd Fonts' license and the licenses of the icon sets it adds), committed; `styles.scss` declares it and the build puts it under `media/` |
-| `web/src/app/app.config.ts` | providers: router, HttpClient with the interceptor and XSRF, bfcache protection |
-| `web/src/app/app.routes.ts` | routes: `/login` (`guestGuard`), `/` (`authGuard`, workspace) |
-| `web/src/app/core/auth/auth.service.ts` | session state, login (password or passkey), logout, session expiry, tab sync |
-| `web/src/app/core/auth/auth.guards.ts` | `authGuard` (only with a session), `guestGuard` (only without a session) |
-| `web/src/app/core/auth/auth.interceptor.ts` | 401 from the API → end of the session and reload to `/login` (except requests with `IGNORE_UNAUTHORIZED`, and the login's own endpoints in `OWN_AUTH_ENDPOINTS`: `me`, `login`, `logout` and `passkeys/login`) |
-| `web/src/app/core/auth/ignore-unauthorized.ts` | `IGNORE_UNAUTHORIZED` (HttpContextToken): a request whose 401 the interceptor skips (e.g. `DELETE /api/auth/sessions/{id}` in `confirmLogout`) |
-| `web/src/app/core/auth/return-url.ts` | `returnUrl` validation (open redirect protection) |
-| `web/src/app/core/auth/session-timer.ts` | countdown to the end of the session, extension on activity (at most once a minute) |
-| `web/src/app/core/api/sessions-api.ts` | API client for active sessions and login history |
-| `web/src/app/core/api/passkeys-api.ts` | API client for the account's passkeys and the re-authentication before adding or removing one (`PasskeyApiError`: `forbidden` asks for the password and code first) |
-| `web/src/app/core/browser/hard-navigation.ts` | full page reload (clears all in-memory state) |
-| `web/src/app/core/browser/bfcache-guard.ts` | reload of a page restored from the back/forward cache |
-| `web/src/app/core/browser/dialogs.ts` | the browser's `confirm()` and `alert()` wrapped in a service (to swap out in tests). Only in response to a user action and for short texts: they block the page (including the session countdown), and Chrome truncates long text in them. Questions with long content are panels on the page |
-| `web/src/app/core/browser/webauthn.ts` | the browser's passkey API (`navigator.credentials`) wrapped in a service (to swap out in tests): `available` (both JSON parse functions and `navigator.credentials` exist), `create` and `get` from the API's JSON options, the credential as JSON built by hand (base64url without padding), and the browser's refusals as `cancelled`, `not-here`, `already-registered` or `failed` |
-| `web/src/app/core/browser/trusted-types.ts` | default Trusted Types policy: only worker script URLs from the same domain |
-| `web/src/app/core/browser/focus.ts` | `isTypingElsewhere`: whether the user is typing somewhere else (the view then does not take focus) |
-| `web/src/app/core/browser/theme.ts` | `cssToken`: a token of `styles.scss` read at run time, for the Monaco and xterm themes |
-| `web/src/app/core/browser/fonts.ts` | `monoFontReady` (JetBrains Mono loaded, 3 s at most) and `onFontsLoaded` (Monaco and xterm measure again when a font arrives later) |
-| `web/src/app/core/browser/device-layout.ts` | `DeviceLayout`: `phone` (narrow window or phone in landscape) and `touch` (coarse pointer) from `matchMedia`; false without it (jsdom) |
-| `web/src/app/core/browser/keyboard-inset.ts` | `KeyboardInset`: in the phone layout, `--keyboard-inset` on `<html>` from `visualViewport` (iOS does not resize the page for the keyboard) |
-| `web/src/app/core/api/files-api.ts` | files API client: directory listing, read, save with conflict detection |
-| `web/src/app/core/api/search-api.ts` | search in files (`POST /api/search`): the request, the results by file |
-| `web/src/app/core/api/api-error.ts` | shared API error for workspaces, git and search (`ApiError`, HTTP code mapping) |
-| `web/src/app/core/api/workspaces-api.ts` | API client for workspaces and repositories: list, create, clone |
-| `web/src/app/core/api/git-api.ts` | git API client: status, pull, push |
-| `web/src/app/core/api/terminal-theme-api.ts` | the terminal's colours from the server (`GET /api/terminal/theme`): `TerminalThemeApi.load` gives the theme or null (a `204`, an error, a malformed body, no answer within 3 s), never cached |
-| `web/src/app/core/project/project-context.ts` | the open repository (from the `?repo=` URL), "files changed" and "files saved" events |
-| `web/src/app/core/project/repo-status.ts` | git status of the open repo: branch, changes, badges for the explorer, the letters (`STATUS_LETTERS`) |
-| `web/src/app/core/text/format.ts` | shared text helpers: English plurals (`countLabel`: "1 change", "2 changes"), relative time ("12 minutes ago"), the dates (`formatTime` "14:03", `formatDateTime` "05/10/2026, 14:03", `en-GB`) and the wait of a `429` (`formatWait`: "30 s.", "15 min.", "24 h.") |
-| `web/src/app/core/text/visible-text.ts` | `revealHidden`: shows invisible and control characters, tabs, runs of whitespace and blank lines (commands to approve). `previewText`: a preview for the question window, with explicit information about omitted fragments |
-| `web/src/app/core/realtime/hub-client.ts` | shared base for SignalR connections: WebSocket, auto-reconnect, session check on disconnect |
-| `web/src/app/core/realtime/console-protocol.ts` | console hub contract: events, methods, option types |
-| `web/src/app/core/realtime/console-connection.ts` | connection to `/hubs/console` (built on `HubClient`) |
-| `web/src/app/core/realtime/terminal-protocol.ts` | terminal hub contract: methods, events, types |
-| `web/src/app/core/realtime/terminal-connection.ts` | connection to `/hubs/terminal` (built on `HubClient`) |
-| `web/src/app/core/api/project-path.ts` | relative path validation (no `..`, leading `/`, `\`) |
-| `web/src/app/core/icons/file-icons.ts` | `fileIconUrl`, `folderIconUrl`: a file's or folder's icon in `public/file-icons/` (the whole name, then every suffix after a dot from the longest, then the default; a folder by its name, `-open` when expanded) |
-| `web/src/app/core/icons/file-icon-map.ts` | generated by `scripts/file-icons.mjs`: the theme's file names, suffixes and folder names that lead to a shipped icon |
+| `web/src/app/` | the root component (`app.ts`), the providers in `app.config.ts` (router, HttpClient with the interceptor and XSRF, bfcache protection) and the routes in `app.routes.ts` (`/login` behind `guestGuard`, `/` behind `authGuard` with the page after login) |
+| `web/src/app/core/` | what the whole app shares, one folder per kind (section "Frontend", "Conventions") |
+| `web/src/app/core/auth/` | the session state, login with a password or a passkey, logout and session expiry with tab sync (`AuthService`), `authGuard` and `guestGuard`, the interceptor that ends the session on a 401 (not for `IGNORE_UNAUTHORIZED` requests and the login's own endpoints), the return address check, and the session countdown with its extension on activity (`SessionTimer`) |
+| `web/src/app/core/api/` | the HTTP clients of the API areas (files, git, search, workspaces, sessions, passkeys, the terminal theme), the shared `ApiError` with its HTTP code mapping, and the relative path rule (`project-path.ts`) |
+| `web/src/app/core/browser/` | the browser behind small services and functions, so tests can replace the device and the user (the reload, the bfcache guard, `confirm()` and `alert()`, WebAuthn, `DeviceLayout`, `KeyboardInset`), plus the Trusted Types policy, `isTypingElsewhere`, `cssToken` and the font checks |
+| `web/src/app/core/project/` | the open repository from `?repo=` with its "files changed" and "files saved" events (`ProjectContext`), and its git status with the explorer's marks (`RepoStatusStore`, `STATUS_LETTERS`) |
+| `web/src/app/core/realtime/` | the SignalR base `HubClient` (WebSocket only, reconnect, session check on disconnect) and the console and terminal hub connections with their contracts |
+| `web/src/app/core/text/` | the shared text helpers (plurals, relative time, `en-GB` dates, the wait of a `429`) and `revealHidden` and `previewText` for commands to approve |
+| `web/src/app/core/icons/` | `fileIconUrl` and `folderIconUrl` (a file's or folder's icon in `public/file-icons/`) and `file-icon-map.ts`, which `scripts/file-icons.mjs` generates |
 | `web/public/file-icons/` | the shipped selection of Material Icon Theme's SVGs and its `LICENSE`, copied by `scripts/file-icons.mjs` and committed |
-| `web/scripts/file-icons.mjs` | copies the allowed icons of `material-icon-theme` and writes the map (`README.md`, "Updating the file icons") |
+| `web/scripts/` | `file-icons.mjs`, which copies the allowed icons of `material-icon-theme` and writes the map (`README.md`, "Updating the file icons") |
+| `web/src/app/features/` | one folder per feature with its store, its views and their integration specs |
 | `web/src/app/features/explorer/` | file tree, directories loaded lazily on expand, the theme's file and folder icons, git badges and git-colored names, "Refresh" |
 | `web/src/app/features/search/` | the Search view: `search-store.ts` (the query, toggles, globs, results and folded files; searches 300 ms after typing and drops the older search), `search-view.*` (the field and its toggles, the files to include and exclude, the results by file with the matches highlighted) |
-| `web/src/app/features/editor/editor-store.ts` | state of open files: tabs, unsaved changes, save, conflicts, diff view, the status bar's values of the shown file (cursor, language, indentation, line endings), the place a search result asks to show (`reveal`), the selection's lines (the console's file chip) (no dependency on Monaco) |
-| `web/src/app/features/editor/code-editor.ts` | Monaco: a regular editor or a diff view (diff against HEAD), one model per open file, the minimap on a desktop, the status values, a search result selected and centred, the selection |
-| `web/src/app/features/editor/editor-pane.*` | tabs with file icons and the editor actions (the changes view), the path, error and conflict messages, the slot for the editor |
-| `web/src/app/features/editor/open-editors.*` | OPEN EDITORS at the top of the Explorer view: the open files, unsaved and active marks, closing with the tab's question |
-| `web/src/app/features/editor/monaco-loader.ts` | lazy loading of Monaco, its styles (`monaco.css`), workers and theme (from the tokens); it waits for JetBrains Mono and re-measures when fonts arrive later |
-| `web/src/app/features/editor/workers/` | entry points of the Monaco web workers (editor, TS, JSON, CSS, HTML) |
-| `web/tsconfig.worker.json` | tsconfig for the workers (referenced in `angular.json` as `webWorkerTsConfig`) |
+| `web/src/app/features/editor/` | the open files without Monaco (`EditorStore`, with tabs, unsaved changes, saving, conflicts, the diff view, the shown file's status values, `reveal` and the selection's lines), Monaco (`CodeEditor`, `monaco-loader.ts`, the web workers in `workers/`), the tabs with the editor actions (`EditorPane`) and OPEN EDITORS |
 | `web/src/app/features/login/` | login screen: username, password, TOTP code, the passkey button, retrying an unconfirmed logout |
 | `web/src/app/features/security/` | the Security window: active sessions, passkeys (`passkeys-store.ts`: the list, adding, renaming and removing, the password and code asked again on a `403`), login history with the method, "Log out other sessions" / "Log out everywhere" |
-| `web/src/app/features/console/console-store.ts` | conversation state built from hub events, sending, permissions, interrupt, new conversation, the open file the prompt names (detached by × or when the server refuses it) |
-| `web/src/app/features/console/console-panel.*` | the Console panel: a header with "Hide console", the conversation row (the repository, "New conversation"), the conversation as monospace text, and the composer card: the prompt, the open file's chip, the mode chip, Send or Stop, the model and effort chip |
-| `web/src/app/features/workspaces/workspaces-store.ts` | state of the Workspaces panel: workspaces, repositories, pull / push, create, clone |
-| `web/src/app/features/workspaces/workspaces-panel.*` | the workspaces and repositories of the Source Control view (always stacked: the workspace list, then repository cards with Open / Pull / Push, cloning) |
-| `web/src/app/features/workspaces/source-control-view.*` | the Source Control view of the side bar: the Workspaces panel and the open repository's CHANGES (a click opens the file with its changes shown) |
-| `web/src/app/features/workspaces/validation.ts` | validation of the workspace name and the clone URL |
-| `web/src/app/features/terminal/terminal-store.ts` | terminal list, active terminal, opening in the repo directory, closing, queues of typed characters (one per terminal) |
-| `web/src/app/features/terminal/terminal-panel.*` | the bottom panel's only tab, TERMINAL: the terminal bar and their views |
-| `web/src/app/features/terminal/terminal-view.ts` | a single xterm.js: attaching with a snapshot and `seq` numbers, typing, safe pasting, size fitting, the phone keys, the server's theme in xterm and behind its padding |
-| `web/src/app/features/terminal/terminal-input.ts` | queue of typed characters (acknowledged batches with `client` + `seq`), cleaning of pasted text and the sticky Ctrl's control codes (`withCtrl`) |
-| `web/src/app/features/terminal/xterm-loader.ts` | lazy loading of xterm.js (after JetBrains Mono) and the terminal look (`terminalOptions`: the server's theme or the one from the tokens, the font, its size for the desktop or the phone) |
-| `web/src/app/features/workspace/` | the main view (section "Layout"): `workspace.*` (the desktop: title bar, side bar, editor and the bottom panel in `.center`, console column, status bar, Ctrl+S and Ctrl+Alt+B; the phone: section "Phone layout"), `workbench-state.ts` (what the shell shows and the panels' sizes), `sash.*` (a panel's draggable edge), `panel-sizes.ts` (the panels' sizes at start, their minimums and their fit to the window), `title-bar.*` (the command centre, the layout toggles, the account menu; the phone's repository button, countdown and menu), `side-bar.*` (the activity bar and the views), `status-bar.*`, `phone-panes.*` (the tabs Editor · Terminal · Console and the side bar's drawer) |
+| `web/src/app/features/console/` | the conversation state built from hub events, with sending, permissions, interrupt and the open file the prompt names (`ConsoleStore`), and the Console panel with the conversation and the composer card (`ConsolePanel`) |
+| `web/src/app/features/workspaces/` | the Source Control view (the Workspaces panel and the open repository's CHANGES), the Workspaces panel's state (`WorkspacesStore`), and the workspace name and clone URL checks |
+| `web/src/app/features/terminal/` | the terminals with one input queue each (`TerminalStore`, `terminal-input.ts`), the bottom panel's TERMINAL tab (`TerminalPanel`), one xterm.js per terminal (`TerminalView`, attaching with a snapshot and `seq`, typing, safe pasting, fitting, the phone keys, the server's theme), and xterm's lazy loading and look (`xterm-loader.ts`) |
+| `web/src/app/features/workspace/` | the page after login (section "Layout") with both layouts in `workspace.*`, what the shell shows (`WorkbenchState`), the panels' sizes and edges (`panel-sizes.ts`, `sash.*`), the title bar, the side bar, the status bar, and the phone's tabs and drawer (`phone-panes.*`) |
+| `web/tsconfig.worker.json` | tsconfig for the workers (referenced in `angular.json` as `webWorkerTsConfig`) |
 | `web/playwright.config.ts` | e2e configuration (build from `dist/`, mock on port 4400, Chromium, reduced motion; projects `desktop` (1440×900) and `phone` (Pixel 7, only `phone.spec.ts`)) |
-| `web/e2e/mock-api/server.mjs` | mock backend: auth (passkeys without signature checks), files, search, the terminal theme, workspaces and simulated git, console and terminal hubs (SignalR JSON over WebSocket, simulated shell), security headers, the built frontend's files with their types (also `.svg`), `/__test/*`. Listens only on `127.0.0.1`; the origins it accepts are `http://127.0.0.1:4400` and `http://localhost:4400` |
+| `web/e2e/mock-api/` | the mock backend in `server.mjs`, with auth (passkeys without signature checks), files, search, the terminal theme, workspaces and simulated git, console and terminal hubs (SignalR JSON over WebSocket, simulated shell), security headers, the built frontend's files with their types (also `.svg`), `/__test/*`. Listens only on `127.0.0.1`; the origins it accepts are `http://127.0.0.1:4400` and `http://localhost:4400` |
 | `web/e2e/tests/` | e2e tests: `auth`, `editor`, `diff`, `console`, `workspaces`, `terminal`, `security`, `mock-api`, `look`, `motion`, `layout`, `search`, `phone`, `passkeys` + `helpers.ts` and `fixtures.ts` (CSP check in every test, `newDevice` for a second browser, the virtual authenticator) |
 | `web/proxy.conf.json` | dev server proxy to the API |
 | `web/.npmrc` | every npm script runs Node with `--no-experimental-webstorage`: from Node 25 on, Node's own global `localStorage` (undefined without `--localstorage-file`) hides jsdom's in the Vitest tests |
