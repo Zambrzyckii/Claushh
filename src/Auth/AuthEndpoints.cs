@@ -47,17 +47,16 @@ public static class AuthEndpoints
     {
         var log = loggers.CreateLogger("Claushh.Api.Auth.Login");
         // After ForwardedHeaders: behind the tunnel, the address from CF-Connecting-IP.
-        var (ip, limitKey) = LoginGuard.ClientIp(http.Connection.RemoteIpAddress);
-        var userAgent = http.Request.Headers.UserAgent.ToString();
+        var client = LoginClient.From(http);
         using var gate = await guard.EnterAsync(http.RequestAborted);
         if (gate is null)
         {
             // Not recorded, like every 429.
-            log.LogInformation("Login from {Ip} did not start within {Seconds} s", ip, LoginGuard.GateWait.TotalSeconds);
+            log.LogInformation("Login from {Ip} did not start within {Seconds} s", client.Ip, LoginGuard.GateWait.TotalSeconds);
             http.Response.Headers.RetryAfter = LoginGuard.GateWait.TotalSeconds.ToString(CultureInfo.InvariantCulture);
             return Results.StatusCode(StatusCodes.Status429TooManyRequests);
         }
-        if (await guard.RetryAfterAsync(limitKey, http.RequestAborted) is { } retryAfter)
+        if (await guard.RetryAfterAsync(client.LimitKey, http.RequestAborted) is { } retryAfter)
         {
             http.Response.Headers.RetryAfter = retryAfter.ToString(CultureInfo.InvariantCulture);
             return Results.StatusCode(StatusCodes.Status429TooManyRequests);
@@ -66,23 +65,23 @@ public static class AuthEndpoints
         var user = await CheckPasswordAsync(users, body);
         var success = user is not null && await totp.VerifyAsync(user, body.TotpCode!);
         // Not the request's token: an attempt whose client went away is still recorded and counted.
-        await guard.RecordAsync(success, LoginMethods.Password, ip, limitKey, userAgent, CancellationToken.None);
+        await guard.RecordAsync(success, LoginMethods.Password, client.Ip, client.LimitKey, client.UserAgent, CancellationToken.None);
         if (user is null || !success)
         {
             // The password was right: only wrong or reused codes count towards the lockout. Queuing does not wait for ntfy.
             if (user is not null && await guard.CodeFailedAsync(user) is { } lockout)
             {
-                notifications.AccountLocked(lockout, ip, userAgent);
+                notifications.AccountLocked(lockout, client.Ip, client.UserAgent);
             }
             // No user name: it is unvalidated input (newlines, any length, sometimes a mistyped password).
-            log.LogInformation("Failed login from {Ip}", ip);
+            log.LogInformation("Failed login from {Ip}", client.Ip);
             return Results.Unauthorized();
         }
         await guard.SucceededAsync(user);
-        var (_, secret) = await sessions.CreateAsync(user, userAgent, ip, http.RequestAborted);
+        var (_, secret) = await sessions.CreateAsync(user, client.UserAgent, client.Ip, http.RequestAborted);
         cookies.AppendSession(http.Response, secret);
-        log.LogInformation("Login of {UserName} from {Ip}", user.UserName, ip);
-        notifications.LoggedIn(ip, userAgent);
+        log.LogInformation("Login of {UserName} from {Ip}", user.UserName, client.Ip);
+        notifications.LoggedIn(client.Ip, client.UserAgent);
         return Results.NoContent();
     }
 

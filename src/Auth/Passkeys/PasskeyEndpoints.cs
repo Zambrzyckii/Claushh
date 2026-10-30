@@ -47,15 +47,14 @@ public static class PasskeyEndpoints
         TotpVerifier totp, PasskeyCeremonies ceremonies, LoginNotifications notifications)
     {
         var session = SessionAuthenticationHandler.Current(http);
-        var (ip, limitKey) = LoginGuard.ClientIp(http.Connection.RemoteIpAddress);
-        var userAgent = http.Request.Headers.UserAgent.ToString();
+        var client = LoginClient.From(http);
         var body = await JsonBody.ReadAsync<ReauthenticateRequest>(http);
         using var gate = await guard.EnterAsync(http.RequestAborted);
         if (gate is null)
         {
             return TooManyRequests(http, (int)LoginGuard.GateWait.TotalSeconds);
         }
-        if (await guard.RetryAfterAsync(limitKey, http.RequestAborted) is { } retryAfter)
+        if (await guard.RetryAfterAsync(client.LimitKey, http.RequestAborted) is { } retryAfter)
         {
             return TooManyRequests(http, retryAfter);
         }
@@ -64,10 +63,10 @@ public static class PasskeyEndpoints
         if (user is null || !success)
         {
             // Not the request's token: an attempt whose client went away is still recorded and counted.
-            await guard.RecordAsync(false, LoginMethods.Password, ip, limitKey, userAgent, CancellationToken.None);
+            await guard.RecordAsync(false, LoginMethods.Password, client.Ip, client.LimitKey, client.UserAgent, CancellationToken.None);
             if (user is not null && await guard.CodeFailedAsync(user) is { } lockout)
             {
-                notifications.AccountLocked(lockout, ip, userAgent);
+                notifications.AccountLocked(lockout, client.Ip, client.UserAgent);
             }
             return Results.StatusCode(StatusCodes.Status403Forbidden);
         }
@@ -115,15 +114,14 @@ public static class PasskeyEndpoints
         TimeProvider clock, ILoggerFactory loggers)
     {
         var session = SessionAuthenticationHandler.Current(http);
-        var (ip, _) = LoginGuard.ClientIp(http.Connection.RemoteIpAddress);
-        var userAgent = http.Request.Headers.UserAgent.ToString();
+        var client = LoginClient.From(http);
         var body = await JsonBody.ReadAsync<AddPasskeyRequest>(http);
         if (body is null || body.Credential.ValueKind != JsonValueKind.Object)
         {
             return Results.BadRequest(new MessageResponse(NotAdded));
         }
         // A missing or blank name is the device, e.g. "Chrome · Linux".
-        var name = string.IsNullOrWhiteSpace(body.Name) ? DeviceName.From(DeviceName.Stored(userAgent)) : ValidName(body.Name);
+        var name = string.IsNullOrWhiteSpace(body.Name) ? DeviceName.From(DeviceName.Stored(client.UserAgent)) : ValidName(body.Name);
         if (name is null)
         {
             return Results.BadRequest(new MessageResponse(NameRule));
@@ -164,7 +162,7 @@ public static class PasskeyEndpoints
             Name = name,
         };
         IdentityResults.ThrowIfFailed(await users.AddOrUpdatePasskeyAsync(user, passkey));
-        notifications.PasskeyAdded(name, ip, userAgent);
+        notifications.PasskeyAdded(name, client.Ip, client.UserAgent);
         return Results.Json(Response(passkey), statusCode: StatusCodes.Status201Created);
     }
 
@@ -192,6 +190,7 @@ public static class PasskeyEndpoints
         PasskeyCeremonies ceremonies, LoginNotifications notifications)
     {
         var session = SessionAuthenticationHandler.Current(http);
+        var client = LoginClient.From(http);
         if (!ceremonies.IsFresh(session.Id))
         {
             return Results.StatusCode(StatusCodes.Status403Forbidden);
@@ -201,8 +200,7 @@ public static class PasskeyEndpoints
         {
             return Results.NotFound();
         }
-        var (ip, _) = LoginGuard.ClientIp(http.Connection.RemoteIpAddress);
-        notifications.PasskeyRemoved(passkey.Name ?? "", ip, http.Request.Headers.UserAgent.ToString());
+        notifications.PasskeyRemoved(passkey.Name ?? "", client.Ip, client.UserAgent);
         IdentityResults.ThrowIfFailed(await users.RemovePasskeyAsync(user, credentialId));
         return Results.NoContent();
     }
@@ -212,13 +210,13 @@ public static class PasskeyEndpoints
     private static async Task<IResult> LoginOptions(HttpContext http, LoginGuard guard, IPasskeyHandler<IdentityUser> passkeys,
         PasskeyCeremonies ceremonies, AuthCookies cookies)
     {
-        var (_, limitKey) = LoginGuard.ClientIp(http.Connection.RemoteIpAddress);
-        if (await guard.IpRetryAfterAsync(limitKey, http.RequestAborted) is { } retryAfter)
+        var client = LoginClient.From(http);
+        if (await guard.IpRetryAfterAsync(client.LimitKey, http.RequestAborted) is { } retryAfter)
         {
             return TooManyRequests(http, retryAfter);
         }
         var options = await passkeys.MakeRequestOptionsAsync(null, http);
-        var id = ceremonies.AddLoginChallenge(limitKey,
+        var id = ceremonies.AddLoginChallenge(client.LimitKey,
             options.AssertionState ?? throw new InvalidOperationException("Identity gave no assertion state."));
         cookies.AppendPasskeyChallenge(http.Response, id);
         return Results.Content(options.RequestOptionsJson, "application/json");
@@ -232,17 +230,16 @@ public static class PasskeyEndpoints
         LoginNotifications notifications, ILoggerFactory loggers)
     {
         var log = loggers.CreateLogger("Claushh.Api.Auth.PasskeyLogin");
-        var (ip, limitKey) = LoginGuard.ClientIp(http.Connection.RemoteIpAddress);
-        var userAgent = http.Request.Headers.UserAgent.ToString();
+        var client = LoginClient.From(http);
         var body = await JsonBody.ReadAsync<PasskeyLoginRequest>(http);
         using var gate = await guard.EnterAsync(http.RequestAborted);
         if (gate is null)
         {
             // Not recorded, like every 429; the challenge stays for a retry.
-            log.LogInformation("Passkey login from {Ip} did not start within {Seconds} s", ip, LoginGuard.GateWait.TotalSeconds);
+            log.LogInformation("Passkey login from {Ip} did not start within {Seconds} s", client.Ip, LoginGuard.GateWait.TotalSeconds);
             return TooManyRequests(http, (int)LoginGuard.GateWait.TotalSeconds);
         }
-        if (await guard.IpRetryAfterAsync(limitKey, http.RequestAborted) is { } retryAfter)
+        if (await guard.IpRetryAfterAsync(client.LimitKey, http.RequestAborted) is { } retryAfter)
         {
             return TooManyRequests(http, retryAfter);
         }
@@ -257,19 +254,19 @@ public static class PasskeyEndpoints
                 AssertionState = state,
             });
         // Not the request's token: an attempt whose client went away is still recorded and counted.
-        await guard.RecordAsync(result?.Succeeded == true, LoginMethods.Passkey, ip, limitKey, userAgent, CancellationToken.None);
+        await guard.RecordAsync(result?.Succeeded == true, LoginMethods.Passkey, client.Ip, client.LimitKey, client.UserAgent, CancellationToken.None);
         if (result is null || !result.Succeeded)
         {
-            log.LogInformation("Passkey login from {Ip} failed: {Reason}", ip,
+            log.LogInformation("Passkey login from {Ip} failed: {Reason}", client.Ip,
                 result?.Failure?.Message ?? "no challenge or no credential");
             return Results.Unauthorized();
         }
         // The new sign count and backup state: Identity's handler leaves saving them to the caller.
         IdentityResults.ThrowIfFailed(await users.AddOrUpdatePasskeyAsync(result.User, result.Passkey));
-        var (_, secret) = await sessions.CreateAsync(result.User, userAgent, ip, http.RequestAborted);
+        var (_, secret) = await sessions.CreateAsync(result.User, client.UserAgent, client.Ip, http.RequestAborted);
         cookies.AppendSession(http.Response, secret);
-        log.LogInformation("Passkey login of {UserName} from {Ip}", result.User.UserName, ip);
-        notifications.PasskeyLoggedIn(result.Passkey.Name ?? "", ip, userAgent);
+        log.LogInformation("Passkey login of {UserName} from {Ip}", result.User.UserName, client.Ip);
+        notifications.PasskeyLoggedIn(result.Passkey.Name ?? "", client.Ip, client.UserAgent);
         return Results.NoContent();
     }
 

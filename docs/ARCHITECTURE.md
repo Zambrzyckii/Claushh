@@ -912,7 +912,8 @@ Sessions (`Auth/`):
   set by `login-options`, expired by every `login` answer after the gate and the per-IP limit). With
   `Sessions:SecureCookies=false`: `claushh-session`, `claushh-af`, `claushh-passkey`, and `Secure` only on HTTPS.
 
-Client address (`Program.cs`, `LoginGuard.ClientIp`; decisions: `PLAN.md`, "Backend decisions (stage 1, part C)"):
+Client address (`Program.cs`, `LoginGuard.ClientIp`, `LoginClient`;
+decisions: `PLAN.md`, "Backend decisions (stage 1, part C)"):
 - `ForwardedHeaders` runs first in every environment with the framework's default trust: only a loopback peer
   (127.0.0.0/8 and `::1`, also IPv4-mapped), which on the server is the local `cloudflared`.
 - From such a peer the client address is `CF-Connecting-IP` and the scheme is `X-Forwarded-Proto`, one entry each.

@@ -11,6 +11,17 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Claushh.Api.Auth;
 
+// The client of a login, re-authentication or passkey request as login protection sees it: its address and the per-IP
+// limit key (ClientIp, after ForwardedHeaders) and its raw User-Agent.
+public sealed record LoginClient(string Ip, string LimitKey, string UserAgent)
+{
+    public static LoginClient From(HttpContext http)
+    {
+        var (ip, limitKey) = LoginGuard.ClientIp(http.Connection.RemoteIpAddress);
+        return new LoginClient(ip, limitKey, http.Request.Headers.UserAgent.ToString());
+    }
+}
+
 public sealed class LoginGuard(ClaushhDbContext db, UserManager<IdentityUser> users, TimeProvider clock, ILogger<LoginGuard> log)
 {
     private const int MaxFailuresPerIp = 10;
