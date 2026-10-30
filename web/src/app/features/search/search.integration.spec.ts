@@ -118,12 +118,10 @@ describe('Search (integration)', () => {
       [');', false]
     ]);
 
-    host.state.drawerOpen.set(true);
     match.click();
     await render();
     expect(host.editor.reveal()).toMatchObject({ path: 'studia/lab/src/main.c', line: 7, column: 12, endColumn: 16 });
     expect(host.editor.activePath()).toBe('studia/lab/src/main.c');
-    expect(host.state.drawerOpen()).toBe(false);
     http.expectOne((r) => r.url === '/api/files/content').flush({ path: 'studia/lab/src/main.c', content: 'x', version: 'v1' });
 
     root.querySelector<HTMLButtonElement>('.search-file')!.click();

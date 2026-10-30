@@ -1,4 +1,4 @@
-import { Component, ElementRef, Injector, afterNextRender, computed, effect, inject, viewChild } from '@angular/core';
+import { Component, ElementRef, Injector, afterNextRender, computed, effect, inject, output, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
 import { baseName } from '../../core/api/project-path';
@@ -13,8 +13,8 @@ import { SearchOption, SearchStore } from './search-store';
 /**
  * The Search view of the side bar (docs/ARCHITECTURE.md, "Frontend" → "Layout"): the query with VS Code's three toggles,
  * the files to include and exclude behind "…", and the results by file. A preview is text with its matches in spans,
- * never HTML. A click opens the file at the match and closes the phone's drawer. The view's header (Refresh, Clear,
- * Collapse All) belongs to SideBar.
+ * never HTML. A click opens the file at the match and emits `opened`, on which SideBar closes the phone's drawer. The
+ * view's header (Refresh, Clear, Collapse All) belongs to SideBar.
  */
 @Component({
   selector: 'app-search-view',
@@ -31,6 +31,8 @@ export class SearchView {
   private readonly field = viewChild.required<ElementRef<HTMLInputElement>>('field');
   /** The last focus request this view has seen; a view created later ignores the older ones. */
   private focusSeen = this.state.searchFocus();
+  /** A result was clicked and its file is being opened at the match. */
+  readonly opened = output<void>();
 
   protected readonly toggles: readonly { option: SearchOption; label: string; icon: string }[] = [
     { option: 'matchCase', label: 'Match Case', icon: 'case-sensitive' },
@@ -111,6 +113,6 @@ export class SearchView {
   protected open(path: string, match: SearchMatch): void {
     const [start, end] = match.ranges[0] ?? [0, 0];
     void this.editor.open(path, { line: match.line, column: match.column, endColumn: match.column + (end - start) });
-    this.state.drawerOpen.set(false);
+    this.opened.emit();
   }
 }

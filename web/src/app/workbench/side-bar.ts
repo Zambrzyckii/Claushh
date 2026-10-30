@@ -45,6 +45,10 @@ export class SideBar {
 
   protected openFile(path: string): void {
     void this.editor.open(path);
+    this.closeDrawer();
+  }
+
+  protected closeDrawer(): void {
     this.state.drawerOpen.set(false);
   }
 

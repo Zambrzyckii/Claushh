@@ -138,6 +138,38 @@ describe('Side bar (integration)', () => {
     expect(host.state.drawerOpen()).toBe(false);
   });
 
+  it("a search result and an OPEN EDITORS row close the phone's drawer", async () => {
+    const { root, settle, host } = await setup();
+    tab(root, 'Search').click();
+    await settle();
+    const field = root.querySelector<HTMLInputElement>('#view-search input[aria-label="Search"]')!;
+    field.value = 'main';
+    field.dispatchEvent(new Event('input'));
+    field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+    await settle();
+    respond('/api/search', { files: [{ path: 'a.c', matches: [{ line: 1, column: 1, preview: 'main', ranges: [[0, 4]] }] }], matchCount: 1, limit: null });
+    await settle();
+
+    host.state.drawerOpen.set(true);
+    root.querySelector<HTMLButtonElement>('#view-search .search-match')!.click();
+    await settle();
+    expect(host.state.drawerOpen()).toBe(false);
+    respond('/api/files/content', { path: 'a.c', content: 'x', version: 'v1' });
+    await settle();
+
+    const opening = host.editor.open('notes.txt');
+    respond('/api/files/content', { path: 'notes.txt', content: 'a', version: 'v1' });
+    await opening;
+    tab(root, 'Explorer').click();
+    await settle();
+    root.querySelector<HTMLButtonElement>('app-open-editors .head')!.click();
+    await settle();
+    host.state.drawerOpen.set(true);
+    root.querySelector<HTMLButtonElement>('app-open-editors .open-editor__name[title="notes.txt"]')!.click();
+    await settle();
+    expect(host.state.drawerOpen()).toBe(false);
+  });
+
   it("the views come in VS Code's order, and Search keeps its query and results while another view is shown", async () => {
     const { root, settle } = await setup();
     expect(Array.from(root.querySelectorAll('[role="tab"]')).map((t) => t.getAttribute('aria-label'))).toEqual([

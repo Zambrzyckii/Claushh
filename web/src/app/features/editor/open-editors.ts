@@ -1,8 +1,7 @@
-import { Component, inject } from '@angular/core';
+import { Component, inject, model, output } from '@angular/core';
 
 import { Dialogs } from '../../core/browser/dialogs';
 import { fileIconUrl } from '../../core/icons/file-icons';
-import { WorkbenchState } from '../../workbench/workbench-state';
 import { EditorStore, OpenDocument } from './editor-store';
 
 /**
@@ -17,8 +16,11 @@ import { EditorStore, OpenDocument } from './editor-store';
 })
 export class OpenEditors {
   protected readonly store = inject(EditorStore);
-  protected readonly state = inject(WorkbenchState);
   private readonly dialogs = inject(Dialogs);
+  /** Whether the rows are shown. The parent owns the value and binds it two ways. */
+  readonly expanded = model(false);
+  /** A row was clicked and its file is now the active one. */
+  readonly opened = output<void>();
 
   protected dirty(doc: OpenDocument): boolean {
     return doc.status === 'ready' && doc.value !== doc.savedValue;
@@ -34,7 +36,7 @@ export class OpenEditors {
 
   protected activate(doc: OpenDocument): void {
     this.store.activate(doc.path);
-    this.state.drawerOpen.set(false);
+    this.opened.emit();
   }
 
   protected close(doc: OpenDocument): void {

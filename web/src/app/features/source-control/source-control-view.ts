@@ -1,10 +1,9 @@
-import { Component, inject } from '@angular/core';
+import { Component, inject, output } from '@angular/core';
 
 import { baseName } from '../../core/api/project-path';
 import { fileIconUrl } from '../../core/icons/file-icons';
 import { RepoStatusStore, STATUS_LETTERS } from '../../core/project/repo-status';
 import { EditorStore } from '../editor/editor-store';
-import { WorkbenchState } from '../../workbench/workbench-state';
 import { WorkspacesPanel } from './workspaces-panel';
 
 /**
@@ -21,7 +20,8 @@ import { WorkspacesPanel } from './workspaces-panel';
 export class SourceControlView {
   protected readonly repoStatus = inject(RepoStatusStore);
   private readonly editor = inject(EditorStore);
-  private readonly state = inject(WorkbenchState);
+  /** A change was clicked, emitted before its file is opened. */
+  readonly opened = output<void>();
   protected readonly letters = STATUS_LETTERS;
 
   protected name(path: string): string {
@@ -38,7 +38,7 @@ export class SourceControlView {
   }
 
   protected async open(path: string): Promise<void> {
-    this.state.drawerOpen.set(false);
+    this.opened.emit();
     await this.editor.open(path);
     const doc = this.editor.active();
     if (doc?.path === path && doc.diff === null) {

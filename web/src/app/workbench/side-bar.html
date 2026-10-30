@@ -13,7 +13,7 @@
 
 <section class="view" id="view-explorer" role="tabpanel" aria-labelledby="view-tab-explorer" [hidden]="state.view() !== 'explorer'">
   <div class="view__head"><h2 class="section-title">Explorer</h2></div>
-  <app-open-editors />
+  <app-open-editors [(expanded)]="state.openEditorsExpanded" (opened)="closeDrawer()" />
   <nav class="view__body" aria-label="File explorer">
     <app-explorer [root]="project.path()" [label]="project.label()" [activePath]="editor.activePath()"
                   [decorations]="repoStatus.decorations()" (openFile)="openFile($event)" (refreshed)="explorerRefreshed()" />
@@ -35,10 +35,10 @@
       </button>
     </span>
   </div>
-  <app-search-view class="view__body" />
+  <app-search-view class="view__body" (opened)="closeDrawer()" />
 </section>
 
 <section class="view" id="view-scm" role="tabpanel" aria-labelledby="view-tab-scm" [hidden]="state.view() !== 'scm'">
   <div class="view__head"><h2 class="section-title">Source Control</h2></div>
-  <app-source-control-view class="view__body" />
+  <app-source-control-view class="view__body" (opened)="closeDrawer()" />
 </section>
