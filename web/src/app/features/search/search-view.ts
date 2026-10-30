@@ -2,7 +2,7 @@ import { Component, ElementRef, Injector, afterNextRender, computed, effect, inj
 import { FormsModule } from '@angular/forms';
 
 import { baseName } from '../../core/api/project-path';
-import { SearchFile, SearchMatch, SearchResult } from '../../core/api/search-api';
+import { SearchFile, SearchMatch, SearchResult } from './search-api';
 import { fileIconUrl } from '../../core/icons/file-icons';
 import { ProjectContext } from '../../core/project/project-context';
 import { countLabel } from '../../core/text/format';

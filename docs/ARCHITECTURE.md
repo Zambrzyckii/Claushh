@@ -75,7 +75,7 @@ On the server (decisions: `PLAN.md`, "Deployment decisions"):
 | `web/src/app/` | the root component (`app.ts`), the providers in `app.config.ts` (router, HttpClient with the interceptor and XSRF, bfcache protection) and the routes in `app.routes.ts` (`/login` behind `guestGuard`, `/` behind `authGuard` loads the workbench) |
 | `web/src/app/core/` | what the whole app shares, one folder per kind (section "Frontend", "Conventions") |
 | `web/src/app/core/auth/` | the session state, login with a password or a passkey, logout and session expiry with tab sync (`AuthService`), `authGuard` and `guestGuard`, the interceptor that ends the session on a 401 (not for `IGNORE_UNAUTHORIZED` requests and the login's own endpoints), the return address check, and the session countdown with its extension on activity (`SessionTimer`) |
-| `web/src/app/core/api/` | the HTTP clients of the API areas (files, git, search, workspaces, sessions, passkeys, the terminal theme), the shared `ApiError` with its HTTP code mapping, and the relative path rule (`project-path.ts`) |
+| `web/src/app/core/api/` | the HTTP clients of the API areas (files, git, workspaces, sessions, passkeys, the terminal theme), the shared `ApiError` with its HTTP code mapping, and the relative path rule (`project-path.ts`) |
 | `web/src/app/core/browser/` | the browser behind small services and functions, so tests can replace the device and the user (the reload, the bfcache guard, `confirm()` and `alert()`, WebAuthn, `DeviceLayout`, `KeyboardInset`), plus the Trusted Types policy, `isTypingElsewhere`, `cssToken` and the font checks |
 | `web/src/app/core/project/` | the open repository from `?repo=` with its "files changed" and "files saved" events (`ProjectContext`), and its git status with the explorer's marks (`RepoStatusStore`, `STATUS_LETTERS`) |
 | `web/src/app/core/realtime/` | the SignalR base `HubClient` (WebSocket only, reconnect, session check on disconnect) and the console and terminal hub connections with their contracts |
@@ -85,7 +85,7 @@ On the server (decisions: `PLAN.md`, "Deployment decisions"):
 | `web/scripts/` | `file-icons.mjs`, which copies the allowed icons of `material-icon-theme` and writes the map (`README.md`, "Updating the file icons") |
 | `web/src/app/features/` | one folder per feature with its store, its views and their integration specs |
 | `web/src/app/features/explorer/` | file tree, directories loaded lazily on expand, the theme's file and folder icons, git badges and git-colored names, "Refresh" |
-| `web/src/app/features/search/` | the Search view: `search-store.ts` (the query, toggles, globs, results and folded files; searches 300 ms after typing and drops the older search), `search-view.*` (the field and its toggles, the files to include and exclude, the results by file with the matches highlighted) |
+| `web/src/app/features/search/` | the Search view: `search-api.ts` (the search request and its results by file), `search-store.ts` (the query, toggles, globs, results and folded files; searches 300 ms after typing and drops the older search), `search-view.*` (the field and its toggles, the files to include and exclude, the results by file with the matches highlighted) |
 | `web/src/app/features/editor/` | the open files without Monaco (`EditorStore`, with tabs, unsaved changes, saving, conflicts, the diff view, the shown file's status values, `reveal` and the selection's lines), Monaco (`CodeEditor`, `monaco-loader.ts`, the web workers in `workers/`), the tabs with the editor actions (`EditorPane`) and OPEN EDITORS |
 | `web/src/app/features/login/` | login screen: username, password, TOTP code, the passkey button, retrying an unconfirmed logout |
 | `web/src/app/features/security/` | the Security window: active sessions, passkeys (`passkeys-store.ts`: the list, adding, renaming and removing, the password and code asked again on a `403`), login history with the method, "Log out other sessions" / "Log out everywhere" |
@@ -1291,8 +1291,7 @@ The folders of `src/` and what each owns are listed in "Repository map".
 
 Conventions:
 - Standalone components, local state in `signal()`.
-- Things shared by the whole app (auth, browser access, API clients, SignalR, the open project,
-  shared text helpers) go in `web/src/app/core/`.
+- Things the whole app or two or more features use go in `web/src/app/core/` (auth, browser access, the API clients two or more features use, the SignalR base `HubClient`, the open project, shared text helpers). An API client or hub connection that one feature uses lives in that feature's folder and moves to `core/` when a second feature needs it.
 - Each app feature in a separate folder `web/src/app/features/<name>/`, lazy-loaded from the routes.
 - The page after login is the workbench in `web/src/app/workbench/`, a layer above the features. `core/` imports nothing from `workbench/` or `features/`, features never import `workbench/`, and only `app.routes.ts` imports `workbench/`. Until the shell's state is passed down as outputs and inputs, four features still read `WorkbenchState`.
 - Colors and fonts only through the tokens of `styles.scss`, no hard-coded colors in components; the Monaco and

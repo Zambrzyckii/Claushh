@@ -5,7 +5,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { vi } from 'vitest';
 
-import { SearchResult } from '../../core/api/search-api';
+import { SearchResult } from './search-api';
 import { ProjectContext } from '../../core/project/project-context';
 import { EditorStore } from '../editor/editor-store';
 import { WorkbenchState } from '../../workbench/workbench-state';

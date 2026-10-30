@@ -2,7 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable, catchError, map, throwError } from 'rxjs';
 
-import { toApiError } from './api-error';
+import { toApiError } from '../../core/api/api-error';
 
 /**
  * Search in files (`POST /api/search`). Contract: docs/ARCHITECTURE.md, "Files and editor" → "Search API contract". A

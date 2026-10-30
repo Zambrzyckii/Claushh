@@ -3,7 +3,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Observable, Subject, catchError, map, of, startWith, switchMap, timer } from 'rxjs';
 
 import { ApiError } from '../../core/api/api-error';
-import { SearchApi, SearchRequest, SearchResult } from '../../core/api/search-api';
+import { SearchApi, SearchRequest, SearchResult } from './search-api';
 import { ProjectContext } from '../../core/project/project-context';
 
 /** Typing waits this long before it searches; Enter, a toggle and Refresh search at once. */
