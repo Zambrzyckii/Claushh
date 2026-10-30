@@ -7,7 +7,7 @@ import { vi } from 'vitest';
 
 import { Dialogs } from '../../core/browser/dialogs';
 import { ProjectContext } from '../../core/project/project-context';
-import { WorkbenchState } from '../workspace/workbench-state';
+import { WorkbenchState } from '../../workbench/workbench-state';
 import { EditorStore } from './editor-store';
 import { OpenEditors } from './open-editors';
 

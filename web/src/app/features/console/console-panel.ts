@@ -136,7 +136,7 @@ export class ConsolePanel {
     });
   }
 
-  /** Puts the focus in the prompt: Workspace calls it when Ctrl+Alt+B opens the console. */
+  /** Puts the focus in the prompt: Workbench calls it when Ctrl+Alt+B opens the console. */
   focusPrompt(): void {
     this.input().nativeElement.focus();
   }

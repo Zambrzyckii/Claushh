@@ -13,24 +13,24 @@ import {
   viewChild
 } from '@angular/core';
 
-import { AuthService } from '../../core/auth/auth.service';
-import { SessionTimer } from '../../core/auth/session-timer';
-import { DeviceLayout } from '../../core/browser/device-layout';
-import { Dialogs } from '../../core/browser/dialogs';
-import { KeyboardInset } from '../../core/browser/keyboard-inset';
-import { ProjectContext } from '../../core/project/project-context';
-import { RepoStatusStore } from '../../core/project/repo-status';
-import { ConsoleConnection } from '../../core/realtime/console-connection';
-import { TerminalConnection } from '../../core/realtime/terminal-connection';
-import { ConsolePanel } from '../console/console-panel';
-import { ConsoleStore } from '../console/console-store';
-import { EditorPane } from '../editor/editor-pane';
-import { EditorStore } from '../editor/editor-store';
-import { SearchStore } from '../search/search-store';
-import { SecurityDialog } from '../security/security-dialog';
-import { TerminalPanel } from '../terminal/terminal-panel';
-import { TerminalStore } from '../terminal/terminal-store';
-import { WorkspacesStore } from '../source-control/workspaces-store';
+import { AuthService } from '../core/auth/auth.service';
+import { SessionTimer } from '../core/auth/session-timer';
+import { DeviceLayout } from '../core/browser/device-layout';
+import { Dialogs } from '../core/browser/dialogs';
+import { KeyboardInset } from '../core/browser/keyboard-inset';
+import { ProjectContext } from '../core/project/project-context';
+import { RepoStatusStore } from '../core/project/repo-status';
+import { ConsoleConnection } from '../core/realtime/console-connection';
+import { TerminalConnection } from '../core/realtime/terminal-connection';
+import { ConsolePanel } from '../features/console/console-panel';
+import { ConsoleStore } from '../features/console/console-store';
+import { EditorPane } from '../features/editor/editor-pane';
+import { EditorStore } from '../features/editor/editor-store';
+import { SearchStore } from '../features/search/search-store';
+import { SecurityDialog } from '../features/security/security-dialog';
+import { TerminalPanel } from '../features/terminal/terminal-panel';
+import { TerminalStore } from '../features/terminal/terminal-store';
+import { WorkspacesStore } from '../features/source-control/workspaces-store';
 import { PhonePanes, PhoneTab } from './phone-panes';
 import { CONSOLE, PANEL, SIDE_BAR, fitPanels } from './panel-sizes';
 import { Sash } from './sash';
@@ -53,7 +53,7 @@ import { WorkbenchState } from './workbench-state';
  * terminals live on the server. Changing the repository does not close open editor tabs (their paths are full).
  */
 @Component({
-  selector: 'app-workspace',
+  selector: 'app-workbench',
   imports: [TitleBar, SideBar, EditorPane, TerminalPanel, ConsolePanel, StatusBar, SecurityDialog, PhonePanes, Sash],
   providers: [
     SessionTimer,
@@ -69,10 +69,10 @@ import { WorkbenchState } from './workbench-state';
     WorkbenchState
   ],
   host: { '[class.phone]': 'layout.phone()' },
-  templateUrl: './workspace.html',
-  styleUrl: './workspace.scss'
+  templateUrl: './workbench.html',
+  styleUrl: './workbench.scss'
 })
-export class Workspace {
+export class Workbench {
   private readonly auth = inject(AuthService);
   private readonly dialogs = inject(Dialogs);
   protected readonly layout = inject(DeviceLayout);

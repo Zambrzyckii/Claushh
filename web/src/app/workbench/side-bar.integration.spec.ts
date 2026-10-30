@@ -4,11 +4,11 @@ import { Component, inject } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 
-import { ProjectContext } from '../../core/project/project-context';
-import { RepoStatusStore } from '../../core/project/repo-status';
-import { EditorStore } from '../editor/editor-store';
-import { SearchStore } from '../search/search-store';
-import { WorkspacesStore } from '../source-control/workspaces-store';
+import { ProjectContext } from '../core/project/project-context';
+import { RepoStatusStore } from '../core/project/repo-status';
+import { EditorStore } from '../features/editor/editor-store';
+import { SearchStore } from '../features/search/search-store';
+import { WorkspacesStore } from '../features/source-control/workspaces-store';
 import { SideBar } from './side-bar';
 import { WorkbenchState } from './workbench-state';
 

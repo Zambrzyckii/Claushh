@@ -21,7 +21,7 @@ export type SearchState =
  * State of the Search view (docs/ARCHITECTURE.md, "Frontend" → "Layout"): the query, its toggles and globs, the results
  * and the folded files. Every change starts a new search and drops the one before it (`switchMap`, which cancels its
  * request); typing waits 300 ms. The search covers the open repository, or the projects directory, and runs again when
- * that changes. Provided in Workspace, so the results survive a switch of view or layout.
+ * that changes. Provided in Workbench, so the results survive a switch of view or layout.
  */
 @Injectable()
 export class SearchStore {

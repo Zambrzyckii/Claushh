@@ -24,7 +24,7 @@ import { onFontsLoaded } from '../../core/browser/fonts';
 import { TerminalInfo } from '../../core/realtime/terminal-protocol';
 import { countLabel } from '../../core/text/format';
 import { previewText } from '../../core/text/visible-text';
-import { WorkbenchState } from '../workspace/workbench-state';
+import { WorkbenchState } from '../../workbench/workbench-state';
 import { MAX_PENDING_INPUT, lineBreaks, sanitizePaste, withCtrl } from './terminal-input';
 import { TerminalStore } from './terminal-store';
 import { TERMINAL_FONT, loadXterm, terminalOptions } from './xterm-loader';

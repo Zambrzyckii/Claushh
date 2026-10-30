@@ -8,7 +8,7 @@ import { vi } from 'vitest';
 import { SearchResult } from '../../core/api/search-api';
 import { ProjectContext } from '../../core/project/project-context';
 import { EditorStore } from '../editor/editor-store';
-import { WorkbenchState } from '../workspace/workbench-state';
+import { WorkbenchState } from '../../workbench/workbench-state';
 import { SearchStore } from './search-store';
 import { SearchView } from './search-view';
 

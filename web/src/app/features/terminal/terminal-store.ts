@@ -15,7 +15,7 @@ import { TerminalInputQueue } from './terminal-input';
  * A new terminal starts in the directory of the open repository (ProjectContext).
  * The queues of typed characters (TerminalInputQueue) are here, not in the view: characters waiting for the connection
  * survive closing the panel, and each terminal has one sender (`client`).
- * Provided in the Workspace component.
+ * Provided in the Workbench component.
  */
 @Injectable()
 export class TerminalStore {

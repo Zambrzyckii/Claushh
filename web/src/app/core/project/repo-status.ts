@@ -25,7 +25,7 @@ export const DIRECTORY_MARK = '•';
  * Refreshes on a repository change, after file changes (console, pull, save in the editor)
  * and after returning to the browser tab (e.g. after working in the terminal on another device).
  * There is no status for the projects directory (no open repo).
- * Provided in the Workspace component.
+ * Provided in the Workbench component.
  */
 @Injectable()
 export class RepoStatusStore {

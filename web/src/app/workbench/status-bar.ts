@@ -1,11 +1,11 @@
 import { Component, computed, inject, input } from '@angular/core';
 
-import { SessionTimer } from '../../core/auth/session-timer';
-import { DeviceLayout } from '../../core/browser/device-layout';
-import { RepoStatusStore } from '../../core/project/repo-status';
-import { countLabel } from '../../core/text/format';
-import { ConsoleStore } from '../console/console-store';
-import { EditorStore } from '../editor/editor-store';
+import { SessionTimer } from '../core/auth/session-timer';
+import { DeviceLayout } from '../core/browser/device-layout';
+import { RepoStatusStore } from '../core/project/repo-status';
+import { countLabel } from '../core/text/format';
+import { ConsoleStore } from '../features/console/console-store';
+import { EditorStore } from '../features/editor/editor-store';
 
 /**
  * The status bar of both layouts (docs/ARCHITECTURE.md, "Frontend" → "Layout"), read-only: VS Code's items without their

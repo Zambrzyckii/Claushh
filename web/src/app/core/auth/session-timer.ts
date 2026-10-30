@@ -25,7 +25,7 @@ const ACTIVITY_EVENTS = ['keydown', 'pointerdown', 'wheel'] as const;
  *   and one extended in another tab simply updates the countdown.
  * - Safe without a network: if the server does not respond and `EXPIRY_GRACE_MS` has passed since the deadline,
  *   the session ends locally the same way as on 401.
- * Provided in the Workspace component. Description: docs/ARCHITECTURE.md, section "Authentication".
+ * Provided in the Workbench component. Description: docs/ARCHITECTURE.md, section "Authentication".
  */
 @Injectable()
 export class SessionTimer {

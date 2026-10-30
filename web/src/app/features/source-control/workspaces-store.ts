@@ -21,7 +21,7 @@ export interface RepoMessage {
  * creating a workspace and cloning. Opening a repository sets ProjectContext.
  *
  * The repository list refreshes after operations, after file changes (console, save) and after returning to the tab.
- * Background refresh does not clear the visible data. Provided in the Workspace component.
+ * Background refresh does not clear the visible data. Provided in the Workbench component.
  */
 @Injectable()
 export class WorkspacesStore {

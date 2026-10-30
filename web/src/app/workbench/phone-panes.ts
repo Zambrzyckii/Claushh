@@ -1,9 +1,9 @@
 import { Component, computed, inject, linkedSignal, model } from '@angular/core';
 
-import { ConsolePanel } from '../console/console-panel';
-import { EditorPane } from '../editor/editor-pane';
-import { EditorStore } from '../editor/editor-store';
-import { TerminalPanel } from '../terminal/terminal-panel';
+import { ConsolePanel } from '../features/console/console-panel';
+import { EditorPane } from '../features/editor/editor-pane';
+import { EditorStore } from '../features/editor/editor-store';
+import { TerminalPanel } from '../features/terminal/terminal-panel';
 import { SideBar } from './side-bar';
 import { SideView, WorkbenchState } from './workbench-state';
 

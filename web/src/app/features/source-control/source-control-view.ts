@@ -4,7 +4,7 @@ import { baseName } from '../../core/api/project-path';
 import { fileIconUrl } from '../../core/icons/file-icons';
 import { RepoStatusStore, STATUS_LETTERS } from '../../core/project/repo-status';
 import { EditorStore } from '../editor/editor-store';
-import { WorkbenchState } from '../workspace/workbench-state';
+import { WorkbenchState } from '../../workbench/workbench-state';
 import { WorkspacesPanel } from './workspaces-panel';
 
 /**

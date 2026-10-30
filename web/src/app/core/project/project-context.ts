@@ -17,7 +17,7 @@ import { baseName, isSafeRelativePath } from '../api/project-path';
  * - `filesChanged`: files changed outside the editor (console, pull). The explorer and the editor refresh.
  * - `filesSaved`: files saved by the editor. Only the git status refreshes (the editor already has the current content).
  *
- * Provided in the Workspace component.
+ * Provided in the Workbench component.
  */
 @Injectable()
 export class ProjectContext {

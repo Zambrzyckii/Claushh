@@ -72,7 +72,7 @@ On the server (decisions: `PLAN.md`, "Deployment decisions"):
 | `web/src/main.ts` | app startup: Trusted Types policy, and inside a frame of a foreign page the app does not start |
 | `web/src/styles.scss` | the design tokens (surfaces, text, accent, semantic colors with blue, green and purple, git colors, fonts), the shared controls (buttons, inputs, tabs, section titles, chips), the focus ring, the touch sizes and the 16 px fields of touch screens; components keep only their layout |
 | `web/src/fonts/` | the terminal's symbols font: the Regular face of JetBrainsMono Nerd Font (Nerd Fonts 3.5.1) as woff2, its `OFL.txt` and `NERD-FONTS-LICENSE.md` (Nerd Fonts' license and the licenses of the icon sets it adds), committed; `styles.scss` declares it and the build puts it under `media/` |
-| `web/src/app/` | the root component (`app.ts`), the providers in `app.config.ts` (router, HttpClient with the interceptor and XSRF, bfcache protection) and the routes in `app.routes.ts` (`/login` behind `guestGuard`, `/` behind `authGuard` with the page after login) |
+| `web/src/app/` | the root component (`app.ts`), the providers in `app.config.ts` (router, HttpClient with the interceptor and XSRF, bfcache protection) and the routes in `app.routes.ts` (`/login` behind `guestGuard`, `/` behind `authGuard` loads the workbench) |
 | `web/src/app/core/` | what the whole app shares, one folder per kind (section "Frontend", "Conventions") |
 | `web/src/app/core/auth/` | the session state, login with a password or a passkey, logout and session expiry with tab sync (`AuthService`), `authGuard` and `guestGuard`, the interceptor that ends the session on a 401 (not for `IGNORE_UNAUTHORIZED` requests and the login's own endpoints), the return address check, and the session countdown with its extension on activity (`SessionTimer`) |
 | `web/src/app/core/api/` | the HTTP clients of the API areas (files, git, search, workspaces, sessions, passkeys, the terminal theme), the shared `ApiError` with its HTTP code mapping, and the relative path rule (`project-path.ts`) |
@@ -92,7 +92,7 @@ On the server (decisions: `PLAN.md`, "Deployment decisions"):
 | `web/src/app/features/console/` | the conversation state built from hub events, with sending, permissions, interrupt and the open file the prompt names (`ConsoleStore`), and the Console panel with the conversation and the composer card (`ConsolePanel`) |
 | `web/src/app/features/source-control/` | the Source Control view (the Workspaces panel and the open repository's CHANGES), the Workspaces panel's state (`WorkspacesStore`), and the workspace name and clone URL checks |
 | `web/src/app/features/terminal/` | the terminals with one input queue each (`TerminalStore`, `terminal-input.ts`), the bottom panel's TERMINAL tab (`TerminalPanel`), one xterm.js per terminal (`TerminalView`, attaching with a snapshot and `seq`, typing, safe pasting, fitting, the phone keys, the server's theme), and xterm's lazy loading and look (`xterm-loader.ts`) |
-| `web/src/app/features/workspace/` | the page after login (section "Layout") with both layouts in `workspace.*`, what the shell shows (`WorkbenchState`), the panels' sizes and edges (`panel-sizes.ts`, `sash.*`), the title bar, the side bar, the status bar, and the phone's tabs and drawer (`phone-panes.*`) |
+| `web/src/app/workbench/` | the page after login (section "Layout") with both layouts in `workbench.*`, what the shell shows (`WorkbenchState`), the panels' sizes and edges (`panel-sizes.ts`, `sash.*`), the title bar, the side bar, the status bar, and the phone's tabs and drawer (`phone-panes.*`) |
 | `web/tsconfig.worker.json` | tsconfig for the workers (referenced in `angular.json` as `webWorkerTsConfig`) |
 | `web/playwright.config.ts` | e2e configuration (build from `dist/`, mock on port 4400, Chromium, reduced motion; projects `desktop` (1440×900) and `phone` (Pixel 7, only `phone.spec.ts`)) |
 | `web/e2e/mock-api/` | the mock backend in `server.mjs`, with auth (passkeys without signature checks), files, search, the terminal theme, workspaces and simulated git, console and terminal hubs (SignalR JSON over WebSocket, simulated shell), security headers, the built frontend's files with their types (also `.svg`), `/__test/*`. Listens only on `127.0.0.1`; the origins it accepts are `http://127.0.0.1:4400` and `http://localhost:4400` |
@@ -331,7 +331,7 @@ every test that the page reports no CSP violations.
 - **Saving never silently overwrites changes on disk.** Every file has a version (e.g. a content hash). A save sends
   the version the edit was based on. If the file changed on disk in the meantime (e.g. the console edited it),
   the server rejects the save (409) and the user chooses: "Load from disk" or "Overwrite with my version".
-- The editor state (`EditorStore`) is provided in the Workspace component, and logout reloads the page,
+- The editor state (`EditorStore`) is provided in the Workbench component, and logout reloads the page,
   so open files disappear from memory together with the session.
 - **There is deliberately no `beforeunload` warning** for unsaved changes: it would block the reload on
   logout in another tab or on session expiry, and then the code would stay visible on screen. Instead
@@ -1294,6 +1294,7 @@ Conventions:
 - Things shared by the whole app (auth, browser access, API clients, SignalR, the open project,
   shared text helpers) go in `web/src/app/core/`.
 - Each app feature in a separate folder `web/src/app/features/<name>/`, lazy-loaded from the routes.
+- The page after login is the workbench in `web/src/app/workbench/`, a layer above the features. `core/` imports nothing from `workbench/` or `features/`, features never import `workbench/`, and only `app.routes.ts` imports `workbench/`. Until the shell's state is passed down as outputs and inputs, four features still read `WorkbenchState`.
 - Colors and fonts only through the tokens of `styles.scss`, no hard-coded colors in components; the Monaco and
   xterm themes read them through `theme.ts` (only the syntax colors, the selection and the 16 terminal colors are
   fixed there, and the terminal takes the server's theme instead when there is one: section "Terminal"); the file-icon SVGs in `public/file-icons/` keep their theme's own colors. Buttons, inputs, focus and
@@ -1322,13 +1323,13 @@ Development: `@playwright/test`, `ws` (hub mock), `@types/node`, `material-icon-
 ### Layout
 
 Decisions: `PLAN.md`, "Frontend decisions (VS Code layout)".
-- Desktop (`features/workspace/workspace.*`): the title bar (`title-bar.*`, 35 px) with the command centre (the open
+- Desktop (`workbench/workbench.*`): the title bar (`title-bar.*`, 35 px) with the command centre (the open
   repository's workspace, name and branch, or "projects directory"; a click shows Source Control), the toggles "Side
   bar", "Panel" and "Console" (`aria-pressed`) and the account button ("Account: <user>") with its menu: the user
   name, "Security…" and "Log out". Below it the primary side bar (`side-bar.*`, 240 px at start), the editor with the
   bottom panel under it (`.center`, so both side bars run the full height) and the console column (420 px at start);
   at the bottom the status bar (`status-bar.*`, 22 px).
-- `WorkbenchState` (`workbench-state.ts`, provided in Workspace) holds what is shown and the panels' sizes, in memory
+- `WorkbenchState` (`workbench-state.ts`, provided in Workbench) holds what is shown and the panels' sizes, in memory
   only (a reload starts with the sizes at start): the side bar (open, on Explorer), the bottom panel (closed), the
   console (open), the view, the phone's drawer, the widths of the side bar and the console, the height of the bottom
   panel, and `resizing` while an edge is dragged. `show(view)` opens the side bar or the drawer on a view.
@@ -1346,7 +1347,7 @@ Decisions: `PLAN.md`, "Frontend decisions (VS Code layout)".
   per drag; Monaco follows at once (`automaticLayout`). An open title-bar menu covers the edges (the bar is raised
   above the workbench while it is open), so a press on one closes the menu.
 - Ctrl+Alt+B / Cmd+Option+B (VS Code's key for the secondary side bar) shows and hides the console wherever the focus
-  is, Monaco and the terminal included: Workspace listens to `keydown` on the document in the capture phase and stops
+  is, Monaco and the terminal included: Workbench listens to `keydown` on the document in the capture phase and stops
   the event, so neither of them receives it. Opening puts the focus in the prompt; closing with the focus in the
   console returns it to where it was when the key opened the console. A held key toggles once. The key does nothing
   in the phone layout or while a dialog is open. The tooltips "Console (Ctrl+Alt+B)" and "Hide console (Ctrl+Alt+B)"
@@ -1372,10 +1373,10 @@ Decisions: `PLAN.md`, "Frontend decisions (UI refresh)".
 - `DeviceLayout` (`core/browser/device-layout.ts`) has two signals: `phone` for `(max-width: 767.98px), (pointer:
   coarse) and (max-height: 500px)` and `touch` for `(pointer: coarse)`. Without `matchMedia` (jsdom) both are false;
   tests replace the service the way they replace `Dialogs`.
-- `workspace.html` has two branches. The phone branch has a condensed top bar (the repository and branch as a button
+- `workbench.html` has two branches. The phone branch has a condensed top bar (the repository and branch as a button
   that opens the drawer on Source Control, the countdown as `m:ss` with "Extend", a menu with the user name, Security…
   and Log out),
-  `PhonePanes` (`features/workspace/phone-panes.*`: the tabs Editor, Terminal and Console) and a one-line status bar
+  `PhonePanes` (`workbench/phone-panes.*`: the tabs Editor, Terminal and Console) and a one-line status bar
   (cursor and language only in the Editor tab); indentation, encoding and line endings are desktop-only, for width,
   and so is the minimap. Crossing the breakpoint recreates the editor, terminal and console
   views: Monaco's undo history is lost, `EditorStore` keeps the text, terminals attach again.

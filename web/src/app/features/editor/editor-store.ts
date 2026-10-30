@@ -14,7 +14,7 @@ import { ProjectContext } from '../../core/project/project-context';
  * and passes every content change here through `updateValue`. When the store replaces the content itself
  * (e.g. "Load from disk"), it increments `revision`, and CodeEditor copies it into the model.
  *
- * Provided at the Workspace component level, so it disappears together with it (and on logout,
+ * Provided at the Workbench component level, so it disappears together with it (and on logout,
  * because that is a full page reload).
  */
 

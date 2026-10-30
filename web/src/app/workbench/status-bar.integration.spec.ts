@@ -6,15 +6,15 @@ import { Router, provideRouter } from '@angular/router';
 import { Subject } from 'rxjs';
 import { vi } from 'vitest';
 
-import { AUTH_API, AuthService } from '../../core/auth/auth.service';
-import { SessionTimer } from '../../core/auth/session-timer';
-import { HardNavigation } from '../../core/browser/hard-navigation';
-import { ProjectContext } from '../../core/project/project-context';
-import { RepoStatusStore } from '../../core/project/repo-status';
-import { ConnectionState, ConsoleConnection } from '../../core/realtime/console-connection';
-import { ConsoleEvent } from '../../core/realtime/console-protocol';
-import { ConsoleStore } from '../console/console-store';
-import { EditorStore } from '../editor/editor-store';
+import { AUTH_API, AuthService } from '../core/auth/auth.service';
+import { SessionTimer } from '../core/auth/session-timer';
+import { HardNavigation } from '../core/browser/hard-navigation';
+import { ProjectContext } from '../core/project/project-context';
+import { RepoStatusStore } from '../core/project/repo-status';
+import { ConnectionState, ConsoleConnection } from '../core/realtime/console-connection';
+import { ConsoleEvent } from '../core/realtime/console-protocol';
+import { ConsoleStore } from '../features/console/console-store';
+import { EditorStore } from '../features/editor/editor-store';
 import { StatusBar } from './status-bar';
 
 /**

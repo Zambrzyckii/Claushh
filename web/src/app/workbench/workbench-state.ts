@@ -1,7 +1,7 @@
 import { Injectable, effect, inject, signal, untracked } from '@angular/core';
 
-import { DeviceLayout } from '../../core/browser/device-layout';
-import { ProjectContext } from '../../core/project/project-context';
+import { DeviceLayout } from '../core/browser/device-layout';
+import { ProjectContext } from '../core/project/project-context';
 import { CONSOLE, PANEL, SIDE_BAR } from './panel-sizes';
 
 /** The views of the side bar (docs/ARCHITECTURE.md, "Frontend" → "Layout"). */
@@ -11,7 +11,7 @@ export type SideView = 'explorer' | 'search' | 'scm';
  * What the VS Code-like shell shows (docs/ARCHITECTURE.md, "Frontend" → "Layout"): the primary side bar and its view, the
  * bottom panel, the console, on a phone the drawer that holds the side bar, and the panels' sizes. In memory only, so a
  * reload starts with the side bar on Explorer, the panel closed (the terminal hub connects only when it is first shown),
- * the console open and the sizes at start. Provided in Workspace.
+ * the console open and the sizes at start. Provided in Workbench.
  */
 @Injectable()
 export class WorkbenchState {
@@ -28,7 +28,7 @@ export class WorkbenchState {
   readonly searchFocus = signal(0);
 
   /**
-   * The widths and the height chosen by dragging the panels' edges (Sash). Workspace fits them to the window
+   * The widths and the height chosen by dragging the panels' edges (Sash). Workbench fits them to the window
    * (fitPanels), so a narrow window never changes what was chosen.
    */
   readonly sideBarWidth = signal(SIDE_BAR.initial);

@@ -7,7 +7,7 @@ import { fileIconUrl } from '../../core/icons/file-icons';
 import { ProjectContext } from '../../core/project/project-context';
 import { countLabel } from '../../core/text/format';
 import { EditorStore } from '../editor/editor-store';
-import { WorkbenchState } from '../workspace/workbench-state';
+import { WorkbenchState } from '../../workbench/workbench-state';
 import { SearchOption, SearchStore } from './search-store';
 
 /**

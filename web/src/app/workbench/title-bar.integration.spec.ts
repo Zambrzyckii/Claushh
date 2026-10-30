@@ -5,13 +5,13 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { vi } from 'vitest';
 
-import { AUTH_API, AuthService } from '../../core/auth/auth.service';
-import { SessionTimer } from '../../core/auth/session-timer';
-import { DeviceLayout } from '../../core/browser/device-layout';
-import { HardNavigation } from '../../core/browser/hard-navigation';
-import { ProjectContext } from '../../core/project/project-context';
-import { RepoStatusStore } from '../../core/project/repo-status';
-import { WorkspacesStore } from '../source-control/workspaces-store';
+import { AUTH_API, AuthService } from '../core/auth/auth.service';
+import { SessionTimer } from '../core/auth/session-timer';
+import { DeviceLayout } from '../core/browser/device-layout';
+import { HardNavigation } from '../core/browser/hard-navigation';
+import { ProjectContext } from '../core/project/project-context';
+import { RepoStatusStore } from '../core/project/repo-status';
+import { WorkspacesStore } from '../features/source-control/workspaces-store';
 import { TitleBar } from './title-bar';
 import { WorkbenchState } from './workbench-state';
 

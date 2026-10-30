@@ -1,18 +1,18 @@
 import { Component, HostListener, computed, inject, input, output, signal } from '@angular/core';
 
-import { AuthService } from '../../core/auth/auth.service';
-import { SessionTimer } from '../../core/auth/session-timer';
-import { DeviceLayout } from '../../core/browser/device-layout';
-import { ProjectContext } from '../../core/project/project-context';
-import { RepoStatusStore } from '../../core/project/repo-status';
-import { WorkspacesStore } from '../source-control/workspaces-store';
+import { AuthService } from '../core/auth/auth.service';
+import { SessionTimer } from '../core/auth/session-timer';
+import { DeviceLayout } from '../core/browser/device-layout';
+import { ProjectContext } from '../core/project/project-context';
+import { RepoStatusStore } from '../core/project/repo-status';
+import { WorkspacesStore } from '../features/source-control/workspaces-store';
 import { WorkbenchState } from './workbench-state';
 
 /**
  * The top bar of both layouts (docs/ARCHITECTURE.md, "Frontend" → "Layout"). Desktop: VS Code's title bar with the
  * command centre (the open repository and its branch; a click shows Source Control), the toggles of the side bar, the
  * panel and the console, and the account menu. Phone: the repository button (the drawer on Source Control), the countdown
- * with "Extend" and the same menu behind a kebab. Workspace handles Security, Log out and the repository button.
+ * with "Extend" and the same menu behind a kebab. Workbench handles Security, Log out and the repository button.
  */
 @Component({
   selector: 'app-title-bar',

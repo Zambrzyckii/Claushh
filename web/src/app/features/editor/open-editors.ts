@@ -2,7 +2,7 @@ import { Component, inject } from '@angular/core';
 
 import { Dialogs } from '../../core/browser/dialogs';
 import { fileIconUrl } from '../../core/icons/file-icons';
-import { WorkbenchState } from '../workspace/workbench-state';
+import { WorkbenchState } from '../../workbench/workbench-state';
 import { EditorStore, OpenDocument } from './editor-store';
 
 /**

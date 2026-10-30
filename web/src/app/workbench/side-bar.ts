@@ -1,14 +1,14 @@
 import { Component, inject } from '@angular/core';
 
-import { ProjectContext } from '../../core/project/project-context';
-import { RepoStatusStore } from '../../core/project/repo-status';
-import { EditorStore } from '../editor/editor-store';
-import { OpenEditors } from '../editor/open-editors';
-import { Explorer } from '../explorer/explorer';
-import { SearchStore } from '../search/search-store';
-import { SearchView } from '../search/search-view';
-import { SourceControlView } from '../source-control/source-control-view';
-import { WorkspacesStore } from '../source-control/workspaces-store';
+import { ProjectContext } from '../core/project/project-context';
+import { RepoStatusStore } from '../core/project/repo-status';
+import { EditorStore } from '../features/editor/editor-store';
+import { OpenEditors } from '../features/editor/open-editors';
+import { Explorer } from '../features/explorer/explorer';
+import { SearchStore } from '../features/search/search-store';
+import { SearchView } from '../features/search/search-view';
+import { SourceControlView } from '../features/source-control/source-control-view';
+import { WorkspacesStore } from '../features/source-control/workspaces-store';
 import { SideView, WorkbenchState } from './workbench-state';
 
 /**
