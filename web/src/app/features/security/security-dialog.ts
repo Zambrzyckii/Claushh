@@ -1,8 +1,8 @@
 import { Component, ElementRef, inject, input, output, signal, viewChild } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 
-import { Passkey } from '../../core/api/passkeys-api';
-import { ActiveSession, LoginAttempt, SessionsApi } from '../../core/api/sessions-api';
+import { Passkey } from './passkeys-api';
+import { ActiveSession, LoginAttempt, SessionsApi } from './sessions-api';
 import { SessionTimer } from '../../core/auth/session-timer';
 import { DeviceLayout } from '../../core/browser/device-layout';
 import { Dialogs } from '../../core/browser/dialogs';

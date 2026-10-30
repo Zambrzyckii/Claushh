@@ -1,7 +1,7 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 
-import { Passkey, PasskeyApiError, PasskeysApi } from '../../core/api/passkeys-api';
+import { Passkey, PasskeyApiError, PasskeysApi } from './passkeys-api';
 import { WebAuthn, WebAuthnFailure } from '../../core/browser/webauthn';
 import { formatWait } from '../../core/text/format';
 

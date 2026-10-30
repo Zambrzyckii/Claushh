@@ -4,7 +4,7 @@ import { Component, viewChild } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { vi } from 'vitest';
 
-import { PASSKEYS_API } from '../../core/api/passkeys-api';
+import { PASSKEYS_API } from './passkeys-api';
 import { authInterceptor } from '../../core/auth/auth.interceptor';
 import { SessionTimer } from '../../core/auth/session-timer';
 import { Dialogs } from '../../core/browser/dialogs';

@@ -2,7 +2,7 @@ import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable, catchError, map, throwError } from 'rxjs';
 
-import { PasskeyCredentialJson } from '../browser/webauthn';
+import { PasskeyCredentialJson } from '../../core/browser/webauthn';
 
 /**
  * The account's passkeys and the re-authentication that adding and removing one need.
