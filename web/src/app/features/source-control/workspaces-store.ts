@@ -7,6 +7,7 @@ import { GitApi } from '../../core/api/git-api';
 import { RepoSummary, WorkspaceInfo, WorkspacesApi } from './workspaces-api';
 import { ProjectContext } from '../../core/project/project-context';
 import { RepoStatusStore } from '../../core/project/repo-status';
+import { NO_CONNECTION } from '../../core/text/format';
 import { validateCloneUrl, validateWorkspaceName } from './validation';
 
 export type RepoOperation = 'pull' | 'push';
@@ -244,7 +245,7 @@ function gitErrorMessage(operation: RepoOperation, error: ApiError): string {
 
 function message(error: unknown, fallback: string): string {
   const e = toApiError(error);
-  return e.kind === 'network' ? 'No connection to the server.' : withDetail(fallback, e.detail);
+  return e.kind === 'network' ? NO_CONNECTION : withDetail(fallback, e.detail);
 }
 
 function withDetail(text: string, detail: string | null): string {

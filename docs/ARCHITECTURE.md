@@ -79,7 +79,7 @@ On the server (decisions: `PLAN.md`, "Deployment decisions"):
 | `web/src/app/core/browser/` | the browser behind small services and functions, so tests can replace the device and the user (the reload, the bfcache guard, `confirm()` and `alert()`, WebAuthn, `DeviceLayout`, `KeyboardInset`), plus the Trusted Types policy, `isTypingElsewhere`, `cssToken` and the font checks |
 | `web/src/app/core/project/` | the open repository from `?repo=` with its "files changed" and "files saved" events (`ProjectContext`), and its git status with the explorer's marks (`RepoStatusStore`, `STATUS_LETTERS`) |
 | `web/src/app/core/realtime/` | the SignalR base `HubClient` (WebSocket only, reconnect, session check on disconnect) |
-| `web/src/app/core/text/` | the shared text helpers (plurals, relative time, `en-GB` dates, the wait of a `429`) and `revealHidden` and `previewText` for commands to approve |
+| `web/src/app/core/text/` | the shared text helpers (plurals, relative time, `en-GB` dates, the wait of a `429`, the shared failure texts `tooManyAttempts`, `NO_CONNECTION` and `PASSKEYS_AT_DOMAIN_ONLY`) and `revealHidden` and `previewText` for commands to approve |
 | `web/src/app/core/icons/` | `fileIconUrl` and `folderIconUrl` (a file's or folder's icon in `public/file-icons/`) and `file-icon-map.ts`, which `scripts/file-icons.mjs` generates |
 | `web/public/file-icons/` | the shipped selection of Material Icon Theme's SVGs and its `LICENSE`, copied by `scripts/file-icons.mjs` and committed |
 | `web/scripts/` | `file-icons.mjs`, which copies the allowed icons of `material-icon-theme` and writes the map (`README.md`, "Updating the file icons") |

@@ -1,6 +1,7 @@
 /**
  * Shared text helpers of the interface (docs/ARCHITECTURE.md, "Frontend"): English plurals, relative time, the date
- * formats and the wait of a 429. The interface has one language; dates are day first with a 24-hour clock (en-GB).
+ * formats, the wait of a 429 and the failure texts several screens share. The interface has one language; dates are day
+ * first with a 24-hour clock (en-GB).
  */
 
 /** "1 change", "3 changes", "0 changes". */
@@ -74,3 +75,14 @@ export function formatWait(seconds: number): string {
   }
   return `${Math.ceil(seconds / 3600)} h.`;
 }
+
+/** "Too many attempts. Try again in 30 s." with a wait, "Too many attempts. Try again later." without one (0 counts as none). */
+export function tooManyAttempts(retryAfterSeconds: number | null | undefined): string {
+  return retryAfterSeconds
+    ? `Too many attempts. Try again in ${formatWait(retryAfterSeconds)}`
+    : 'Too many attempts. Try again later.';
+}
+
+export const NO_CONNECTION = 'No connection to the server.';
+
+export const PASSKEYS_AT_DOMAIN_ONLY = "Passkeys work only at the portal's domain name.";

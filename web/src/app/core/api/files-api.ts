@@ -4,6 +4,7 @@ import { Observable, map, throwError } from 'rxjs';
 
 import { mapHttpError, readHttpFailure } from './api-error';
 import { isSafeRelativePath } from './project-path';
+import { NO_CONNECTION } from '../text/format';
 
 /**
  * Access to files in the projects directory through the API.
@@ -122,7 +123,7 @@ export function fileErrorMessage(kind: FileErrorKind): string {
     case 'invalid-path':
       return 'Invalid path.';
     case 'network':
-      return 'No connection to the server.';
+      return NO_CONNECTION;
     case 'server':
       return 'Server error.';
   }
