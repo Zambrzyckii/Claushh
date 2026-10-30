@@ -3,8 +3,8 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Observable, Subject, filter, map, merge } from 'rxjs';
 
 import { ProjectContext } from '../../core/project/project-context';
-import { TerminalConnection } from '../../core/realtime/terminal-connection';
-import { TerminalAttachment, TerminalInfo } from '../../core/realtime/terminal-protocol';
+import { TerminalConnection } from './terminal-connection';
+import { TerminalAttachment, TerminalInfo } from './terminal-protocol';
 import { TerminalInputQueue } from './terminal-input';
 
 /**

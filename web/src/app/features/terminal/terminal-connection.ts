@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 import { HubConnection } from '@microsoft/signalr';
 import { Observable, Subject } from 'rxjs';
 
-import { HubClient } from './hub-client';
+import { HubClient } from '../../core/realtime/hub-client';
 import { TERMINAL_HUB, TerminalAttachment, TerminalExit, TerminalInfo, TerminalInput, TerminalOutput } from './terminal-protocol';
 
 /**

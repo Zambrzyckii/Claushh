@@ -16,12 +16,12 @@ import type { FitAddon } from '@xterm/addon-fit';
 import type { Terminal } from '@xterm/xterm';
 import { Subscription } from 'rxjs';
 
-import { TerminalThemeApi } from '../../core/api/terminal-theme-api';
+import { TerminalThemeApi } from './terminal-theme-api';
 import { DeviceLayout } from '../../core/browser/device-layout';
 import { Dialogs } from '../../core/browser/dialogs';
 import { isTypingElsewhere } from '../../core/browser/focus';
 import { onFontsLoaded } from '../../core/browser/fonts';
-import { TerminalInfo } from '../../core/realtime/terminal-protocol';
+import { TerminalInfo } from './terminal-protocol';
 import { countLabel } from '../../core/text/format';
 import { previewText } from '../../core/text/visible-text';
 import { WorkbenchState } from '../../workbench/workbench-state';

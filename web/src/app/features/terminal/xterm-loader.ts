@@ -1,7 +1,7 @@
 import type { FitAddon } from '@xterm/addon-fit';
 import type { ITerminalOptions, ITheme, Terminal } from '@xterm/xterm';
 
-import type { TerminalTheme } from '../../core/api/terminal-theme-api';
+import type { TerminalTheme } from './terminal-theme-api';
 import { monoFontReady } from '../../core/browser/fonts';
 import { cssToken } from '../../core/browser/theme';
 

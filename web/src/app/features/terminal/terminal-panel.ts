@@ -1,7 +1,7 @@
 import { Component, inject } from '@angular/core';
 
 import { Dialogs } from '../../core/browser/dialogs';
-import { TerminalInfo } from '../../core/realtime/terminal-protocol';
+import { TerminalInfo } from './terminal-protocol';
 import { TerminalStore } from './terminal-store';
 import { TerminalView } from './terminal-view';
 
