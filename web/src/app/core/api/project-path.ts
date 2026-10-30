@@ -19,8 +19,3 @@ export function isSafeRelativePath(path: string): boolean {
 export function baseName(path: string): string {
   return path.slice(path.lastIndexOf('/') + 1);
 }
-
-/** Joins a directory and an entry name into a relative path. */
-export function joinPath(directory: string, name: string): string {
-  return directory === '' ? name : `${directory}/${name}`;
-}
