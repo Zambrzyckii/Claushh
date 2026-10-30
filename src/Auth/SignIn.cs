@@ -9,8 +9,8 @@ using Microsoft.AspNetCore.Identity;
 
 namespace Claushh.Api.Auth;
 
-// How a sign-in ended. TooMany carries the Retry-After seconds, Succeeded the new session's secret, and ChallengeTaken
-// says that a passkey login used up its challenge.
+// How a sign-in ended. TooMany carries the Retry-After seconds, Succeeded the new session's secret (none after a
+// re-authentication), and ChallengeTaken says that a passkey login used up its challenge.
 public enum SignInStatus { Succeeded, Failed, TooMany }
 
 public sealed record SignInOutcome(SignInStatus Status, int RetryAfter = 0, string? Secret = null, bool ChallengeTaken = false);

@@ -1,7 +1,8 @@
 // The account's passkeys (docs/ARCHITECTURE.md, "Authentication" → "Passkeys"; decisions: docs/PLAN.md, "Backend
 // decisions (passkeys)"): re-authentication, the list, adding, renaming, removing, and the passkey login. Identity's
 // passkey handler makes the options and checks the credentials; this file keeps its states on the server
-// (PasskeyCeremonies), binds them to the session, and applies the login gate, the limits and the notifications.
+// (PasskeyCeremonies), binds them to the session, applies the login gate to adding, the per-IP limit to the login
+// options and the notifications to adding and removing, and leaves re-authentication and the passkey login to SignIn.
 using System.Buffers.Text;
 using System.Globalization;
 using System.Text;

@@ -1,7 +1,8 @@
 // Login protection (docs/ARCHITECTURE.md, "Backend", "Login protection"; decisions: docs/PLAN.md, "Login and sessions"):
 // the client address, the limit of failed attempts per address, the account lockout after wrong codes and the login
-// history. The only place with these rules; the login, passkey and re-authentication endpoints call it. Time comes from
-// TimeProvider, so tests move the clock instead of waiting.
+// history. The only place with these rules. SignIn applies them to the three ways in, and the passkey endpoints use the
+// gate when a passkey is added and the per-IP limit for the login options. Time comes from TimeProvider, so tests move
+// the clock instead of waiting.
 using System.Globalization;
 using System.Net;
 using System.Net.Sockets;

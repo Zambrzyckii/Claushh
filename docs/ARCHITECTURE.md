@@ -64,7 +64,7 @@ On the server (decisions: `PLAN.md`, "Deployment decisions"):
 | `src/Frontend/` | serving the built frontend (`Frontend:Root`) |
 | `src/Claude/` | the console: the claude CLI, conversations, their processes and event log, the `/hubs/console` hub. Not `Console/`, whose namespace would hide `System.Console`. `Translation/` (what the CLI's stream-json lines mean for a turn) |
 | `dotnet-tools.json` | local .NET tools: `dotnet-ef` (`dotnet tool restore`) |
-| `tests/Claushh.Api.Tests/` | backend integration tests: xUnit, the API in memory (`WebApplicationFactory`), PostgreSQL 17 from Testcontainers (`ApiFactory`). One folder per feature folder of `src/`, plus `Support/` (the shared harness) and `ConsoleRecordings/` |
+| `tests/Claushh.Api.Tests/` | backend integration tests: xUnit, the API in memory (`WebApplicationFactory`), PostgreSQL 17 from Testcontainers (`ApiFactory`). One folder per feature folder of `src/` that has tests, plus `Support/` (the shared harness) and `ConsoleRecordings/` |
 | `tests/Claushh.FakeClaude/` | a stand-in for the `claude` CLI in the backend tests: replays scripted stream-json lines and logs what the API sent; scripts are made of the recordings in `tests/Claushh.Api.Tests/ConsoleRecordings/` |
 | `global.json` | `dotnet test` runs on Microsoft.Testing.Platform (required by xUnit v3 on the .NET 10 SDK) |
 | `web/` | Angular 21 frontend (standalone components, signals, the new `@if` syntax) |
@@ -896,7 +896,7 @@ Frontend (`Frontend/`; decisions: `PLAN.md`, "Backend decisions (stage 1, part C
   (`DoubleSlashNotFound.UseDoubleSlashNotFound` in `Web/`), also without `Frontend:Root`.
 - Content types come from the framework's list, except `.ttf` as `font/ttf` and `.woff` as `font/woff` (`.woff2` is `font/woff2` and `.svg` `image/svg+xml` already); unknown types are not served. `index.html`
   is `no-store`, every other file `no-cache` (revalidated with its ETag).
-- `SecurityHeaders` sets the headers of "Security headers" on every response; the CSP goes only with the page.
+- `SecurityHeaders` (in `Web/`) sets the headers of "Security headers" on every response; the CSP goes only with the page.
   Antiforgery's own `X-Frame-Options` is suppressed.
 
 Sessions (`Auth/`):
@@ -963,8 +963,8 @@ Login protection (`Auth/`):
 Passkeys (`Auth/Passkeys/`; the contract is in "Authentication" → "Passkeys"; decisions: `PLAN.md`, "Backend decisions
 (passkeys)"):
 - Identity stores them (schema version 3): table `AspNetUserPasskeys`, keyed by the credential id, the rest as JSON.
-  Its `PasskeyHandler` makes the options and checks the credentials; `AuthModule` registers it, and the endpoints
-  call it directly, without `SignInManager`.
+  Its `PasskeyHandler` makes the options and checks the credentials; `AuthModule` registers it, and the endpoints and
+  `SignIn.PasskeyAsync` call it directly, without `SignInManager`.
 - The RP ID is `Passkeys:ServerDomain`. A credential's origin must be one of `Hubs:AllowedOrigins`, without
   `crossOrigin` and without a top origin; user verification is required; the creation options ask for a discoverable
   credential (the server does not check this) and no attestation.
@@ -985,11 +985,11 @@ Passkeys (`Auth/Passkeys/`; the contract is in "Authentication" → "Passkeys"; 
 - Login: `login-options` (outside the gate, behind the per-IP limit only) asks Identity for request options without a
   user and keeps the state under a random id (32 bytes, base64url) in the challenge cookie: at most 3 pending
   challenges per address (the per-IP limit's key) and 10,000 in all, the oldest dropped; 5 minutes, used once.
-  `login` (`SignIn.PasskeyAsync`) enters the gate, checks the per-IP limit, takes the challenge and expires its
-  cookie, and lets Identity check the assertion (the user from the user handle, a stored passkey, the signature, a sign
-  count that grows unless both are 0). Every attempt that gets this far is recorded with the method `passkey`. A
-  success saves the passkey's new sign count and backup state, creates the session as a password login does, and sends
-  the passkey login notification.
+  `login` (`SignIn.PasskeyAsync`) enters the gate, checks the per-IP limit, takes the challenge and lets Identity check
+  the assertion (the user from the user handle, a stored passkey, the signature, a sign count that grows unless both are
+  0). The endpoint expires the challenge cookie of every attempt that took it. Every attempt that gets this far is
+  recorded with the method `passkey`. A success saves the passkey's new sign count and backup state, creates the session
+  as a password login does, and sends the passkey login notification.
 
 Notifications (`Auth/Notifications/`; decisions: `PLAN.md`, "Backend decisions (stage 1, part C)"):
 - `LoginNotifications` sends a phone notification through ntfy for these events, never with the user name:

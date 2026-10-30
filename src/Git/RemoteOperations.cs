@@ -1,6 +1,7 @@
 // Git's remote operations (docs/ARCHITECTURE.md, "Workspaces and git"; decisions: docs/PLAN.md, "Backend decisions
-// (stage 4)"): pull, push and clone, each under the repository's lock and within one Git:NetworkTimeout, with git's
-// messages carried verbatim and a typed outcome that the endpoints map to status codes.
+// (stage 4)"): pull, push and clone, each under the repository's lock and within one Git:NetworkTimeout, with git's own
+// messages (pull and push replace the resolved path with the API path) and a typed outcome that the endpoints map to
+// status codes.
 using Claushh.Api.Platform;
 using Claushh.Api.Projects;
 using Microsoft.Extensions.Options;
