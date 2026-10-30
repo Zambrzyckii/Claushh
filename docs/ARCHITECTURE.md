@@ -59,7 +59,7 @@ On the server (decisions: `PLAN.md`, "Deployment decisions"):
 | `src/Auth/` | login and sessions: session rules, the login gate with its limits and lockout, TOTP, the auth cookies and the XSRF filter, cleanup after 90 days. `Passkeys/` (passkey ceremonies and endpoints), `Account/` (`create-user` and its command line), `Notifications/` (phone notifications of logins through ntfy), `Realtime/` (hub connections tied to their session and closed when it ends) |
 | `src/Files/` | the files API and search in files |
 | `src/Workspaces/` | workspaces, the repository list of a workspace, cloning |
-| `src/Git/` | repositories read with libgit2, the git CLI, one lock per repository, the background fetch, the git API |
+| `src/Git/` | repositories read with libgit2, the git CLI, one lock per repository, the background fetch, remote operations (pull and push), the git API |
 | `src/Terminal/` | the terminal: the API's own tmux server, the terminals, the `/hubs/terminal` hub, the theme API |
 | `src/Frontend/` | serving the built frontend (`Frontend:Root`) |
 | `src/Claude/` | the console: the claude CLI, conversations, their processes and event log, the `/hubs/console` hub. Not `Console/`, whose namespace would hide `System.Console`. `Translation/` (what the CLI's stream-json lines mean for a turn) |
@@ -1104,18 +1104,18 @@ Workspaces and git (`Workspaces/`, `Git/`):
   the destination given by name (not the resolved path), so git's own "Cloning into '…'" message never puts a
   resolved path in a `502` response. A failure or a timeout removes the target directory if it exists and answers
   `502`; a clone that is not a repository the portal can read is a `500`.
-- Pull: no upstream (also a detached HEAD) → `400`; `git fetch <remote>` (a failure → `502`); nothing new → "Already
-  up to date."; `git merge --ff-only @{upstream}` (a failure → `409` with git's message); then `changedPaths` from `git
-  diff --name-only --no-renames -z <old HEAD> HEAD` (on a branch that had no commits, `git ls-tree -r --name-only -z HEAD`).
-- Push: a detached HEAD → `400`; an upstream with nothing ahead → "Nothing to push." without the network; with an
-  upstream `git push --porcelain <remote> HEAD:<its branch>` (explicit, so `push.default` does not matter); without one
-  but with `origin`, `git push --porcelain -u origin HEAD`; neither → `400`. When ahead cannot be computed (the
-  upstream has no tip yet, e.g. a freshly cloned empty remote, or there is no common history) the shortcut is skipped
-  and the push runs regardless, so git's own porcelain output decides `200`/`409`/`502` as for any push; its success
-  message then counts HEAD's own commits, since there is nothing ahead can be compared against. A porcelain line
-  `!…[rejected]` → `409`; any other failure → `502`. A message that repeats the repository's resolved path (e.g. a
-  stale lock file) has it replaced
-  with the API path, as clone's destination name does for its own message.
+- Pull (`RemoteOperations.PullAsync`): no upstream (also a detached HEAD) → `400`; `git fetch <remote>` (a failure →
+  `502`); nothing new → "Already up to date."; `git merge --ff-only @{upstream}` (a failure → `409` with git's message);
+  then `changedPaths` from `git diff --name-only --no-renames -z <old HEAD> HEAD` (on a branch that had no commits, `git
+  ls-tree -r --name-only -z HEAD`).
+- Push (`RemoteOperations.PushAsync`): a detached HEAD → `400`; an upstream with nothing ahead → "Nothing to push."
+  without the network; with an upstream `git push --porcelain <remote> HEAD:<its branch>` (explicit, so `push.default`
+  does not matter); without one but with `origin`, `git push --porcelain -u origin HEAD`; neither → `400`. When ahead
+  cannot be computed (the upstream has no tip yet, e.g. a freshly cloned empty remote, or there is no common history)
+  the shortcut is skipped and the push runs regardless, so git's own porcelain output decides `200`/`409`/`502` as for
+  any push; its success message then counts HEAD's own commits, since there is nothing ahead can be compared against. A
+  porcelain line `!…[rejected]` → `409`; any other failure → `502`. A message that repeats the repository's resolved
+  path (e.g. a stale lock file) has it replaced with the API path, as clone's destination name does for its own message.
 
 Hubs (`Auth/Realtime/` and `Web/HubOrigins.cs`, shared by every hub):
 - SignalR with the JSON protocol, WebSocket only; the frontend skips negotiation. Detailed errors are off: a client

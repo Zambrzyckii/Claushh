@@ -13,6 +13,7 @@ public static class GitModule
         services.AddSingleton<GitRunner>();
         services.AddSingleton<RepoLocks>();
         services.AddSingleton<BackgroundFetch>();
+        services.AddSingleton<RemoteOperations>();
         return services;
     }
 }

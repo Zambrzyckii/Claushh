@@ -2,7 +2,6 @@
 // "Workspaces and git" → "API contract").
 using Claushh.Api.Projects;
 using Claushh.Api.Web;
-using Microsoft.Extensions.Options;
 
 namespace Claushh.Api.Git;
 
@@ -57,123 +56,45 @@ public static class GitEndpoints
 
     // `git pull --ff-only` as its two steps, so that the answer follows the step that failed: the fetch (502), then a
     // fast-forward merge (409). The lock and every step share one Git:NetworkTimeout.
-    private static async Task<IResult> Pull(string? repo, HttpContext http, Repositories repositories, RepoLocks locks,
-        GitRunner git, IOptionsMonitor<GitOptions> options)
+    private static async Task<IResult> Pull(string? repo, HttpContext http, Repositories repositories,
+        RemoteOperations remote)
     {
         var lookup = repositories.Find(repo);
         if (lookup is not { Status: LookupStatus.Found, Path: { } repository })
         {
             return lookup.Status == LookupStatus.Invalid ? Results.BadRequest() : Results.NotFound();
         }
-        using var deadline = new GitDeadline(options.CurrentValue.NetworkTimeout, http.RequestAborted);
-        try
+        var result = await remote.PullAsync(repository, http.RequestAborted);
+        return result.Status switch
         {
-            using var held = await locks.EnterAsync(repository.FullPath, deadline);
-            var before = repositories.Head(repository);
-            if (before is not { Upstream: not null, Remote: { } remote })
-            {
-                return Results.BadRequest(new MessageResponse("The branch has no upstream."));
-            }
-            var fetch = await git.RunAsync(repository.FullPath, ["fetch", remote], deadline);
-            if (!fetch.Succeeded)
-            {
-                return RemoteError(Redacted(fetch.Message, repository));
-            }
-            var behind = repositories.Head(repository).Behind;
-            if (behind == 0)
-            {
-                return Results.Ok(new PullResponse("Already up to date.", []));
-            }
-            var merge = await git.RunAsync(repository.FullPath, ["merge", "--ff-only", "@{upstream}"], deadline, GitRunner.LocalStepLimit);
-            if (!merge.Succeeded)
-            {
-                return Results.Conflict(new MessageResponse(Redacted(merge.Message, repository)));
-            }
-            // Both paths of a rename (--no-renames); on a branch that had no commits, every file of the new HEAD.
-            string[] listing = before.Sha is { } old
-                ? ["diff", "--name-only", "--no-renames", "-z", old, "HEAD"]
-                : ["ls-tree", "-r", "--name-only", "-z", "HEAD"];
-            var changed = await git.RunAsync(repository.FullPath, listing, deadline, GitRunner.LocalStepLimit);
-            IReadOnlyList<string> paths = changed.Succeeded
-                ? changed.Output.Split('\0', StringSplitOptions.RemoveEmptyEntries).Select(path => $"{repository.Relative}/{path}").ToList()
-                : [];
-            return Results.Ok(new PullResponse($"Pulled {behind} {Commits(behind)}.", paths));
-        }
-        catch (GitTimeoutException e)
-        {
-            return RemoteError(e.ResponseMessage);
-        }
+            RemoteStatus.Done => Results.Ok(new PullResponse(result.Message, result.ChangedPaths!)),
+            RemoteStatus.InvalidState => Results.BadRequest(new MessageResponse(result.Message)),
+            RemoteStatus.Conflict => Results.Conflict(new MessageResponse(result.Message)),
+            _ => RemoteError(result.Message),
+        };
     }
 
     // To the tracked branch with an explicit refspec, so push.default does not matter; without an upstream, the
     // contract's `git push -u origin HEAD`. A ref refused as [rejected] (the remote has newer commits) is 409; any other
     // failure (network, authentication, [remote rejected] by a hook or a protection rule) is 502.
-    private static async Task<IResult> Push(string? repo, HttpContext http, Repositories repositories, RepoLocks locks,
-        GitRunner git, IOptionsMonitor<GitOptions> options)
+    private static async Task<IResult> Push(string? repo, HttpContext http, Repositories repositories,
+        RemoteOperations remote)
     {
         var lookup = repositories.Find(repo);
         if (lookup is not { Status: LookupStatus.Found, Path: { } repository })
         {
             return lookup.Status == LookupStatus.Invalid ? Results.BadRequest() : Results.NotFound();
         }
-        using var deadline = new GitDeadline(options.CurrentValue.NetworkTimeout, http.RequestAborted);
-        try
+        var result = await remote.PushAsync(repository, http.RequestAborted);
+        return result.Status switch
         {
-            using var held = await locks.EnterAsync(repository.FullPath, deadline);
-            var head = repositories.Head(repository);
-            if (head.Branch is not { } branch)
-            {
-                return Results.BadRequest(new MessageResponse("Detached HEAD: switch to a branch to push."));
-            }
-            string[] arguments;
-            string pushed;
-            if (head is { Upstream: { } upstream, Remote: { } remote, MergeRef: { } mergeRef })
-            {
-                if (head.AheadKnown && head.Ahead == 0)
-                {
-                    return Results.Ok(new MessageResponse("Nothing to push."));
-                }
-                arguments = ["push", "--porcelain", remote, $"HEAD:{mergeRef}"];
-                // Ahead unknown (no common history with the upstream, e.g. a freshly cloned empty remote): every
-                // commit of HEAD is one that this push sends.
-                var count = head.AheadKnown ? head.Ahead : repositories.CommitCount(repository);
-                pushed = $"Pushed {count} {Commits(count)} to {upstream}.";
-            }
-            else if (head.HasOrigin)
-            {
-                arguments = ["push", "--porcelain", "-u", "origin", "HEAD"];
-                pushed = $"Pushed branch {branch} to origin/{branch}.";
-            }
-            else
-            {
-                return Results.BadRequest(new MessageResponse("No remote 'origin'."));
-            }
-            var push = await git.RunAsync(repository.FullPath, arguments, deadline);
-            // --porcelain: a line per ref, starting with "!" for one that was refused.
-            var refused = push.Output.Split('\n').Where(line => line.StartsWith('!')).ToList();
-            if (push.Succeeded && refused.Count == 0)
-            {
-                return Results.Ok(new MessageResponse(pushed));
-            }
-            var message = Redacted(push.Message, repository);
-            return refused.Any(line => line.Contains("\t[rejected]", StringComparison.Ordinal))
-                ? Results.Conflict(new MessageResponse(message))
-                : RemoteError(message);
-        }
-        catch (GitTimeoutException e)
-        {
-            return RemoteError(e.ResponseMessage);
-        }
+            RemoteStatus.Done => Results.Ok(new MessageResponse(result.Message)),
+            RemoteStatus.InvalidState => Results.BadRequest(new MessageResponse(result.Message)),
+            RemoteStatus.Conflict => Results.Conflict(new MessageResponse(result.Message)),
+            _ => RemoteError(result.Message),
+        };
     }
 
     private static IResult RemoteError(string message) =>
         Results.Json(new MessageResponse(message), statusCode: StatusCodes.Status502BadGateway);
-
-    // git's own messages can repeat the repository's resolved path (e.g. a stale index.lock); the response gets the
-    // API path instead, so responses never contain resolved paths.
-    private static string Redacted(string message, ProjectPath repository) =>
-        message.Replace(repository.FullPath, repository.Relative, StringComparison.Ordinal);
-
-    // English plural: 1 commit, otherwise commits.
-    private static string Commits(int count) => count == 1 ? "commit" : "commits";
 }
