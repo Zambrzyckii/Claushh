@@ -426,9 +426,11 @@ describe('Terminal (integration)', () => {
 
       expect(written).toEqual(['reset', 's1']);
 
-      order.completeAttach('s2', 6);
+      order.beginAttach();
+      send(8, 'during the attach');
+      order.completeAttach('s2', 7);
 
-      expect(written).toEqual(['reset', 's1', 'reset', 's2', 'while detached']);
+      expect(written).toEqual(['reset', 's1', 'reset', 's2', 'during the attach']);
     });
   });
 });
