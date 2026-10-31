@@ -12,7 +12,7 @@ public static partial class FrontendFiles
     private const string Index = "index.html";
 
     // The policy in index.html's Content-Security-Policy <meta> (web/src/index.html), read as the mock reads it
-    // (web/e2e/mock-api/server.mjs, pageCsp); null without the file or the <meta>.
+    // (web/e2e/mock-api/routes/frontend.mjs, pageCsp); null without the file or the <meta>.
     public static string? ReadPolicy(string root)
     {
         var index = Path.Join(root, Index);

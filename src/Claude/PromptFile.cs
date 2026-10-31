@@ -1,4 +1,4 @@
-// The open file a prompt names (web/src/app/core/realtime/console-protocol.ts; docs/ARCHITECTURE.md, "Console"): its
+// The open file a prompt names (web/src/app/features/console/console-protocol.ts; docs/ARCHITECTURE.md, "Console"): its
 // path and, for a selection, its lines. The CLI gets a note with the path only, never the file's content (decisions:
 // docs/PLAN.md, "Backend decisions (stage 3)").
 namespace Claushh.Api.Claude;

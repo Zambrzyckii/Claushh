@@ -1,4 +1,4 @@
-// The workspace name rule and the directory made from a name, exactly as the frontend (workspaces/validation.ts) and the
+// The workspace name rule and the directory made from a name, exactly as the frontend (source-control/validation.ts) and the
 // mock apply them (docs/ARCHITECTURE.md, "Workspaces and git"; decisions: docs/PLAN.md, "Backend decisions (stage 4)").
 using System.Globalization;
 using System.Text;

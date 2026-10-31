@@ -1,5 +1,5 @@
 // The User-Agent as it is stored with sessions and login attempts, and as the security window shows it, e.g.
-// "Chrome · Linux" (docs/ARCHITECTURE.md, "Backend"). The rules match the mock (web/e2e/mock-api/server.mjs,
+// "Chrome · Linux" (docs/ARCHITECTURE.md, "Backend"). The rules match the mock (web/e2e/mock-api/http.mjs,
 // deviceOf); the fallbacks are English like the rest of the interface.
 namespace Claushh.Api.Auth;
 
