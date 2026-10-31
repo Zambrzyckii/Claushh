@@ -16,18 +16,19 @@ import type { FitAddon } from '@xterm/addon-fit';
 import type { Terminal } from '@xterm/xterm';
 import { Subscription } from 'rxjs';
 
-import { TerminalThemeApi } from '../../core/api/terminal-theme-api';
+import { TerminalThemeApi } from './terminal-theme-api';
 import { DeviceLayout } from '../../core/browser/device-layout';
 import { Dialogs } from '../../core/browser/dialogs';
 import { isTypingElsewhere } from '../../core/browser/focus';
 import { onFontsLoaded } from '../../core/browser/fonts';
-import { TerminalInfo } from '../../core/realtime/terminal-protocol';
+import { TerminalInfo } from './terminal-protocol';
 import { countLabel } from '../../core/text/format';
 import { previewText } from '../../core/text/visible-text';
-import { WorkbenchState } from '../workspace/workbench-state';
 import { MAX_PENDING_INPUT, lineBreaks, sanitizePaste, withCtrl } from './terminal-input';
+import { PhoneKey, TerminalKeys, keySequence } from './terminal-keys';
+import { TerminalOutputOrder } from './terminal-output';
 import { TerminalStore } from './terminal-store';
-import { TERMINAL_FONT, loadXterm, terminalOptions } from './xterm-loader';
+import { TERMINAL_FONT, createTerminal, loadXterm } from './xterm-loader';
 
 /**
  * Characters typed during a disconnection are sent after reattaching without asking, if they waited less than this many ms.
@@ -68,150 +69,10 @@ const PASTE_MARGIN = 16;
  */
 @Component({
   selector: 'app-terminal-view',
+  imports: [TerminalKeys],
   host: { '[class.phone]': 'layout.phone()', '[style.background-color]': 'paddingBackground()' },
-  template: `
-    <div #host class="host"></div>
-    @if (loadFailed()) {
-      <p class="failed" role="alert">Could not load the terminal. Reload the page.</p>
-    }
-    @if (pasteRequest(); as request) {
-      <div class="decision decision--top" role="alertdialog" [attr.aria-labelledby]="ids.pasteTitle"
-           [attr.aria-describedby]="ids.pasteText" (keydown.escape)="cancelPaste()">
-        <p [id]="ids.pasteTitle">
-          The pasted text has {{ request.breaksLabel }}, so it can run commands at once. Paste it into the terminal?
-        </p>
-        <pre [id]="ids.pasteText">{{ request.preview }}</pre>
-        <div>
-          <button type="button" (click)="confirmPaste()">Paste</button>
-          <button #cancelPasteButton type="button" (click)="cancelPaste()">Cancel</button>
-        </div>
-      </div>
-    }
-    @if (inputState().held) {
-      <div class="decision" role="alertdialog" [attr.aria-labelledby]="ids.staleTitle" [attr.aria-describedby]="ids.staleText">
-        <p [id]="ids.staleTitle">Characters typed while disconnected did not reach the terminal. Send them now?</p>
-        <pre [id]="ids.staleText">{{ stalePreview() }}</pre>
-        <p class="faint">The terminal shows what already reached it. “Discard” removes only the characters above.</p>
-        <div>
-          <button type="button" (click)="sendStaleInput()">Send</button>
-          <button type="button" (click)="discardStaleInput()">Discard</button>
-        </div>
-      </div>
-    } @else if (inputNotice(); as notice) {
-      <p class="notice" role="status">{{ notice }}</p>
-    }
-    @if (layout.phone()) {
-      <div class="keys" role="toolbar" aria-label="Terminal keys">
-        @for (key of keys; track key.id) {
-          <button type="button" [disabled]="!!pasteRequest()" [attr.aria-label]="key.label"
-                  [attr.aria-pressed]="key.id === 'ctrl' ? ctrl() : null"
-                  (pointerdown)="$event.preventDefault()" (mousedown)="$event.preventDefault()" (click)="press(key.id)">
-            @if (key.icon) {
-              <span [class]="'codicon codicon-' + key.icon" aria-hidden="true"></span>
-            } @else {
-              {{ key.label }}
-            }
-          </button>
-        }
-      </div>
-    }
-  `,
-  styles: `
-    :host {
-      display: block;
-      position: relative;
-      height: 100%;
-    }
-    .host {
-      position: absolute;
-      inset: 10px;
-    }
-    .failed {
-      position: absolute;
-      margin: 12px 16px;
-      color: var(--error);
-    }
-    .notice {
-      position: absolute;
-      right: 12px;
-      bottom: 8px;
-      margin: 0;
-      padding: 4px 8px;
-      background: var(--surface);
-      border: 1px solid var(--warning);
-      border-radius: 3px;
-      color: var(--warning);
-      font-size: 12px;
-    }
-    .decision {
-      box-sizing: border-box;
-      position: absolute;
-      right: 12px;
-      bottom: 8px;
-      max-width: min(560px, calc(100% - 24px));
-      max-height: calc(100% - 16px);
-      overflow: auto;
-      padding: 8px 12px;
-      background: var(--surface);
-      border: 1px solid var(--warning);
-      border-radius: 3px;
-      font-size: 12px;
-
-      &--top {
-        top: 8px;
-        bottom: auto;
-      }
-      p {
-        margin: 0 0 6px;
-      }
-      pre {
-        margin: 0 0 6px;
-        white-space: pre-wrap;
-        overflow-wrap: anywhere;
-        font-family: var(--font-mono);
-        color: var(--text-strong);
-      }
-      .faint {
-        color: var(--text-muted);
-      }
-      button {
-        margin-right: 8px;
-        border-color: var(--border-strong);
-      }
-    }
-    .keys {
-      position: absolute;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      height: 40px;
-      display: flex;
-      background: var(--surface);
-      border-top: 1px solid var(--border);
-    }
-    .keys button {
-      flex: 1 1 0;
-      min-width: 0;
-      height: 100%;
-      padding: 0;
-      border-radius: 0;
-      font-family: var(--font-mono);
-      font-size: 12px;
-    }
-    .keys button[aria-pressed='true'] {
-      color: var(--accent);
-    }
-    :host(.phone) .host {
-      bottom: 50px;
-    }
-    :host(.phone) .notice,
-    :host(.phone) .decision:not(.decision--top) {
-      bottom: 48px;
-    }
-    :host(.phone) .decision {
-      max-height: calc(100% - 56px);
-    }
-  `
+  templateUrl: './terminal-view.html',
+  styleUrl: './terminal-view.scss'
 })
 export class TerminalView {
   readonly terminal = input.required<TerminalInfo>();
@@ -220,8 +81,7 @@ export class TerminalView {
   private readonly dialogs = inject(Dialogs);
   protected readonly layout = inject(DeviceLayout);
   private readonly injector = inject(Injector);
-  /** Optional: a view outside the workspace has no panels to drag. */
-  private readonly workbench = inject(WorkbenchState, { optional: true });
+  readonly resizing = input(false);
   private readonly themes = inject(TerminalThemeApi);
   private readonly host = viewChild.required<ElementRef<HTMLElement>>('host');
   private readonly cancelPasteButton = viewChild<ElementRef<HTMLButtonElement>>('cancelPasteButton');
@@ -230,9 +90,7 @@ export class TerminalView {
   private term: Terminal | null = null;
   private fit: FitAddon | null = null;
   private resizeObserver: ResizeObserver | null = null;
-  private attached = false;
-  private lastSeq = 0;
-  private pending: { seq: number; data: string }[] = [];
+  private readonly outputOrder = new TerminalOutputOrder({ reset: () => this.term?.reset(), write: (data) => this.term?.write(data) });
   private exitShown = false;
   private destroyed = false;
   /** Stops re-measuring on late fonts (set in `init`). */
@@ -245,17 +103,6 @@ export class TerminalView {
   /** Unique identifiers of panel elements (there are several terminals in the panel at once). */
   protected readonly ids = panelIds(`term-${crypto.randomUUID()}`);
 
-  /** The phone keys, in the row's order. */
-  protected readonly keys: readonly { id: PhoneKey; label: string; icon?: string }[] = [
-    { id: 'esc', label: 'Esc' },
-    { id: 'tab', label: 'Tab' },
-    { id: 'ctrl', label: 'Ctrl' },
-    { id: 'left', label: 'Left', icon: 'arrow-left' },
-    { id: 'up', label: 'Up', icon: 'arrow-up' },
-    { id: 'down', label: 'Down', icon: 'arrow-down' },
-    { id: 'right', label: 'Right', icon: 'arrow-right' },
-    { id: 'paste', label: 'Paste', icon: 'clippy' }
-  ];
   /** Sticky Ctrl: the next typed character becomes its control code (`withCtrl`), then Ctrl turns off. */
   protected readonly ctrl = signal(false);
 
@@ -297,14 +144,14 @@ export class TerminalView {
     // confirms what arrived and pauses characters that are too old (also when the connection comes back via a manual "reconnect").
     effect(() => {
       if (this.store.connectionState() !== 'connected') {
-        this.attached = false;
+        this.outputOrder.detach();
       }
     });
 
     // A dragged panel edge holds the terminal at its size; it fits once when the drag ends, so tmux is resized once
     // per drag (docs/ARCHITECTURE.md, "Frontend" → "Layout").
     effect(() => {
-      if (!(this.workbench?.resizing() ?? false) && this.term) {
+      if (!this.resizing() && this.term) {
         untracked(() => this.fitToContainer());
       }
     });
@@ -337,34 +184,7 @@ export class TerminalView {
       return;
     }
     const host = this.host().nativeElement;
-    const term = new xterm.Terminal(terminalOptions(this.layout.phone(), theme));
-    const fit = new xterm.FitAddon();
-    term.loadAddon(fit);
-    // OSC 8 links disabled: the visible text ("https://github.com/…") could lead somewhere else.
-    // A handler that returns `true` takes over the sequence, so xterm does not create a link. The text itself is displayed.
-    term.parser.registerOscHandler(8, () => true);
-    // Terminal queries (device attributes, cursor position, modes, colours) are left to tmux on the server: it
-    // answers the cursor position report, the mode report and the colour queries, and passes every query on to every
-    // view, so xterm answering too would type one more reply per open tab into the program (e.g. "^[[<row>;<col>R"
-    // in vim). Device attributes get no answer at all (tmux does not answer them either), which is accepted: an
-    // answer from the view would have the same per-tab duplication problem. A handler that returns `true` takes the
-    // sequence over, so xterm sends nothing.
-    const queries = [
-      { final: 'c' },
-      { prefix: '>', final: 'c' },
-      { final: 'n' },
-      { prefix: '?', final: 'n' },
-      { intermediates: '$', final: 'p' },
-      { prefix: '?', intermediates: '$', final: 'p' }
-    ];
-    for (const query of queries) {
-      term.parser.registerCsiHandler(query, () => true);
-    }
-    term.parser.registerDcsHandler({ intermediates: '$', final: 'q' }, () => true);
-    // Colour queries ("?") only: setting a colour still works.
-    for (const colour of [4, 10, 11, 12]) {
-      term.parser.registerOscHandler(colour, (data) => data.split(';').includes('?'));
-    }
+    const { term, fit } = createTerminal(xterm, this.layout.phone(), theme);
     this.paddingBackground.set(theme?.background ?? null);
     term.open(host);
     this.term = term;
@@ -389,11 +209,11 @@ export class TerminalView {
       void this.flushInput();
     });
     term.onResize(({ cols, rows }) => {
-      if (this.attached) {
+      if (this.outputOrder.attached) {
         this.store.resize(this.id, cols, rows);
       }
     });
-    this.subscriptions.add(this.store.output(this.id).subscribe((chunk) => this.onOutput(chunk)));
+    this.subscriptions.add(this.store.output(this.id).subscribe((chunk) => this.outputOrder.receive(chunk)));
     this.subscriptions.add(this.store.reattach.subscribe(() => void this.attach()));
 
     this.resizeObserver = new ResizeObserver(() => this.fitToContainer());
@@ -410,22 +230,14 @@ export class TerminalView {
     if (!term) {
       return;
     }
-    this.attached = false;
-    this.pending = [];
+    this.outputOrder.beginAttach();
     try {
       const attachment = await this.store.attach(this.id, term.cols, term.rows);
       if (this.destroyed) {
         return;
       }
-      term.reset();
-      term.write(attachment.snapshot);
-      this.lastSeq = attachment.seq;
-      this.attached = true;
+      this.outputOrder.completeAttach(attachment.snapshot, attachment.seq);
       this.exitShown = false;
-      for (const chunk of this.pending) {
-        this.onOutput(chunk);
-      }
-      this.pending = [];
       if (this.terminal().exited) {
         this.showExit();
       }
@@ -439,7 +251,7 @@ export class TerminalView {
 
   /** Sends the waiting characters if the view is attached (the queue will not send paused ones on its own). */
   private flushInput(): Promise<void> {
-    return this.attached ? this.inputQueue().flush() : Promise.resolve();
+    return this.outputOrder.attached ? this.inputQueue().flush() : Promise.resolve();
   }
 
   protected sendStaleInput(): void {
@@ -538,20 +350,8 @@ export class TerminalView {
     afterNextRender(() => this.cancelPasteButton()?.nativeElement.focus(), { injector: this.injector });
   }
 
-  private onOutput(chunk: { seq: number; data: string }): void {
-    if (!this.attached) {
-      this.pending.push(chunk);
-      return;
-    }
-    if (chunk.seq <= this.lastSeq) {
-      return; // already in the snapshot
-    }
-    this.lastSeq = chunk.seq;
-    this.term?.write(chunk.data);
-  }
-
   private showExit(): void {
-    if (!this.term || !this.attached || this.exitShown) {
+    if (!this.term || !this.outputOrder.attached || this.exitShown) {
       return;
     }
     this.exitShown = true;
@@ -559,7 +359,7 @@ export class TerminalView {
   }
 
   private fitToContainer(): void {
-    if (this.workbench?.resizing()) {
+    if (this.resizing()) {
       return;
     }
     const element = this.host().nativeElement;
@@ -582,21 +382,6 @@ export class TerminalView {
     term.options.fontFamily = TERMINAL_FONT;
     this.fitToContainer();
   }
-}
-
-type PhoneKey = 'esc' | 'tab' | 'ctrl' | 'left' | 'up' | 'down' | 'right' | 'paste';
-
-const ARROWS = { left: 'D', up: 'A', down: 'B', right: 'C' } as const;
-
-/** Esc, Tab and the arrows as a terminal sends them; arrows follow the application cursor mode. */
-function keySequence(key: 'esc' | 'tab' | keyof typeof ARROWS, applicationCursor: boolean): string {
-  if (key === 'esc') {
-    return '\x1b';
-  }
-  if (key === 'tab') {
-    return '\t';
-  }
-  return (applicationCursor ? '\x1bO' : '\x1b[') + ARROWS[key];
 }
 
 function panelIds(prefix: string) {

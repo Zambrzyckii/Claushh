@@ -3,7 +3,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 
 import { baseName } from '../../core/api/project-path';
 import { ProjectContext } from '../../core/project/project-context';
-import { ConsoleConnection } from '../../core/realtime/console-connection';
+import { ConsoleConnection } from './console-connection';
 import {
   ConsoleEvent,
   ConsoleOptions,
@@ -11,7 +11,7 @@ import {
   PermissionDecision,
   PromptFile,
   StepKind
-} from '../../core/realtime/console-protocol';
+} from './console-protocol';
 import { EditorStore } from '../editor/editor-store';
 
 /**
@@ -75,14 +75,19 @@ export class ConsoleStore {
     return null;
   });
 
+  /**
+   * While the console works or waits for an answer, no prompt is sent, no new conversation starts and Stop takes the
+   * place of Send.
+   */
+  readonly busy = computed(() => this.stateSignal() === 'working' || this.stateSignal() === 'waiting');
+
   /** Whether a prompt can be sent: there is a connection, the conversation is loaded and Claude is not working. */
   readonly canSend = computed(
     () =>
       this.connection.state() === 'connected' &&
       !this.loading() &&
       !this.sending() &&
-      this.stateSignal() !== 'working' &&
-      this.stateSignal() !== 'waiting'
+      !this.busy()
   );
 
   /** × leaves the open file out until another file becomes active, as VS Code's chip. */
@@ -187,14 +192,14 @@ export class ConsoleStore {
 
   async interrupt(): Promise<void> {
     const conversationId = this.conversationId();
-    if (conversationId && (this.stateSignal() === 'working' || this.stateSignal() === 'waiting')) {
+    if (conversationId && this.busy()) {
       await this.connection.interrupt(conversationId).catch(() => this.failure.set('Could not interrupt.'));
     }
   }
 
   /** A new, empty conversation in the same project. The previous one stays on the server. */
   async newConversation(): Promise<void> {
-    if (this.sending() || this.stateSignal() === 'working' || this.stateSignal() === 'waiting') {
+    if (this.sending() || this.busy()) {
       return;
     }
     // The same lock as when sending: a prompt sent in the meantime would still go to the previous conversation.

@@ -158,7 +158,7 @@ export class CodeEditor {
     const monaco = this.monaco!;
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => void this.store.save());
     editor.onDidChangeCursorPosition((e) =>
-      this.store.cursor.set({ line: e.position.lineNumber, column: e.position.column })
+      this.store.reportShownFile({ cursor: { line: e.position.lineNumber, column: e.position.column } })
     );
     editor.onDidChangeCursorSelection((e) => this.reportSelection(e.selection));
   }
@@ -209,11 +209,7 @@ export class CodeEditor {
       this.reportPosition(editor, target.model);
       this.focus(editor);
     } else {
-      this.store.cursor.set(null);
-      this.store.language.set(null);
-      this.store.indentation.set(null);
-      this.store.eol.set(null);
-      this.store.selection.set(null);
+      this.store.clearShownFile();
     }
   }
 
@@ -317,7 +313,7 @@ export class CodeEditor {
 
   private reportPosition(editor: MonacoApi.editor.ICodeEditor, model: MonacoApi.editor.ITextModel): void {
     const position = editor.getPosition();
-    this.store.cursor.set(position ? { line: position.lineNumber, column: position.column } : null);
+    this.store.reportShownFile({ cursor: position ? { line: position.lineNumber, column: position.column } : null });
     this.reportSelection(editor.getSelection());
     this.reportModel(model);
   }
@@ -331,23 +327,25 @@ export class CodeEditor {
   /** A non-empty selection in the shown file, by lines. One that ends at the start of a line (Shift+Down) leaves that line out. */
   private reportSelection(selection: MonacoApi.Selection | null): void {
     if (!selection || selection.isEmpty() || !this.shownPath) {
-      this.store.selection.set(null);
+      this.store.reportShownFile({ selection: null });
       return;
     }
     const endLine =
       selection.endColumn === 1 && selection.endLineNumber > selection.startLineNumber ? selection.endLineNumber - 1 : selection.endLineNumber;
-    this.store.selection.set({ path: this.shownPath, startLine: selection.startLineNumber, endLine });
+    this.store.reportShownFile({ selection: { path: this.shownPath, startLine: selection.startLineNumber, endLine } });
   }
 
   /** Indentation (spaces of the indent size, or the tab size), line endings and the language's display name ("C"). */
   private reportModel(model: MonacoApi.editor.ITextModel): void {
     const options = model.getOptions();
-    this.store.indentation.set({
-      insertSpaces: options.insertSpaces,
-      size: options.insertSpaces ? options.indentSize : options.tabSize
-    });
-    this.store.eol.set(model.getEOL() === '\r\n' ? 'CRLF' : 'LF');
     const id = model.getLanguageId();
-    this.store.language.set(this.monaco?.languages.getLanguages().find((language) => language.id === id)?.aliases?.[0] ?? id);
+    this.store.reportShownFile({
+      indentation: {
+        insertSpaces: options.insertSpaces,
+        size: options.insertSpaces ? options.indentSize : options.tabSize
+      },
+      eol: model.getEOL() === '\r\n' ? 'CRLF' : 'LF',
+      language: this.monaco?.languages.getLanguages().find((language) => language.id === id)?.aliases?.[0] ?? id
+    });
   }
 }

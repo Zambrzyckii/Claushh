@@ -1,8 +1,10 @@
-import { HttpClient, HttpErrorResponse, HttpParams } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { Observable, catchError, map, throwError } from 'rxjs';
+import { Observable, map, throwError } from 'rxjs';
 
+import { mapHttpError, readHttpFailure } from './api-error';
 import { isSafeRelativePath } from './project-path';
+import { NO_CONNECTION } from '../text/format';
 
 /**
  * Access to files in the projects directory through the API.
@@ -74,7 +76,7 @@ export class FilesApi {
     if (!isSafeRelativePath(path)) {
       return throwError(() => new FileApiError('invalid-path'));
     }
-    return request().pipe(catchError((error: unknown) => throwError(() => toFileApiError(error))));
+    return request().pipe(mapHttpError(toFileApiError));
   }
 }
 
@@ -83,10 +85,11 @@ function pathParam(path: string): HttpParams {
 }
 
 function toFileApiError(error: unknown): FileApiError {
-  if (!(error instanceof HttpErrorResponse)) {
+  const failure = readHttpFailure(error);
+  if (!failure) {
     return new FileApiError('server');
   }
-  switch (error.status) {
+  switch (failure.status) {
     case 0:
       return new FileApiError('network');
     case 400:
@@ -94,7 +97,7 @@ function toFileApiError(error: unknown): FileApiError {
     case 404:
       return new FileApiError('not-found');
     case 409: {
-      const current = (error.error as { currentVersion?: unknown } | null)?.currentVersion;
+      const current = (failure.body as { currentVersion?: unknown } | null)?.currentVersion;
       return new FileApiError('conflict', typeof current === 'string' ? current : undefined);
     }
     case 413:
@@ -120,7 +123,7 @@ export function fileErrorMessage(kind: FileErrorKind): string {
     case 'invalid-path':
       return 'Invalid path.';
     case 'network':
-      return 'No connection to the server.';
+      return NO_CONNECTION;
     case 'server':
       return 'Server error.';
   }

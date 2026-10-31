@@ -3,8 +3,8 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Observable, Subject, filter, map, merge } from 'rxjs';
 
 import { ProjectContext } from '../../core/project/project-context';
-import { TerminalConnection } from '../../core/realtime/terminal-connection';
-import { TerminalAttachment, TerminalInfo } from '../../core/realtime/terminal-protocol';
+import { TerminalConnection } from './terminal-connection';
+import { TerminalAttachment, TerminalInfo } from './terminal-protocol';
 import { TerminalInputQueue } from './terminal-input';
 
 /**
@@ -15,7 +15,7 @@ import { TerminalInputQueue } from './terminal-input';
  * A new terminal starts in the directory of the open repository (ProjectContext).
  * The queues of typed characters (TerminalInputQueue) are here, not in the view: characters waiting for the connection
  * survive closing the panel, and each terminal has one sender (`client`).
- * Provided in the Workspace component.
+ * Provided in the Workbench component.
  */
 @Injectable()
 export class TerminalStore {

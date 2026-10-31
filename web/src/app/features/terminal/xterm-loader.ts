@@ -1,7 +1,7 @@
 import type { FitAddon } from '@xterm/addon-fit';
 import type { ITerminalOptions, ITheme, Terminal } from '@xterm/xterm';
 
-import type { TerminalTheme } from '../../core/api/terminal-theme-api';
+import type { TerminalTheme } from './terminal-theme-api';
 import { monoFontReady } from '../../core/browser/fonts';
 import { cssToken } from '../../core/browser/theme';
 
@@ -81,13 +81,13 @@ const PORTAL_ANSI: ITheme = {
 /**
  * Terminal appearance, read when a terminal is created. `theme`: the server's (pywal's) colors, which give the
  * background, the foreground, the cursor and the 16 ANSI colors; without one they come from the tokens of
- * `web/src/styles.scss` and the 16 ANSI colors above. The selection stays fixed here. `phone`: the phone layout's
- * smaller font. The line height adds about a pixel to the font's own, and bold text keeps its color instead of turning
- * bright, as in a desktop terminal.
+ * `web/src/styles.scss` and the 16 ANSI colors above. The selection always comes from the token `--editor-selection`.
+ * `phone`: the phone layout's smaller font. The line height adds about a pixel to the font's own, and bold text keeps
+ * its color instead of turning bright, as in a desktop terminal.
  *
  * Deliberately without clipboard addons (OSC 52): a program in the terminal cannot write anything to the browser clipboard.
  */
-export function terminalOptions(phone: boolean, theme: TerminalTheme | null): ITerminalOptions {
+function terminalOptions(phone: boolean, theme: TerminalTheme | null): ITerminalOptions {
   const background = theme?.background ?? cssToken('--surface');
   return {
     fontFamily: TERMINAL_FONT,
@@ -102,7 +102,7 @@ export function terminalOptions(phone: boolean, theme: TerminalTheme | null): IT
       foreground: theme?.foreground ?? cssToken('--text'),
       cursor: theme?.cursor ?? cssToken('--accent'),
       cursorAccent: background,
-      selectionBackground: '#2c3a52',
+      selectionBackground: cssToken('--editor-selection'),
       ...(theme ? ansiColours(theme.palette) : PORTAL_ANSI)
     }
   };
@@ -115,4 +115,40 @@ function ansiColours(palette: readonly string[]): ITheme {
     colours[name] = palette[i];
   });
   return colours;
+}
+
+/**
+ * A new terminal with its fit addon loaded, OSC 8 links disabled and terminal queries left to tmux (docs/ARCHITECTURE.md,
+ * section "Terminal", "Rules"). The caller opens it.
+ */
+export function createTerminal(xterm: XtermModules, phone: boolean, theme: TerminalTheme | null): { term: Terminal; fit: FitAddon } {
+  const term = new xterm.Terminal(terminalOptions(phone, theme));
+  const fit = new xterm.FitAddon();
+  term.loadAddon(fit);
+  // OSC 8 links disabled: the visible text ("https://github.com/…") could lead somewhere else.
+  // A handler that returns `true` takes over the sequence, so xterm does not create a link. The text itself is displayed.
+  term.parser.registerOscHandler(8, () => true);
+  // Terminal queries (device attributes, cursor position, modes, colours) are left to tmux on the server: it
+  // answers the cursor position report, the mode report and the colour queries, and passes every query on to every
+  // view, so xterm answering too would type one more reply per open tab into the program (e.g. "^[[<row>;<col>R"
+  // in vim). Device attributes get no answer at all (tmux does not answer them either), which is accepted: an
+  // answer from the view would have the same per-tab duplication problem. A handler that returns `true` takes the
+  // sequence over, so xterm sends nothing.
+  const queries = [
+    { final: 'c' },
+    { prefix: '>', final: 'c' },
+    { final: 'n' },
+    { prefix: '?', final: 'n' },
+    { intermediates: '$', final: 'p' },
+    { prefix: '?', intermediates: '$', final: 'p' }
+  ];
+  for (const query of queries) {
+    term.parser.registerCsiHandler(query, () => true);
+  }
+  term.parser.registerDcsHandler({ intermediates: '$', final: 'q' }, () => true);
+  // Colour queries ("?") only: setting a colour still works.
+  for (const colour of [4, 10, 11, 12]) {
+    term.parser.registerOscHandler(colour, (data) => data.split(';').includes('?'));
+  }
+  return { term, fit };
 }

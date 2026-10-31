@@ -22,7 +22,7 @@ export type ConnectionState = 'connecting' | 'connected' | 'reconnecting' | 'dis
  *   ends as on a 401 from the API (clearing the state and returning to login).
  * - Derived classes provide `url` and `label`, register server events in `register` and call hub methods
  *   via `invoke` / `send`.
- * - Provided in the Workspace component. Logout reloads the page, which closes the connection.
+ * - Provided in the Workbench component. Logout reloads the page, which closes the connection.
  */
 @Injectable()
 export abstract class HubClient implements OnDestroy {

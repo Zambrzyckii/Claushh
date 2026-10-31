@@ -1,0 +1,113 @@
+<nav class="workspaces" aria-label="Workspaces">
+  <h3 class="section-title">Workspaces</h3>
+  @if (store.listError(); as error) {
+    <p class="error" role="alert">{{ error }}</p>
+    <button type="button" (click)="store.load()">Try again</button>
+  }
+  @for (ws of store.workspaces(); track ws.path) {
+    <button type="button" class="workspace" [class.workspace--active]="ws.path === store.selected()"
+            [attr.aria-current]="ws.path === store.selected() ? 'true' : null" (click)="store.select(ws.path)">
+      <span class="workspace__name">{{ ws.name }}</span>
+      <span class="workspace__count">{{ repoCount(ws.repoCount) }}</span>
+    </button>
+  }
+
+  @if (creating()) {
+    <form class="inline-form" novalidate (submit)="create($event)">
+      <input #workspaceName type="text" aria-label="New workspace name" placeholder="name" maxlength="40"
+             autocomplete="off" (keydown.escape)="cancel('create')">
+      <div class="inline-form__buttons">
+        <button type="submit" class="primary" [disabled]="createBusy()">Create</button>
+        <button type="button" (click)="cancel('create')">Cancel</button>
+      </div>
+      @if (createError(); as error) {
+        <p class="error" role="alert">{{ error }}</p>
+      }
+    </form>
+  } @else if (store.workspaces()) {
+    <button type="button" class="workspaces__new" (click)="startCreating()"><span class="codicon codicon-add" aria-hidden="true"></span>New workspace</button>
+  }
+</nav>
+
+<section class="repos" [attr.aria-label]="'Repositories: ' + (store.selectedWorkspace()?.name ?? '')">
+  <h3 class="section-title">Repositories</h3>
+  @if (store.selectedWorkspace(); as ws) {
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">REPOSITORY</th>
+          <th scope="col">BRANCH</th>
+          <th scope="col">STATUS</th>
+          <th scope="col">LAST COMMIT</th>
+          <th scope="col">REMOTE</th>
+          <th scope="col" class="actions-head">
+            <button type="button" class="icon" aria-label="Refresh" (click)="store.refreshRepos()"><span class="codicon codicon-refresh" aria-hidden="true"></span></button>
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (repo of store.repos(); track repo.path) {
+          <tr class="repo" [class.repo--open]="isOpen(repo)">
+            <td class="repo__name">{{ repo.name }}</td>
+            <td class="mono" data-label="Branch">{{ branchLabel(repo.branch) }}</td>
+            <td data-label="Status" [class.changed]="repo.changes > 0" [class.faint]="repo.changes === 0">{{ state(repo) }}</td>
+            <td class="commit" data-label="Last commit" [title]="repo.lastCommit?.message ?? ''">
+              @if (repo.lastCommit; as commit) {
+                {{ commit.message }} <span class="faint">· {{ when(repo) }}</span>
+              } @else {
+                <span class="faint">no commits</span>
+              }
+            </td>
+            <td class="mono faint" data-label="Remote">{{ remote(repo) }}</td>
+            <td class="actions">
+              <button type="button" [class.is-on]="isOpen(repo)" [disabled]="isOpen(repo)"
+                      [attr.aria-label]="(isOpen(repo) ? 'Opened: ' : 'Open ') + repo.name" (click)="store.open(repo)">
+                {{ isOpen(repo) ? 'Opened' : 'Open' }}
+              </button>
+              <button type="button" [disabled]="store.busy().has(repo.path) || !repo.upstream"
+                      [attr.aria-label]="'Pull ' + repo.name" (click)="store.pull(repo)">
+                {{ store.busy().get(repo.path) === 'pull' ? 'Pull…' : 'Pull' }}
+              </button>
+              <button type="button" [disabled]="store.busy().has(repo.path)"
+                      [attr.aria-label]="'Push ' + repo.name" (click)="store.push(repo)">
+                {{ store.busy().get(repo.path) === 'push' ? 'Push…' : 'Push' }}
+              </button>
+            </td>
+          </tr>
+          @if (store.messages().get(repo.path); as msg) {
+            <tr class="repo-message">
+              <td colspan="6" [class.error]="msg.error" [attr.role]="msg.error ? 'alert' : 'status'">{{ msg.text }}</td>
+            </tr>
+          }
+        } @empty {
+          <tr>
+            <td colspan="6" class="faint">{{ store.repos() === null ? 'Loading…' : 'No repositories in this workspace.' }}</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+
+    @if (store.reposError(); as error) {
+      <p class="error padded" role="alert">{{ error }}</p>
+    }
+
+    <div class="padded">
+      @if (cloning()) {
+        <form class="inline-form inline-form--row" novalidate (submit)="clone($event)">
+          <input #cloneUrl type="url" aria-label="Repository URL to clone"
+                 placeholder="https://github.com/user/project.git" autocomplete="off" spellcheck="false"
+                 (keydown.escape)="cancel('clone')">
+          <button type="submit" class="primary" [disabled]="cloneBusy()">{{ cloneBusy() ? 'Cloning…' : 'Clone' }}</button>
+          <button type="button" [disabled]="cloneBusy()" (click)="cancel('clone')">Cancel</button>
+        </form>
+        @if (cloneError(); as error) {
+          <p class="error" role="alert">{{ error }}</p>
+        }
+      } @else {
+        <button type="button" (click)="startCloning()"><span class="codicon codicon-repo-clone" aria-hidden="true"></span>Clone a repository into “{{ ws.name }}”</button>
+      }
+    </div>
+  } @else if (store.workspaces()?.length === 0) {
+    <p class="faint padded">There is no workspace yet. Create the first one above.</p>
+  }
+</section>

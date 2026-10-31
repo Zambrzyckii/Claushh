@@ -1,0 +1,42 @@
+<div class="tabbar" role="tablist" aria-label="Views">
+  @for (t of tabs; track t.id) {
+    <button type="button" role="tab" [id]="'phone-tab-' + t.id" [attr.aria-selected]="tab() === t.id"
+            [attr.aria-controls]="'phone-pane-' + t.id" (click)="select(t.id)">{{ t.label }}</button>
+  }
+  @if (tab() === 'editor') {
+    <div class="tabbar__actions">
+      <button type="button" class="icon" aria-label="Explorer" [attr.aria-expanded]="state.drawerOpen() && state.view() === 'explorer'"
+              (click)="toggle('explorer')">
+        <span class="codicon codicon-files" aria-hidden="true"></span>
+      </button>
+      <button type="button" class="icon" aria-label="Search" [attr.aria-expanded]="state.drawerOpen() && state.view() === 'search'"
+              (click)="toggle('search')">
+        <span class="codicon codicon-search" aria-hidden="true"></span>
+      </button>
+      <button type="button" [disabled]="!editor.canSave()" (click)="save()">
+        <span class="codicon codicon-save" aria-hidden="true"></span>Save
+      </button>
+    </div>
+  }
+</div>
+
+<div class="panes">
+  <section role="tabpanel" class="pane" id="phone-pane-editor" aria-labelledby="phone-tab-editor"
+           [class.pane--active]="tab() === 'editor'" [attr.inert]="tab() === 'editor' ? null : ''">
+    <app-editor-pane />
+    <div class="scrim" [class.scrim--on]="state.drawerOpen()" (click)="state.drawerOpen.set(false)"></div>
+    <aside class="drawer" [class.drawer--open]="state.drawerOpen()" aria-label="Side bar">
+      <app-side-bar />
+    </aside>
+  </section>
+  <section role="tabpanel" class="pane" id="phone-pane-terminal" aria-labelledby="phone-tab-terminal"
+           [class.pane--active]="tab() === 'terminal'" [attr.inert]="tab() === 'terminal' ? null : ''">
+    @if (terminalVisited()) {
+      <app-terminal-panel />
+    }
+  </section>
+  <section role="tabpanel" class="pane" id="phone-pane-console" aria-labelledby="phone-tab-console"
+           [class.pane--active]="tab() === 'console'" [attr.inert]="tab() === 'console' ? null : ''">
+    <app-console-panel />
+  </section>
+</div>

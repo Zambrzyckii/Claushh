@@ -16,6 +16,7 @@
   --focus: var(--accent);
   --hover: #1f2126;
   --selection: #262830;
+  --editor-selection: #2c3a52; // selected text in the editor and the terminal
   --scrim: rgb(0 0 0 / 55%);
   --error: #f48771;
   --warning: #cca700;
@@ -368,7 +369,7 @@ dialog.sheet {
   }
 }
 
-// While a panel's edge is dragged (features/workspace/sash.ts): its cursor over the whole page, Monaco and the
+// While a panel's edge is dragged (workbench/sash.ts): its cursor over the whole page, Monaco and the
 // terminal included, and no text selection.
 html.sash-dragging-vertical,
 html.sash-dragging-vertical * {

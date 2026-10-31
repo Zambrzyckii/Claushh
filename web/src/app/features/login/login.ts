@@ -5,7 +5,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { AuthService, LoginResult, PasskeyLoginResult } from '../../core/auth/auth.service';
 import { safeReturnUrl } from '../../core/auth/return-url';
 import { WebAuthn } from '../../core/browser/webauthn';
-import { formatWait } from '../../core/text/format';
+import { NO_CONNECTION, PASSKEYS_AT_DOMAIN_ONLY, tooManyAttempts } from '../../core/text/format';
 
 /**
  * Login screen: login, password and a 6-digit TOTP code from the phone app.
@@ -223,11 +223,9 @@ function errorMessage(result: Extract<LoginResult, { ok: false }>): string {
     case 'invalid':
       return 'Invalid login details.';
     case 'rate-limited':
-      return result.retryAfterSeconds
-        ? `Too many attempts. Try again in ${formatWait(result.retryAfterSeconds)}`
-        : 'Too many attempts. Try again later.';
+      return tooManyAttempts(result.retryAfterSeconds);
     case 'network':
-      return 'No connection to the server.';
+      return NO_CONNECTION;
     case 'server':
       return 'Server error. Try again.';
   }
@@ -239,7 +237,7 @@ function passkeyErrorMessage(result: Extract<PasskeyLoginResult, { ok: false }>)
     case 'cancelled':
       return 'Passkey login cancelled.';
     case 'not-here':
-      return "Passkeys work only at the portal's domain name.";
+      return PASSKEYS_AT_DOMAIN_ONLY;
     case 'already-registered':
     case 'failed':
       return 'The passkey could not be used.';

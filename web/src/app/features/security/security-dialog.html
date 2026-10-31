@@ -8,7 +8,7 @@
     <p class="muted">The session expires in {{ remaining }} without activity. Any activity on the page extends it.</p>
   }
 
-  @if (error(); as message) {
+  @if (sessions.error(); as message) {
     <p class="error" role="alert">{{ message }}</p>
   }
 
@@ -25,7 +25,7 @@
         </tr>
       </thead>
       <tbody>
-        @for (s of sessions(); track s.id) {
+        @for (s of sessions.list(); track s.id) {
           <tr class="session" [class.session--current]="s.current">
             <td data-label="Device">{{ s.device }}</td>
             <td class="mono" data-label="IP">{{ s.ip }}</td>
@@ -35,19 +35,19 @@
               @if (s.current) {
                 <span class="muted">this session</span>
               } @else {
-                <button type="button" [disabled]="busy()" [attr.aria-label]="'Log out session ' + s.device + ' ' + s.ip"
-                        (click)="revoke(s)">Log out</button>
+                <button type="button" [disabled]="sessions.busy()" [attr.aria-label]="'Log out session ' + s.device + ' ' + s.ip"
+                        (click)="sessions.revoke(s)">Log out</button>
               }
             </td>
           </tr>
         } @empty {
-          <tr><td colspan="5" class="muted">{{ sessions() === null ? 'Loading…' : 'No sessions.' }}</td></tr>
+          <tr><td colspan="5" class="muted">{{ sessions.list() === null ? 'Loading…' : 'No sessions.' }}</td></tr>
         }
       </tbody>
     </table>
     <div class="buttons">
-      <button type="button" [disabled]="busy() || otherSessions() === 0" (click)="revokeOthers()">Log out other sessions</button>
-      <button type="button" class="danger" [disabled]="busy()" (click)="everywhere()">Log out everywhere</button>
+      <button type="button" [disabled]="sessions.busy() || sessions.otherSessions() === 0" (click)="sessions.revokeOthers()">Log out other sessions</button>
+      <button type="button" class="danger" [disabled]="sessions.busy()" (click)="everywhere()">Log out everywhere</button>
     </div>
   </section>
 
@@ -134,7 +134,7 @@
         </tr>
       </thead>
       <tbody>
-        @for (l of logins(); track $index) {
+        @for (l of sessions.logins(); track $index) {
           <tr class="login" [class.login--failed]="!l.success">
             <td data-label="Date">{{ date(l.at) }}</td>
             <td class="mono" data-label="IP">{{ l.ip }}</td>
@@ -143,7 +143,7 @@
             <td data-label="Result">{{ l.success ? 'succeeded' : 'failed' }}</td>
           </tr>
         } @empty {
-          <tr><td colspan="5" class="muted">{{ logins() === null ? 'Loading…' : 'No entries.' }}</td></tr>
+          <tr><td colspan="5" class="muted">{{ sessions.logins() === null ? 'Loading…' : 'No entries.' }}</td></tr>
         }
       </tbody>
     </table>

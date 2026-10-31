@@ -1,20 +1,19 @@
-import { Component, ElementRef, Injector, afterNextRender, computed, effect, inject, viewChild } from '@angular/core';
+import { Component, ElementRef, computed, inject, output, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
 import { baseName } from '../../core/api/project-path';
-import { SearchFile, SearchMatch, SearchResult } from '../../core/api/search-api';
-import { fileIconUrl } from '../../core/icons/file-icons';
+import { SearchFile, SearchMatch, SearchResult } from './search-api';
+import { fileIconFor } from '../../core/icons/file-icons';
 import { ProjectContext } from '../../core/project/project-context';
 import { countLabel } from '../../core/text/format';
 import { EditorStore } from '../editor/editor-store';
-import { WorkbenchState } from '../workspace/workbench-state';
 import { SearchOption, SearchStore } from './search-store';
 
 /**
  * The Search view of the side bar (docs/ARCHITECTURE.md, "Frontend" → "Layout"): the query with VS Code's three toggles,
  * the files to include and exclude behind "…", and the results by file. A preview is text with its matches in spans,
- * never HTML. A click opens the file at the match and closes the phone's drawer. The view's header (Refresh, Clear,
- * Collapse All) belongs to SideBar.
+ * never HTML. A click opens the file at the match and emits `opened`, on which SideBar closes the phone's drawer. The
+ * view's header (Refresh, Clear, Collapse All) belongs to SideBar.
  */
 @Component({
   selector: 'app-search-view',
@@ -25,12 +24,10 @@ import { SearchOption, SearchStore } from './search-store';
 export class SearchView {
   protected readonly store = inject(SearchStore);
   private readonly editor = inject(EditorStore);
-  private readonly state = inject(WorkbenchState);
   private readonly project = inject(ProjectContext);
-  private readonly injector = inject(Injector);
   private readonly field = viewChild.required<ElementRef<HTMLInputElement>>('field');
-  /** The last focus request this view has seen; a view created later ignores the older ones. */
-  private focusSeen = this.state.searchFocus();
+  /** A result was clicked and its file is being opened at the match. */
+  readonly opened = output<void>();
 
   protected readonly toggles: readonly { option: SearchOption; label: string; icon: string }[] = [
     { option: 'matchCase', label: 'Match Case', icon: 'case-sensitive' },
@@ -42,15 +39,8 @@ export class SearchView {
     return state.status === 'error' ? state.message : '';
   });
 
-  constructor() {
-    // WorkbenchState.show('search') asks for the field: the activity bar and the phone's Search button.
-    effect(() => {
-      const request = this.state.searchFocus();
-      if (request !== this.focusSeen) {
-        this.focusSeen = request;
-        afterNextRender(() => this.field().nativeElement.focus(), { injector: this.injector });
-      }
-    });
+  focusField(): void {
+    this.field().nativeElement.focus();
   }
 
   protected pressed(option: SearchOption): boolean {
@@ -68,9 +58,7 @@ export class SearchView {
     return `${countLabel(result.matchCount, 'result', 'results')} in ${countLabel(result.files.length, 'file', 'files')}`;
   }
 
-  protected name(path: string): string {
-    return baseName(path);
-  }
+  protected readonly name = baseName;
 
   /** The file's directory below the searched repository (from the projects directory without one). */
   protected directory(path: string): string {
@@ -79,9 +67,7 @@ export class SearchView {
     return inRoot.includes('/') ? inRoot.slice(0, inRoot.lastIndexOf('/')) : '';
   }
 
-  protected icon(path: string): string {
-    return fileIconUrl(baseName(path));
-  }
+  protected readonly icon = fileIconFor;
 
   /** The file's badge: its highlighted matches, at least one per line. */
   protected count(file: SearchFile): number {
@@ -111,6 +97,6 @@ export class SearchView {
   protected open(path: string, match: SearchMatch): void {
     const [start, end] = match.ranges[0] ?? [0, 0];
     void this.editor.open(path, { line: match.line, column: match.column, endColumn: match.column + (end - start) });
-    this.state.drawerOpen.set(false);
+    this.opened.emit();
   }
 }

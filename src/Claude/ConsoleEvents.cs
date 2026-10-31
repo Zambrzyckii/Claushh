@@ -1,4 +1,4 @@
-// The contract's console events (web/src/app/core/realtime/console-protocol.ts; docs/ARCHITECTURE.md, "Console") as JSON
+// The contract's console events (web/src/app/features/console/console-protocol.ts; docs/ARCHITECTURE.md, "Console") as JSON
 // elements, sent and stored as they are, so a replay is the same JSON as the live stream. Absent optional fields are
 // left out.
 using System.Globalization;

@@ -2,7 +2,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable, catchError, map, of, throwError } from 'rxjs';
 
-import { ApiError, toApiError } from './api-error';
+import { ApiError, mapHttpError, toApiError } from './api-error';
 import { isSafeRelativePath } from './project-path';
 
 /**
@@ -93,7 +93,7 @@ export class GitApi {
     if (!isSafeRelativePath(repo) || repo === '') {
       return throwError(() => new ApiError('invalid'));
     }
-    return request().pipe(catchError((e: unknown) => throwError(() => toApiError(e))));
+    return request().pipe(mapHttpError(toApiError));
   }
 }
 

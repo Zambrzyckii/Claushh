@@ -1,4 +1,4 @@
-// The frontend's clone URL rule (web/src/app/features/workspaces/validation.ts) in .NET terms: the CLONE_URL pattern,
+// The frontend's clone URL rule (web/src/app/features/source-control/validation.ts) in .NET terms: the CLONE_URL pattern,
 // then what `new URL(url).href === url` checks for a string that passed it, and the directory name
 // (docs/ARCHITECTURE.md, "Workspaces and git"; decisions: docs/PLAN.md, "Backend decisions (stage 4)").
 using System.Diagnostics.CodeAnalysis;

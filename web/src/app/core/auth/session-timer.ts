@@ -1,5 +1,6 @@
 import { DOCUMENT, DestroyRef, Injectable, computed, inject, signal } from '@angular/core';
 
+import { formatDuration } from '../text/format';
 import { AuthService } from './auth.service';
 
 /** How many milliseconds before the end the countdown warns and shows "Extend". */
@@ -25,7 +26,7 @@ const ACTIVITY_EVENTS = ['keydown', 'pointerdown', 'wheel'] as const;
  *   and one extended in another tab simply updates the countdown.
  * - Safe without a network: if the server does not respond and `EXPIRY_GRACE_MS` has passed since the deadline,
  *   the session ends locally the same way as on 401.
- * Provided in the Workspace component. Description: docs/ARCHITECTURE.md, section "Authentication".
+ * Provided in the Workbench component. Description: docs/ARCHITECTURE.md, section "Authentication".
  */
 @Injectable()
 export class SessionTimer {
@@ -100,13 +101,4 @@ export class SessionTimer {
       this.verifying = false;
     }
   }
-}
-
-export function formatDuration(ms: number): string {
-  const total = Math.ceil(ms / 1000);
-  const hours = Math.floor(total / 3600);
-  const minutes = Math.floor((total % 3600) / 60);
-  const seconds = total % 60;
-  const ss = String(seconds).padStart(2, '0');
-  return hours > 0 ? `${hours}:${String(minutes).padStart(2, '0')}:${ss}` : `${minutes}:${ss}`;
 }

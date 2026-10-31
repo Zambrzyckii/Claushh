@@ -1,4 +1,4 @@
-// The options of one prompt (web/src/app/core/realtime/console-protocol.ts): the CLI's own values, given at launch and
+// The options of one prompt (web/src/app/features/console/console-protocol.ts): the CLI's own values, given at launch and
 // applied again before every prompt.
 namespace Claushh.Api.Claude;
 

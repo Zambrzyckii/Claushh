@@ -1,7 +1,7 @@
-import { Component, inject } from '@angular/core';
+import { Component, inject, input } from '@angular/core';
 
 import { Dialogs } from '../../core/browser/dialogs';
-import { TerminalInfo } from '../../core/realtime/terminal-protocol';
+import { TerminalInfo } from './terminal-protocol';
 import { TerminalStore } from './terminal-store';
 import { TerminalView } from './terminal-view';
 
@@ -19,6 +19,7 @@ import { TerminalView } from './terminal-view';
 export class TerminalPanel {
   protected readonly store = inject(TerminalStore);
   private readonly dialogs = inject(Dialogs);
+  readonly resizing = input(false);
 
   constructor() {
     void this.store.init();

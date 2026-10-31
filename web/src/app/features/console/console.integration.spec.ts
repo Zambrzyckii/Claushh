@@ -9,11 +9,12 @@ import { vi } from 'vitest';
 import { DeviceLayout } from '../../core/browser/device-layout';
 import { Dialogs } from '../../core/browser/dialogs';
 import { ProjectContext } from '../../core/project/project-context';
-import { ConnectionState, ConsoleConnection } from '../../core/realtime/console-connection';
-import { ConsoleEvent, ConversationSnapshot, SendPromptRequest } from '../../core/realtime/console-protocol';
+import { ConnectionState, ConsoleConnection } from './console-connection';
+import { ConsoleEvent, ConversationSnapshot, SendPromptRequest } from './console-protocol';
 import { EditorStore } from '../editor/editor-store';
-import { ConsolePanel, PERMISSION_ARM_MS } from './console-panel';
+import { ConsolePanel } from './console-panel';
 import { ConsoleStore } from './console-store';
+import { PERMISSION_ARM_MS } from './permission-arming';
 
 /**
  * Integration: real ConsolePanel + ConsoleStore + ProjectContext + EditorStore.
@@ -413,14 +414,14 @@ describe('Console (integration)', () => {
     expect(chip(root)).toBe('main.c');
     expect(root.querySelector('.file-chip img.file-icon')!.getAttribute('src')).toBe('file-icons/c.svg');
 
-    host.editor.selection.set({ path: 'studia/lab/src/main.c', startLine: 5, endLine: 10 });
+    host.editor.reportShownFile({ selection: { path: 'studia/lab/src/main.c', startLine: 5, endLine: 10 } });
     await settle();
     expect(chip(root)).toBe('main.c:5-10');
     // Lines of another file are never paired with the active one.
-    host.editor.selection.set({ path: 'studia/lab/src/other.c', startLine: 1, endLine: 2 });
+    host.editor.reportShownFile({ selection: { path: 'studia/lab/src/other.c', startLine: 1, endLine: 2 } });
     await settle();
     expect(chip(root)).toBe('main.c');
-    host.editor.selection.set({ path: 'studia/lab/src/main.c', startLine: 5, endLine: 10 });
+    host.editor.reportShownFile({ selection: { path: 'studia/lab/src/main.c', startLine: 5, endLine: 10 } });
     await settle();
     typePrompt(root, 'wyjaśnij');
     send(root);

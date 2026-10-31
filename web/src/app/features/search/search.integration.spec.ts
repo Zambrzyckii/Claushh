@@ -5,25 +5,23 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { vi } from 'vitest';
 
-import { SearchResult } from '../../core/api/search-api';
+import { SearchResult } from './search-api';
 import { ProjectContext } from '../../core/project/project-context';
 import { EditorStore } from '../editor/editor-store';
-import { WorkbenchState } from '../workspace/workbench-state';
 import { SearchStore } from './search-store';
 import { SearchView } from './search-view';
 
 /**
- * Integration: the real SearchView with SearchStore, SearchApi, EditorStore, WorkbenchState and ProjectContext (router),
+ * Integration: the real SearchView with SearchStore, SearchApi, EditorStore and ProjectContext (router),
  * on fake timers. Only HTTP is replaced (HttpTestingController).
  */
 @Component({
   imports: [SearchView],
-  providers: [ProjectContext, EditorStore, WorkbenchState, SearchStore],
+  providers: [ProjectContext, EditorStore, SearchStore],
   template: '<app-search-view />'
 })
 class Host {
   readonly editor = inject(EditorStore);
-  readonly state = inject(WorkbenchState);
 }
 
 const RESULT: SearchResult = {
@@ -118,12 +116,10 @@ describe('Search (integration)', () => {
       [');', false]
     ]);
 
-    host.state.drawerOpen.set(true);
     match.click();
     await render();
     expect(host.editor.reveal()).toMatchObject({ path: 'studia/lab/src/main.c', line: 7, column: 12, endColumn: 16 });
     expect(host.editor.activePath()).toBe('studia/lab/src/main.c');
-    expect(host.state.drawerOpen()).toBe(false);
     http.expectOne((r) => r.url === '/api/files/content').flush({ path: 'studia/lab/src/main.c', content: 'x', version: 'v1' });
 
     root.querySelector<HTMLButtonElement>('.search-file')!.click();
@@ -171,8 +167,8 @@ describe('Search (integration)', () => {
     expect(texts(root, '.message')).toEqual(['4 results in 2 files', 'The search stopped after 10 s, so the results are incomplete.']);
   });
 
-  it('sends the files to include and exclude, and showing Search puts the focus in its field', async () => {
-    const { root, render, host } = await setup();
+  it('sends the files to include and exclude', async () => {
+    const { root, render } = await setup();
     root.querySelector<HTMLButtonElement>('button[aria-label="Toggle Search Details"]')!.click();
     await render();
     const [include, exclude] = Array.from(root.querySelectorAll<HTMLInputElement>('.glob input'));
@@ -181,9 +177,5 @@ describe('Search (integration)', () => {
     type(exclude, 'build');
     await render(300);
     expect(http.expectOne('/api/search').request.body).toMatchObject({ query: 'main', include: '*.c, src', exclude: 'build' });
-
-    host.state.show('search');
-    await render();
-    expect(document.activeElement).toBe(field(root));
   });
 });

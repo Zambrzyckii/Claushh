@@ -3,7 +3,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Observable, Subject, catchError, map, of, startWith, switchMap, timer } from 'rxjs';
 
 import { ApiError } from '../../core/api/api-error';
-import { SearchApi, SearchRequest, SearchResult } from '../../core/api/search-api';
+import { SearchApi, SearchRequest, SearchResult } from './search-api';
 import { ProjectContext } from '../../core/project/project-context';
 
 /** Typing waits this long before it searches; Enter, a toggle and Refresh search at once. */
@@ -21,7 +21,7 @@ export type SearchState =
  * State of the Search view (docs/ARCHITECTURE.md, "Frontend" → "Layout"): the query, its toggles and globs, the results
  * and the folded files. Every change starts a new search and drops the one before it (`switchMap`, which cancels its
  * request); typing waits 300 ms. The search covers the open repository, or the projects directory, and runs again when
- * that changes. Provided in Workspace, so the results survive a switch of view or layout.
+ * that changes. Provided in Workbench, so the results survive a switch of view or layout.
  */
 @Injectable()
 export class SearchStore {

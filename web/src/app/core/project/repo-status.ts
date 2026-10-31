@@ -1,6 +1,6 @@
 import { DOCUMENT, DestroyRef, Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { debounceTime, firstValueFrom, fromEvent, merge } from 'rxjs';
+import { debounceTime, firstValueFrom } from 'rxjs';
 
 import { ApiError } from '../api/api-error';
 import { GitApi, GitFileStatus, GitStatus } from '../api/git-api';
@@ -16,6 +16,11 @@ export const STATUS_LETTERS: Record<GitFileStatus, string> = {
   conflicted: '!'
 };
 
+/** A branch name as shown, "(detached HEAD)" for null. */
+export function branchLabel(branch: string | null): string {
+  return branch ?? '(detached HEAD)';
+}
+
 /** Marker for a directory that contains changed files. */
 export const DIRECTORY_MARK = '•';
 
@@ -25,7 +30,7 @@ export const DIRECTORY_MARK = '•';
  * Refreshes on a repository change, after file changes (console, pull, save in the editor)
  * and after returning to the browser tab (e.g. after working in the terminal on another device).
  * There is no status for the projects directory (no open repo).
- * Provided in the Workspace component.
+ * Provided in the Workbench component.
  */
 @Injectable()
 export class RepoStatusStore {
@@ -70,7 +75,7 @@ export class RepoStatusStore {
     });
 
     const document = inject(DOCUMENT);
-    merge(this.project.filesChanged, this.project.filesSaved, fromEvent(document, 'visibilitychange'))
+    this.project.mayHaveChanged
       .pipe(debounceTime(300), takeUntilDestroyed(inject(DestroyRef)))
       .subscribe(() => {
         if (document.visibilityState !== 'hidden') {

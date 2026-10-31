@@ -11,7 +11,7 @@ export const routes: Routes = [
   {
     path: '',
     canActivate: [authGuard],
-    loadComponent: () => import('./features/workspace/workspace').then((m) => m.Workspace)
+    loadComponent: () => import('./workbench/workbench').then((m) => m.Workbench)
   },
   { path: '**', redirectTo: '' }
 ];

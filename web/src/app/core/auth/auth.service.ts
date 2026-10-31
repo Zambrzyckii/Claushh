@@ -2,6 +2,7 @@ import { HttpClient, HttpContext, HttpErrorResponse } from '@angular/common/http
 import { Injectable, OnDestroy, computed, inject, signal } from '@angular/core';
 import { firstValueFrom, timeout } from 'rxjs';
 
+import { readHttpFailure } from '../api/api-error';
 import { HardNavigation } from '../browser/hard-navigation';
 import { PasskeyCredentialJson, WebAuthn, WebAuthnFailure } from '../browser/webauthn';
 import { IGNORE_UNAUTHORIZED } from './ignore-unauthorized';
@@ -576,19 +577,19 @@ function asChannelMessage(data: unknown): ChannelMessage | null {
 }
 
 function toLoginFailure(error: unknown): LoginFailureResult {
-  if (!(error instanceof HttpErrorResponse)) {
+  const failure = readHttpFailure(error);
+  if (!failure) {
     return { ok: false, reason: 'server' };
   }
-  if (error.status === 0) {
+  if (failure.status === 0) {
     return { ok: false, reason: 'network' };
   }
-  if (error.status === 400 || error.status === 401) {
+  if (failure.status === 400 || failure.status === 401) {
     return { ok: false, reason: 'invalid' };
   }
-  if (error.status === 429) {
-    const retryAfter = Number(error.headers.get('Retry-After'));
-    return Number.isFinite(retryAfter) && retryAfter > 0
-      ? { ok: false, reason: 'rate-limited', retryAfterSeconds: retryAfter }
+  if (failure.status === 429) {
+    return failure.retryAfterSeconds !== null
+      ? { ok: false, reason: 'rate-limited', retryAfterSeconds: failure.retryAfterSeconds }
       : { ok: false, reason: 'rate-limited' };
   }
   return { ok: false, reason: 'server' };

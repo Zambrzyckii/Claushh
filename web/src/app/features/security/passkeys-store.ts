@@ -1,9 +1,9 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 
-import { Passkey, PasskeyApiError, PasskeysApi } from '../../core/api/passkeys-api';
+import { Passkey, PasskeyApiError, PasskeysApi } from './passkeys-api';
 import { WebAuthn, WebAuthnFailure } from '../../core/browser/webauthn';
-import { formatWait } from '../../core/text/format';
+import { NO_CONNECTION, PASSKEYS_AT_DOMAIN_ONLY, tooManyAttempts } from '../../core/text/format';
 
 /** The backend's name rule, word for word (docs/ARCHITECTURE.md, "Authentication" → "Passkeys"). */
 const NAME_RULE = 'A passkey name has 1 to 64 characters and no control characters.';
@@ -186,7 +186,7 @@ function promptFailure(reason: WebAuthnFailure): string {
     case 'already-registered':
       return 'This device already has a passkey for the portal.';
     case 'not-here':
-      return "Passkeys work only at the portal's domain name.";
+      return PASSKEYS_AT_DOMAIN_ONLY;
     case 'failed':
       return NOT_ADDED;
   }
@@ -202,11 +202,9 @@ function errorText(error: unknown, failure: string): string {
     case 'conflict':
       return error.detail ?? failure;
     case 'rate-limited':
-      return error.retryAfterSeconds
-        ? `Too many attempts. Try again in ${formatWait(error.retryAfterSeconds)}`
-        : 'Too many attempts. Try again later.';
+      return tooManyAttempts(error.retryAfterSeconds);
     case 'network':
-      return 'No connection to the server.';
+      return NO_CONNECTION;
     default:
       return failure;
   }

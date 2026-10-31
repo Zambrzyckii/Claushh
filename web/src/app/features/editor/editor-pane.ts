@@ -1,7 +1,7 @@
 import { Component, computed, inject } from '@angular/core';
 
 import { Dialogs } from '../../core/browser/dialogs';
-import { fileIconUrl } from '../../core/icons/file-icons';
+import { fileIconFor } from '../../core/icons/file-icons';
 import { CodeEditor } from './code-editor';
 import { EditorStore, OpenDocument } from './editor-store';
 
@@ -21,13 +21,7 @@ export class EditorPane {
 
   protected readonly breadcrumb = computed(() => this.store.active()?.path.split('/') ?? []);
 
-  protected icon(name: string): string {
-    return fileIconUrl(name);
-  }
-
-  protected dirty(doc: OpenDocument): boolean {
-    return doc.status === 'ready' && doc.value !== doc.savedValue;
-  }
+  protected readonly icon = fileIconFor;
 
   /** Diff view for a file that is not in the last commit. */
   protected isNewFile(doc: OpenDocument): boolean {
@@ -36,12 +30,7 @@ export class EditorPane {
 
   protected close(doc: OpenDocument, event?: Event): void {
     event?.stopPropagation();
-    if (this.store.close(doc.path)) {
-      return;
-    }
-    if (this.dialogs.confirm(`${doc.name} has unsaved changes. Close it without saving?`)) {
-      this.store.close(doc.path, true);
-    }
+    this.store.closeWithQuestion(doc.path);
   }
 
   protected closeWithMiddleClick(doc: OpenDocument, event: MouseEvent): void {
@@ -56,7 +45,7 @@ export class EditorPane {
   }
 
   protected reload(doc: OpenDocument): void {
-    if (this.dirty(doc) && !doc.conflict) {
+    if (this.store.isDirty(doc.path) && !doc.conflict) {
       if (!this.dialogs.confirm(`Discard the unsaved changes in ${doc.name} and load the file from disk?`)) {
         return;
       }

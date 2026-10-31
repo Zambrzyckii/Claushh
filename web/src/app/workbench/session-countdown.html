@@ -1,0 +1,8 @@
+@if (timer.label(); as remaining) {
+  <span [class]="bar() + '__session' + (timer.warning() ? ' ' + bar() + '__session--warning' : '')" role="timer" aria-live="off"
+        [attr.aria-label]="'Session expires in ' + remaining"
+        [attr.title]="bar() === 'statusbar' ? 'Session expires in ' + remaining : null">@if (bar() === 'statusbar') {<span class="codicon codicon-clock" aria-hidden="true"></span>}{{ remaining }}</span>
+  @if (timer.warning()) {
+    <button type="button" [class.statusbar__extend]="bar() === 'statusbar'" (click)="timer.extend()">Extend</button>
+  }
+}
