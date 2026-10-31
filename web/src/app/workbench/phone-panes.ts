@@ -1,4 +1,4 @@
-import { Component, computed, inject, linkedSignal, model } from '@angular/core';
+import { Component, inject, linkedSignal, model } from '@angular/core';
 
 import { ConsolePanel } from '../features/console/console-panel';
 import { EditorPane } from '../features/editor/editor-pane';
@@ -23,7 +23,7 @@ export type PhoneTab = 'editor' | 'terminal' | 'console';
   styleUrl: './phone-panes.scss'
 })
 export class PhonePanes {
-  private readonly editor = inject(EditorStore);
+  protected readonly editor = inject(EditorStore);
   protected readonly state = inject(WorkbenchState);
 
   readonly tab = model<PhoneTab>('editor');
@@ -37,10 +37,6 @@ export class PhonePanes {
   protected readonly terminalVisited = linkedSignal<PhoneTab, boolean>({
     source: this.tab,
     computation: (tab, previous) => (previous?.value ?? false) || tab === 'terminal'
-  });
-  protected readonly canSave = computed(() => {
-    const doc = this.editor.active();
-    return !!doc && doc.status === 'ready' && this.editor.isDirty(doc.path) && !doc.saving && !doc.conflict;
   });
 
   protected select(tab: PhoneTab): void {

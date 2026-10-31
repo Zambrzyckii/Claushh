@@ -22,10 +22,6 @@ export class OpenEditors {
   /** A row was clicked and its file is now the active one. */
   readonly opened = output<void>();
 
-  protected dirty(doc: OpenDocument): boolean {
-    return doc.status === 'ready' && doc.value !== doc.savedValue;
-  }
-
   protected readonly icon = fileIconFor;
 
   protected directory(doc: OpenDocument): string {

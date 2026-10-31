@@ -89,6 +89,7 @@ export class EditorStore {
   readonly activePath = this.activePathSignal.asReadonly();
   readonly active = computed(() => this.docs().find((d) => d.path === this.activePathSignal()) ?? null);
   readonly unsavedCount = computed(() => this.docs().filter(isDirty).length);
+  readonly canSave = computed(() => saveable(this.active() ?? undefined));
 
   /** Set by CodeEditor for the shown file, shown in the status bar; the language by its display name ("C"). */
   readonly cursor = signal<CursorPosition | null>(null);
@@ -259,7 +260,7 @@ export class EditorStore {
 
   async save(path = this.activePathSignal()): Promise<void> {
     const doc = path ? this.find(path) : undefined;
-    if (!doc || doc.status !== 'ready' || doc.saving || doc.conflict || !isDirty(doc)) {
+    if (!saveable(doc)) {
       return;
     }
     await this.write(doc, doc.version);
@@ -338,6 +339,10 @@ export class EditorStore {
 
 function isDirty(doc: OpenDocument): boolean {
   return doc.status === 'ready' && doc.value !== doc.savedValue;
+}
+
+function saveable(doc: OpenDocument | undefined): doc is OpenDocument {
+  return !!doc && doc.status === 'ready' && !doc.saving && !doc.conflict && isDirty(doc);
 }
 
 function messageOf(error: unknown): string {

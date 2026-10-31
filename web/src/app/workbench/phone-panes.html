@@ -13,7 +13,7 @@
               (click)="toggle('search')">
         <span class="codicon codicon-search" aria-hidden="true"></span>
       </button>
-      <button type="button" [disabled]="!canSave()" (click)="save()">
+      <button type="button" [disabled]="!editor.canSave()" (click)="save()">
         <span class="codicon codicon-save" aria-hidden="true"></span>Save
       </button>
     </div>

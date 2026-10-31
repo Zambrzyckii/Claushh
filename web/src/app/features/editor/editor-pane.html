@@ -6,7 +6,7 @@
                 [title]="doc.path" (click)="store.activate(doc.path)">
           <img class="file-icon" [src]="icon(doc.name)" alt="" width="16" height="16" draggable="false">
           {{ doc.name }}
-          @if (dirty(doc)) {
+          @if (store.isDirty(doc.path)) {
             <span class="tab__dirty codicon codicon-circle-filled" aria-label="unsaved changes"></span>
           }
         </button>

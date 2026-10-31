@@ -23,10 +23,6 @@ export class EditorPane {
 
   protected readonly icon = fileIconFor;
 
-  protected dirty(doc: OpenDocument): boolean {
-    return doc.status === 'ready' && doc.value !== doc.savedValue;
-  }
-
   /** Diff view for a file that is not in the last commit. */
   protected isNewFile(doc: OpenDocument): boolean {
     return doc.diff?.status === 'ready' && doc.diff.isNew;
@@ -54,7 +50,7 @@ export class EditorPane {
   }
 
   protected reload(doc: OpenDocument): void {
-    if (this.dirty(doc) && !doc.conflict) {
+    if (this.store.isDirty(doc.path) && !doc.conflict) {
       if (!this.dialogs.confirm(`Discard the unsaved changes in ${doc.name} and load the file from disk?`)) {
         return;
       }

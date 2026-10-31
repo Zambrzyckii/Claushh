@@ -7,7 +7,7 @@
 @if (expanded()) {
   <ul class="list" aria-label="Open editors">
     @for (doc of store.documents(); track doc.path) {
-      <li class="open-editor" [class.open-editor--active]="doc.path === store.activePath()" [class.open-editor--dirty]="dirty(doc)">
+      <li class="open-editor" [class.open-editor--active]="doc.path === store.activePath()" [class.open-editor--dirty]="store.isDirty(doc.path)">
         <button type="button" class="icon open-editor__close" [attr.aria-label]="'Close editor ' + doc.name"
                 [title]="'Close ' + doc.name" (click)="close(doc)">
           <span class="codicon codicon-close" aria-hidden="true"></span>
