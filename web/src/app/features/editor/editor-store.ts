@@ -78,6 +78,17 @@ export interface LineSelection {
   endLine: number;
 }
 
+/** The status values of the file CodeEditor shows, for the status bar and the console's file chip. */
+export interface ShownFile {
+  cursor: CursorPosition | null;
+  language: string | null;
+  indentation: Indentation | null;
+  eol: 'LF' | 'CRLF' | null;
+  selection: LineSelection | null;
+}
+
+const NO_FILE_SHOWN: ShownFile = { cursor: null, language: null, indentation: null, eol: null, selection: null };
+
 @Injectable()
 export class EditorStore {
   private readonly files = inject(FilesApi);
@@ -86,6 +97,7 @@ export class EditorStore {
 
   private readonly docs = signal<readonly OpenDocument[]>([]);
   private readonly activePathSignal = signal<string | null>(null);
+  private readonly shownFile = signal<ShownFile>(NO_FILE_SHOWN);
 
   readonly documents = this.docs.asReadonly();
   readonly activePath = this.activePathSignal.asReadonly();
@@ -93,16 +105,16 @@ export class EditorStore {
   readonly unsavedCount = computed(() => this.docs().filter(isDirty).length);
   readonly canSave = computed(() => saveable(this.active() ?? undefined));
 
-  /** Set by CodeEditor for the shown file, shown in the status bar; the language by its display name ("C"). */
-  readonly cursor = signal<CursorPosition | null>(null);
-  readonly language = signal<string | null>(null);
-  readonly indentation = signal<Indentation | null>(null);
-  readonly eol = signal<'LF' | 'CRLF' | null>(null);
+  /** Reported by CodeEditor for the shown file and shown in the status bar. The language is its display name ("C"). */
+  readonly cursor = computed(() => this.shownFile().cursor);
+  readonly language = computed(() => this.shownFile().language);
+  readonly indentation = computed(() => this.shownFile().indentation);
+  readonly eol = computed(() => this.shownFile().eol);
   /** Set by `open(path, at)`; CodeEditor selects and centres it once the file is shown. */
   readonly reveal = signal<RevealRequest | null>(null);
   private revealSeq = 0;
-  /** Set by CodeEditor; null without a selection. */
-  readonly selection = signal<LineSelection | null>(null);
+  /** Reported by CodeEditor, null without a selection. */
+  readonly selection = computed(() => this.shownFile().selection);
 
   private readonly project = inject(ProjectContext);
 
@@ -230,6 +242,16 @@ export class EditorStore {
     this.patch(path, (d) => (d.status === 'ready' && d.value !== value ? { ...d, value } : d));
   }
 
+  /** Called by CodeEditor when a status value of the shown file changes. */
+  reportShownFile(change: Partial<ShownFile>): void {
+    this.shownFile.update((shown) => ({ ...shown, ...change }));
+  }
+
+  /** Empties the shown file's status when the last tab closes or CodeEditor shows no file. */
+  clearShownFile(): void {
+    this.shownFile.set(NO_FILE_SHOWN);
+  }
+
   /**
    * Closes a tab. With unsaved changes it closes only with `force`
    * (`closeWithQuestion` asks the user first). Returns whether it was closed.
@@ -250,11 +272,7 @@ export class EditorStore {
       const next = remaining[Math.min(index, remaining.length - 1)];
       this.activePathSignal.set(next?.path ?? null);
       if (!next) {
-        this.cursor.set(null);
-        this.language.set(null);
-        this.indentation.set(null);
-        this.eol.set(null);
-        this.selection.set(null);
+        this.clearShownFile();
       }
     }
     return true;
