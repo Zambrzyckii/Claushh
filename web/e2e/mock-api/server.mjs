@@ -13,22 +13,20 @@ import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { HOST, ORIGIN, ORIGINS, PORT, SECURITY_HEADERS, cookies, createSession, deviceOf, endSession, ipOf, isApiPath, json, readBody, sessionOf, sleep, xsrfOk } from './http.mjs';
+import { HOST, ORIGIN, PORT, SECURITY_HEADERS, isApiPath, json, readBody, sessionOf, sleep, xsrfOk } from './http.mjs';
 import { consoleHub } from './hubs/console.mjs';
 import { attachHubs } from './hubs/signalr.mjs';
 import { terminalHub } from './hubs/terminal.mjs';
-import { USER, directoryExists, listDir, minutesAgo, reset, snapshotCommitted, state } from './state.mjs';
+import { authRoutes } from './routes/auth.mjs';
+import { passkeyRoutes } from './routes/passkeys.mjs';
+import { testControlRoutes } from './routes/test-control.mjs';
+import { directoryExists, listDir, minutesAgo, state } from './state.mjs';
 
 const DIST = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../dist/web/browser');
 const MAX_FILE_BYTES = 5 * 1024 * 1024; // the largest file the files API saves (docs/ARCHITECTURE.md, "Files API contract")
 const ABSENT_VERSION = 'absent'; // the version of a file that does not exist: a save with it creates the file
 
 // ---------- helpers ----------
-
-const sessionTimes = (session) => ({
-  expiresIn: Math.max(0, Math.round((session.expiresAt - Date.now()) / 1000)),
-  absoluteExpiresIn: Math.max(0, Math.round((session.absoluteExpiresAt - Date.now()) / 1000))
-});
 
 // A shortened SHA-1: the contract fixes only the version of a missing file (ABSENT_VERSION), the rest is opaque.
 const version = (content) => crypto.createHash('sha1').update(content ?? '').digest('hex').slice(0, 12);
@@ -237,31 +235,6 @@ function terminalTheme(content) {
   return { background, foreground, cursor, palette };
 }
 
-/** Passkeys (docs/ARCHITECTURE.md, "Authentication" → "Passkeys"): the backend's limits and texts; no signature is checked. */
-const PASSKEY_LIMIT = 10;
-const PASSKEY_FRESH_MS = 5 * 60_000;
-const PASSKEY_NAME_RULE = 'A passkey name has 1 to 64 characters and no control characters.';
-const PASSKEY_NOT_ADDED = 'The passkey could not be added. Try again.';
-const PASSKEY_LIMIT_TEXT = 'There are 10 passkeys already. Remove one first.';
-/** The owner's id in the mock: the passkeys' user handle. */
-const USER_ID = 'mock-owner';
-const base64url = (data) => Buffer.from(data).toString('base64url');
-
-/** A passkey name as the backend takes it: trimmed, 1-64 UTF-16 units, no control or format characters; null otherwise. */
-function passkeyName(name) {
-  const trimmed = typeof name === 'string' ? name.trim() : '';
-  return trimmed.length >= 1 && trimmed.length <= 64 && !/[\p{Cc}\p{Cf}]/u.test(trimmed) ? trimmed : null;
-}
-
-/** The decoded clientDataJSON of a credential, or null. */
-function clientDataOf(credential) {
-  try {
-    return JSON.parse(Buffer.from(credential?.response?.clientDataJSON ?? '', 'base64url').toString('utf8'));
-  } catch {
-    return null;
-  }
-}
-
 // ---------- HTTP ----------
 
 // CSP is the policy from <meta> in index.html plus `frame-ancestors`, which cannot be set in <meta>.
@@ -287,265 +260,8 @@ async function handle(req, res) {
   const url = new URL(req.url, ORIGIN);
   const session = sessionOf(req);
 
-  // test control
-  if (url.pathname === '/__test/reset') {
-    reset();
-    snapshotCommitted();
-    json(res, 204);
-    return;
-  }
-  if (url.pathname === '/__test/session-timeout') {
-    // Shortens the inactivity timeout (also for existing sessions), so the countdown test does not wait 30 minutes.
-    state.idleSeconds = Number(url.searchParams.get('idle') ?? 1800);
-    for (const session of state.sessions.values()) session.expiresAt = Date.now() + state.idleSeconds * 1000;
-    json(res, 204);
-    return;
-  }
-  if (url.pathname === '/__test/kill-sessions') {
-    state.sessions.clear();
-    // keepSockets=1: the session is invalidated, but open WebSockets stay (a test of the HTTP interceptor alone).
-    if (url.searchParams.get('keepSockets') !== '1') {
-      for (const socket of [...state.sockets, ...state.terminalSockets]) socket.terminate();
-    }
-    json(res, 204);
-    return;
-  }
-  if (url.pathname === '/__test/state') {
-    const terminals = [...state.terminals.values()].map(({ id, title, cwd, exited, inputs, sizes }) => ({ id, title, cwd, exited, inputs, sizes }));
-    json(res, 200, { files: Object.fromEntries(state.files), log: state.log, prompts: state.prompts, terminals, passkeyCount: state.passkeys.length, registrationCount: state.registrations.size, freshCount: state.freshUntil.size, challengeCount: state.challenges.size });
-    return;
-  }
-  if (url.pathname === '/__test/file' && req.method === 'PUT') {
-    const body = await readBody(req);
-    state.files.set(body.path, body.content);
-    json(res, 204);
-    return;
-  }
-  if (url.pathname === '/__test/terminal-theme' && req.method === 'PUT') {
-    // A pywal colors.json as text for GET /api/terminal/theme (null: none, as after a reset).
-    const body = await readBody(req);
-    state.terminalThemeFile = typeof body?.content === 'string' ? body.content : null;
-    json(res, 204);
-    return;
-  }
-  if (url.pathname === '/__test/repo-state' && req.method === 'POST') {
-    // A test's own ahead/behind for a repository, so it does not have to add a fourth repository (which would move
-    // the list other tests pin) to get a push rejection or a diverged pull.
-    const body = await readBody(req);
-    const repo = body && state.repos.get(body.repo);
-    if (!repo) return json(res, 400);
-    if (typeof body.ahead === 'number') repo.ahead = body.ahead;
-    if (typeof body.behind === 'number') repo.behind = body.behind;
-    json(res, 204);
-    return;
-  }
-  if (url.pathname === '/__test/drop-sockets') {
-    // Dropped connections without ending the session (e.g. a brief network failure): the client reconnects.
-    for (const socket of [...state.sockets, ...state.terminalSockets]) socket.terminate();
-    json(res, 204);
-    return;
-  }
-  if (url.pathname === '/__test/fault') {
-    // dropInputAck=N: the server accepts the next N `Input` batches, but drops the connection instead of acknowledging.
-    // attachDelayMs: delay of the response to `Attach`.
-    // hubDownMs: from now on, for this many ms the hubs reject new connections and open ones are dropped (network failure).
-    // downAfterDropMs: after a drop caused by dropInputAck the hubs are unavailable for this many ms (a longer failure).
-    // listDelayMs: delay of the response to `ListTerminals`.
-    for (const key of Object.keys(state.faults)) {
-      if (url.searchParams.has(key)) state.faults[key] = Number(url.searchParams.get(key));
-    }
-    if (url.searchParams.has('hubDownMs')) {
-      state.hubDownUntil = Date.now() + state.faults.hubDownMs;
-      for (const socket of [...state.sockets, ...state.terminalSockets]) socket.terminate();
-    }
-    json(res, 204);
-    return;
-  }
-
-  // authentication
-  if (url.pathname === '/api/auth/me') {
-    const token = crypto.randomUUID();
-    state.xsrfTokens.set(token, session?.id ?? null);
-    res.setHeader('Set-Cookie', `XSRF-TOKEN=${token}; Path=/; SameSite=Strict`);
-    session ? json(res, 200, { userName: session.userName, sessionId: session.id, ...sessionTimes(session) }) : json(res, 401);
-    return;
-  }
-  if (url.pathname === '/api/auth/login' && req.method === 'POST') {
-    const ok = xsrfOk(req);
-    const body = await readBody(req);
-    state.log.push({ path: url.pathname, xsrf: ok });
-    if (!ok) return json(res, 400);
-    if (state.loginFailures >= 3) return json(res, 429, undefined, { 'Retry-After': '30' });
-    const attempt = { at: new Date().toISOString(), ip: ipOf(req), device: deviceOf(req), method: 'password' };
-    if (body?.userName !== USER.userName || body?.password !== USER.password || body?.totpCode !== USER.totpCode) {
-      state.loginFailures++;
-      state.logins.unshift({ ...attempt, success: false });
-      return json(res, 401);
-    }
-    state.logins.unshift({ ...attempt, success: true });
-    const sid = createSession(req);
-    return json(res, 204, undefined, { 'Set-Cookie': `sid=${sid}; Path=/; HttpOnly; SameSite=Strict` });
-  }
-  if (url.pathname === '/api/auth/logout' && req.method === 'POST') {
-    const ok = xsrfOk(req);
-    const body = await readBody(req);
-    state.log.push({ path: url.pathname, xsrf: ok, hadSession: !!session, sessionId: body?.sessionId });
-    if (!ok) return json(res, 400);
-    if (!session) return json(res, 401);
-    // Logout of a specific session: the cookie already belongs to another one (a new login), so we end nothing.
-    if (body?.sessionId && body.sessionId !== session.id) return json(res, 409);
-    endSession(cookies(req).sid);
-    return json(res, 204, undefined, {
-      // Deliberately without Clear-Site-Data: Chrome can then hold the response for several seconds
-      // (especially with a second open tab). The frontend clears storage, the API has no-store.
-      'Set-Cookie': ['sid=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict', 'XSRF-TOKEN=; Path=/; Max-Age=0; SameSite=Strict']
-    });
-  }
-
-  // re-authentication and the account's passkeys
-  if (url.pathname === '/api/auth/reauthenticate' && req.method === 'POST') {
-    if (!session) return json(res, 401);
-    if (!xsrfOk(req)) return json(res, 400);
-    const body = await readBody(req).catch(() => null);
-    if (state.loginFailures >= 3) return json(res, 429, undefined, { 'Retry-After': '30' });
-    if (body?.password !== USER.password || body?.totpCode !== USER.totpCode) {
-      state.loginFailures++;
-      state.logins.unshift({ at: new Date().toISOString(), ip: ipOf(req), device: deviceOf(req), success: false, method: 'password' });
-      return json(res, 403);
-    }
-    state.freshUntil.set(cookies(req).sid, Date.now() + PASSKEY_FRESH_MS);
-    return json(res, 204);
-  }
-  // the passkey login, anonymous like /api/auth/login
-  if ((url.pathname === '/api/auth/passkeys/login-options' || url.pathname === '/api/auth/passkeys/login') && req.method === 'POST') {
-    const ok = xsrfOk(req);
-    const body = await readBody(req).catch(() => null);
-    state.log.push({ path: url.pathname, xsrf: ok });
-    if (!ok) return json(res, 400);
-    if (state.loginFailures >= 3) return json(res, 429, undefined, { 'Retry-After': '30' });
-    if (url.pathname === '/api/auth/passkeys/login-options') {
-      const id = base64url(crypto.randomBytes(32));
-      const challenge = base64url(crypto.randomBytes(32));
-      state.challenges.set(id, challenge);
-      return json(res, 200, { challenge, timeout: 300000, rpId: 'localhost', allowCredentials: [], userVerification: 'required' },
-        { 'Set-Cookie': `passkey=${id}; Path=/; Max-Age=300; HttpOnly; SameSite=Strict` });
-    }
-    const challengeId = cookies(req).passkey;
-    const challenge = challengeId ? state.challenges.get(challengeId) : undefined;
-    if (challengeId) state.challenges.delete(challengeId);
-    const expire = 'passkey=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict';
-    const credential = body?.credential;
-    const clientData = clientDataOf(credential);
-    const authenticatorData = Buffer.from(credential?.response?.authenticatorData ?? '', 'base64url');
-    const rpIdHash = crypto.createHash('sha256').update('localhost').digest();
-    const attempt = { at: new Date().toISOString(), ip: ipOf(req), device: deviceOf(req), method: 'passkey' };
-    if (!challenge || clientData?.type !== 'webauthn.get' || clientData.challenge !== challenge || !ORIGINS.includes(clientData.origin)
-      || !state.passkeys.some((p) => p.id === credential?.id) || credential.response?.userHandle !== base64url(USER_ID)
-      || authenticatorData.length < 37 || !authenticatorData.subarray(0, 32).equals(rpIdHash) || (authenticatorData[32] & 0x04) === 0) {
-      state.loginFailures++;
-      state.logins.unshift({ ...attempt, success: false });
-      return json(res, 401, undefined, { 'Set-Cookie': expire });
-    }
-    state.logins.unshift({ ...attempt, success: true });
-    const sid = createSession(req);
-    return json(res, 204, undefined, { 'Set-Cookie': [`sid=${sid}; Path=/; HttpOnly; SameSite=Strict`, expire] });
-  }
-  if (url.pathname === '/api/auth/passkeys' || url.pathname.startsWith('/api/auth/passkeys/')) {
-    if (!session) return json(res, 401);
-    if (req.method !== 'GET' && !xsrfOk(req)) return json(res, 400);
-    const sid = cookies(req).sid;
-    const fresh = (state.freshUntil.get(sid) ?? 0) > Date.now();
-    if (url.pathname === '/api/auth/passkeys' && req.method === 'GET') return json(res, 200, state.passkeys);
-    if (url.pathname === '/api/auth/passkeys/creation-options' && req.method === 'POST') {
-      if (!fresh) return json(res, 403);
-      if (state.passkeys.length >= PASSKEY_LIMIT) return json(res, 409, { message: PASSKEY_LIMIT_TEXT });
-      const challenge = base64url(crypto.randomBytes(32));
-      state.registrations.set(sid, challenge);
-      return json(res, 200, {
-        rp: { name: 'localhost', id: 'localhost' },
-        user: { id: base64url(USER_ID), name: USER.userName, displayName: USER.userName },
-        challenge,
-        pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
-        timeout: 300000,
-        excludeCredentials: state.passkeys.map((p) => ({ type: 'public-key', id: p.id, transports: [] })),
-        authenticatorSelection: { residentKey: 'required', userVerification: 'required' }
-      });
-    }
-    if (url.pathname === '/api/auth/passkeys' && req.method === 'POST') {
-      const body = await readBody(req).catch(() => null);
-      const credential = body?.credential;
-      if (typeof credential !== 'object' || credential === null) return json(res, 400, { message: PASSKEY_NOT_ADDED });
-      const given = body.name;
-      const blank = given === undefined || given === null || (typeof given === 'string' && given.trim() === '');
-      const name = blank ? deviceOf(req) : passkeyName(given);
-      if (!name) return json(res, 400, { message: PASSKEY_NAME_RULE });
-      const challenge = state.registrations.get(sid);
-      state.registrations.delete(sid);
-      if (!challenge) return json(res, 400, { message: PASSKEY_NOT_ADDED });
-      if (state.passkeys.length >= PASSKEY_LIMIT) return json(res, 409, { message: PASSKEY_LIMIT_TEXT });
-      const clientData = clientDataOf(credential);
-      const authenticatorData = Buffer.from(credential.response?.authenticatorData ?? '', 'base64url');
-      if (clientData?.type !== 'webauthn.create' || clientData.challenge !== challenge || !ORIGINS.includes(clientData.origin)
-        || typeof credential.id !== 'string' || !credential.id || state.passkeys.some((p) => p.id === credential.id)
-        || authenticatorData.length < 37) {
-        return json(res, 400, { message: PASSKEY_NOT_ADDED });
-      }
-      const passkey = { id: credential.id, name, createdAt: new Date().toISOString(), synced: (authenticatorData[32] & 0x08) !== 0 };
-      state.passkeys.push(passkey);
-      return json(res, 201, passkey);
-    }
-    const match = url.pathname.match(/^\/api\/auth\/passkeys\/([^/]+)$/);
-    const passkey = match ? state.passkeys.find((p) => p.id === decodeURIComponent(match[1])) : undefined;
-    if (match && req.method === 'PATCH') {
-      const name = passkeyName((await readBody(req).catch(() => null))?.name);
-      if (!name) return json(res, 400, { message: PASSKEY_NAME_RULE });
-      if (!passkey) return json(res, 404);
-      passkey.name = name;
-      return json(res, 204);
-    }
-    if (match && req.method === 'DELETE') {
-      if (!fresh) return json(res, 403);
-      if (!passkey) return json(res, 404);
-      state.passkeys = state.passkeys.filter((p) => p !== passkey);
-      return json(res, 204);
-    }
-    return json(res, 404);
-  }
-
-  // extending the session, session list, login history
-  if (url.pathname === '/api/auth/keepalive' && req.method === 'POST') {
-    if (!session) return json(res, 401);
-    if (!xsrfOk(req)) return json(res, 400);
-    session.expiresAt = Date.now() + state.idleSeconds * 1000;
-    session.lastActivityAt = new Date().toISOString();
-    state.log.push({ path: 'keepalive' });
-    return json(res, 200, { sessionId: session.id, ...sessionTimes(session) });
-  }
-  if (url.pathname.startsWith('/api/auth/sessions') || url.pathname === '/api/auth/logins') {
-    if (!session) return json(res, 401);
-    if (req.method !== 'GET' && !xsrfOk(req)) return json(res, 400);
-    const currentSid = cookies(req).sid;
-    if (url.pathname === '/api/auth/logins' && req.method === 'GET') return json(res, 200, state.logins.slice(0, 20));
-    if (url.pathname === '/api/auth/sessions' && req.method === 'GET') {
-      return json(res, 200, [...state.sessions].reverse().map(([sid, s]) => ({
-        id: s.id, current: sid === currentSid, device: s.device, ip: s.ip, createdAt: s.createdAt, lastActivityAt: s.lastActivityAt
-      })));
-    }
-    if (url.pathname === '/api/auth/sessions/revoke-others' && req.method === 'POST') {
-      for (const sid of [...state.sessions.keys()]) if (sid !== currentSid) endSession(sid);
-      state.log.push({ path: 'revoke-others' });
-      return json(res, 204);
-    }
-    const match = url.pathname.match(/^\/api\/auth\/sessions\/([^/]+)$/);
-    if (match && req.method === 'DELETE') {
-      const entry = [...state.sessions].find(([, s]) => s.id === decodeURIComponent(match[1]));
-      if (!entry) return json(res, 404);
-      if (entry[0] === currentSid) return json(res, 400, { message: 'Your own session ends with a logout.' });
-      endSession(entry[0]);
-      state.log.push({ path: 'revoke', id: entry[1].id });
-      return json(res, 204);
-    }
-    return json(res, 404);
+  for (const routes of [testControlRoutes, authRoutes, passkeyRoutes]) {
+    if (await routes(req, res, url, session)) return;
   }
 
   // workspaces and git
