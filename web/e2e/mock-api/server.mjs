@@ -14,181 +14,23 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 
-const PORT = Number(process.env.MOCK_PORT ?? 4400);
+import { HOST, ORIGIN, ORIGINS, PORT, SECURITY_HEADERS, cookies, createSession, deviceOf, endSession, ipOf, isApiPath, json, readBody, sessionOf, sleep, validSession, xsrfOk } from './http.mjs';
+import { MAIN, USER, directoryExists, listDir, minutesAgo, reset, snapshotCommitted, state } from './state.mjs';
+
 const DIST = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../dist/web/browser');
-const HOST = '127.0.0.1';
-const ORIGIN = `http://${HOST}:${PORT}`;
-/** The origins the portal is served from in the e2e tests (hubs and passkeys): passkeys need a domain, not an IP. */
-const ORIGINS = [ORIGIN, `http://localhost:${PORT}`];
 const RS = '\x1e'; // message separator in the SignalR protocol
 const MAX_FILE_BYTES = 5 * 1024 * 1024; // the largest file the files API saves (docs/ARCHITECTURE.md, "Files API contract")
 const ABSENT_VERSION = 'absent'; // the version of a file that does not exist: a save with it creates the file
 
-export const USER = { userName: 'owner', password: 'secret', totpCode: '123456' };
-export const MAIN = 'studia/lab-3-sieci/src/main.c';
-
-const INITIAL_FILES = {
-  [MAIN]: '#include <stdio.h>\n\nint main(void)\n{\n    return 0;\n}\n',
-  'studia/lab-3-sieci/src/parser.c': 'int parse(void)\n{\n    return 1;\n}\n',
-  'studia/lab-3-sieci/Makefile': 'all:\n\tcc -o app src/main.c\n',
-  'studia/lab-3-sieci/logo.png': null,
-  'studia/so-projekt-shell/src/shell.c': 'int main(void) { return 0; }\n',
-  'studia/bazy-danych-lab/zadanie4.sql': '-- zadanie 4\nCREATE VIEW v AS SELECT 1;\n',
-  'prywatne/notatki/README.md': '# Notatki\n'
-};
-
-export const BAZY_SQL = 'studia/bazy-danych-lab/zadanie4.sql';
-
-const INITIAL_WORKSPACES = [
-  ['studia', 'Studia'],
-  ['prywatne', 'Prywatne']
-];
-
-const minutesAgo = (m) => new Date(Date.now() - m * 60_000).toISOString();
-
-function initialRepos() {
-  return new Map([
-    ['studia/lab-3-sieci', { branch: 'main', upstream: 'origin/main', ahead: 1, behind: 0, lastCommit: { message: 'parser: szkielet parse_ipv4', date: minutesAgo(12) } }],
-    ['studia/so-projekt-shell', { branch: 'dev', upstream: 'origin/dev', ahead: 0, behind: 0, lastCommit: { message: 'obsługa potoków', date: minutesAgo(2 * 1440) } }],
-    ['studia/bazy-danych-lab', {
-      branch: 'main', upstream: 'origin/main', ahead: 0, behind: 2,
-      lastCommit: { message: 'zadanie 4: widoki', date: minutesAgo(7 * 1440) },
-      remote: { message: 'poprawki od prowadzącego', files: { [BAZY_SQL]: '-- zadanie 4 (poprawione)\nCREATE VIEW v AS SELECT 2;\n' } }
-    }],
-    ['prywatne/notatki', { branch: 'main', upstream: null, ahead: 0, behind: 0, lastCommit: { message: 'semestr 5', date: minutesAgo(3 * 1440) } }]
-  ]);
-}
-
-let state;
-function reset() {
-  for (const socket of [...(state?.sockets ?? []), ...(state?.terminalSockets ?? [])]) socket.terminate();
-  state = {
-    sessions: new Map(), // sid (secret from the cookie) -> { id (public), userName, ip, device, createdAt, lastActivityAt, expiresAt, absoluteExpiresAt }
-    idleSeconds: 30 * 60,
-    absoluteSeconds: 12 * 3600,
-    logins: [],
-    loginFailures: 0,
-    passkeys: [], // { id, name, createdAt, synced }, in the order added
-    registrations: new Map(), // sid -> challenge of the session's creation options
-    freshUntil: new Map(), // sid -> time (ms) until which the session may add and remove passkeys
-    challenges: new Map(), // login challenge id (the passkey cookie) -> challenge
-    xsrfTokens: new Map(), // token -> public id of the session it was issued for (null: no session)
-    files: new Map(Object.entries(INITIAL_FILES)),
-    workspaces: new Map(INITIAL_WORKSPACES),
-    repos: initialRepos(),
-    log: [],
-    sockets: new Set(),
-    terminalSockets: new Set(),
-    terminals: new Map(), // id -> { id, title, cwd, exited, seq, history, line, inputs, sizes, inputSeq }
-    terminalCounter: 0,
-    conversations: new Map(), // id -> { projectPath, events, running }
-    latestByProject: new Map(),
-    prompts: [],
-    terminalThemeFile: null, // the text of the pywal file GET /api/terminal/theme answers from (/__test/terminal-theme)
-    // failures on demand from tests (/__test/fault)
-    faults: { dropInputAck: 0, attachDelayMs: 0, hubDownMs: 0, downAfterDropMs: 0, listDelayMs: 0 },
-    hubDownUntil: 0
-  };
-}
-reset();
-
-/** "Committed" state = repository file content at reset time (or after pull/clone). */
-function snapshotCommitted() {
-  for (const [repoPath, repo] of state.repos) {
-    repo.committed = new Map([...state.files].filter(([p]) => p.startsWith(repoPath + '/')));
-  }
-}
-snapshotCommitted();
-
 // ---------- helpers ----------
-
-const cookies = (req) =>
-  Object.fromEntries((req.headers.cookie ?? '').split(/;\s*/).filter(Boolean).map((c) => [c.slice(0, c.indexOf('=')), c.slice(c.indexOf('=') + 1)]));
-const expired = (session) => Date.now() > session.expiresAt || Date.now() > session.absoluteExpiresAt;
-
-/** Valid session with the given secret. An expired one (inactivity or hard limit) is removed, as on the real server. */
-function validSession(sid) {
-  const session = state.sessions.get(sid);
-  if (session && expired(session)) {
-    endSession(sid);
-    return undefined;
-  }
-  return session;
-}
-
-/** Session from the cookie. */
-const sessionOf = (req) => validSession(cookies(req).sid);
-
-function endSession(sid) {
-  state.sessions.delete(sid);
-  for (const ws of [...state.sockets, ...state.terminalSockets]) {
-    if (ws.sid === sid) ws.terminate();
-  }
-}
 
 const sessionTimes = (session) => ({
   expiresIn: Math.max(0, Math.round((session.expiresAt - Date.now()) / 1000)),
   absoluteExpiresIn: Math.max(0, Math.round((session.absoluteExpiresAt - Date.now()) / 1000))
 });
 
-function deviceOf(req) {
-  const ua = req.headers['user-agent'] ?? '';
-  const browser = /Firefox\//.test(ua) ? 'Firefox' : /Edg\//.test(ua) ? 'Edge' : /Chrom/.test(ua) ? 'Chrome' : /Safari\//.test(ua) ? 'Safari' : 'Browser';
-  const os = /Windows/.test(ua) ? 'Windows' : /Android/.test(ua) ? 'Android' : /iPhone|iPad/.test(ua) ? 'iOS' : /Mac OS/.test(ua) ? 'macOS' : /Linux/.test(ua) ? 'Linux' : 'unknown system';
-  return `${browser} · ${os}`;
-}
-
-const ipOf = (req) => (req.socket.remoteAddress ?? '').replace(/^::ffff:/, '');
-/**
- * XSRF token: header equal to the cookie and issued for the same identity as the current request (a session or none),
- * as in ASP.NET antiforgery. So a token from before logout will not pass at login.
- */
-function xsrfOk(req) {
-  const token = cookies(req)['XSRF-TOKEN'];
-  return !!token && req.headers['x-xsrf-token'] === token && state.xsrfTokens.has(token) && state.xsrfTokens.get(token) === (sessionOf(req)?.id ?? null);
-}
 // A shortened SHA-1: the contract fixes only the version of a missing file (ABSENT_VERSION), the rest is opaque.
 const version = (content) => crypto.createHash('sha1').update(content ?? '').digest('hex').slice(0, 12);
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-/** Request body as JSON. Invalid JSON rejects the promise (the handler responds 400, the server keeps running). */
-function readBody(req) {
-  return new Promise((resolve, reject) => {
-    let data = '';
-    req.on('data', (chunk) => (data += chunk));
-    req.on('error', reject);
-    req.on('end', () => {
-      try {
-        resolve(data ? JSON.parse(data) : null);
-      } catch (error) {
-        reject(error);
-      }
-    });
-  });
-}
-
-function json(res, status, body, headers = {}) {
-  res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...headers }).end(body === undefined ? '' : JSON.stringify(body));
-}
-
-function listDir(dir) {
-  const out = new Map();
-  const add = (p, isDirectory) => {
-    if (dir && !p.startsWith(dir + '/')) return;
-    const rest = dir ? p.slice(dir.length + 1) : p;
-    const [name, ...more] = rest.split('/');
-    out.set(name, { name, path: dir ? `${dir}/${name}` : name, kind: more.length || isDirectory ? 'directory' : 'file' });
-  };
-  for (const p of state.files.keys()) add(p, false);
-  for (const p of [...state.workspaces.keys(), ...state.repos.keys()]) add(p, true);
-  return [...out.values()];
-}
-
-/** Whether `dir` is a directory of the mock: the projects directory, a workspace or repository, or a parent of a file. */
-function directoryExists(dir) {
-  if (dir === '' || state.workspaces.has(dir) || state.repos.has(dir)) return true;
-  return [...state.files.keys(), ...state.workspaces.keys(), ...state.repos.keys()].some((p) => p.startsWith(dir + '/'));
-}
 
 function gitFiles(repoPath) {
   const repo = state.repos.get(repoPath);
@@ -243,18 +85,6 @@ const slug = (name) => name.trim().toLowerCase().replace(/ł/g, 'l').normalize('
 
 /** English plural of "commit" (docs/ARCHITECTURE.md, "Workspaces and git"): 1 commit, otherwise commits. */
 const commitWord = (n) => (n === 1 ? 'commit' : 'commits');
-
-/**
- * `workspace`, `repo` and `path` parameters use the files API's path syntax (docs/ARCHITECTURE.md, "Workspaces and
- * git"): non-empty segments joined by "/", none of them ".", "..", ".git", no "\" and no NUL; `segments` fixes their
- * number. Anything else is 400, as in the backend.
- */
-function isApiPath(p, segments) {
-  if (typeof p !== 'string') return false;
-  const parts = p.split('/');
-  return (segments === undefined || parts.length === segments)
-    && parts.every((s) => s !== '' && s !== '.' && s !== '..' && s !== '.git' && !s.includes('\\') && !s.includes('\0'));
-}
 
 /**
  * Search in files (docs/ARCHITECTURE.md, "Search API contract") over state.files, as the backend answers it: the same
@@ -416,23 +246,6 @@ const PASSKEY_LIMIT_TEXT = 'There are 10 passkeys already. Remove one first.';
 const USER_ID = 'mock-owner';
 const base64url = (data) => Buffer.from(data).toString('base64url');
 
-/** A new session of the owner, as after a login; returns its secret for the cookie. */
-function createSession(req) {
-  const sid = crypto.randomUUID();
-  const now = Date.now();
-  state.sessions.set(sid, {
-    id: crypto.randomUUID(),
-    userName: USER.userName,
-    ip: ipOf(req),
-    device: deviceOf(req),
-    createdAt: new Date(now).toISOString(),
-    lastActivityAt: new Date(now).toISOString(),
-    expiresAt: now + state.idleSeconds * 1000,
-    absoluteExpiresAt: now + state.absoluteSeconds * 1000
-  });
-  return sid;
-}
-
 /** A passkey name as the backend takes it: trimmed, 1-64 UTF-16 units, no control or format characters; null otherwise. */
 function passkeyName(name) {
   const trimmed = typeof name === 'string' ? name.trim() : '';
@@ -450,16 +263,7 @@ function clientDataOf(credential) {
 
 // ---------- HTTP ----------
 
-// Security headers required from the backend (docs/ARCHITECTURE.md, "Security headers"). CSP is the policy
-// from <meta> in index.html plus `frame-ancestors`, which cannot be set in <meta>.
-const SECURITY_HEADERS = {
-  'X-Content-Type-Options': 'nosniff',
-  'Referrer-Policy': 'no-referrer',
-  'Cross-Origin-Opener-Policy': 'same-origin',
-  'Cross-Origin-Resource-Policy': 'same-origin',
-  'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=(), usb=()'
-};
-
+// CSP is the policy from <meta> in index.html plus `frame-ancestors`, which cannot be set in <meta>.
 function pageCsp() {
   const html = fs.readFileSync(path.join(DIST, 'index.html'), 'utf8');
   const meta = html.match(/<meta http-equiv="Content-Security-Policy" content="([^"]+)"/);
