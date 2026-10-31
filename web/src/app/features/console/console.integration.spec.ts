@@ -12,8 +12,9 @@ import { ProjectContext } from '../../core/project/project-context';
 import { ConnectionState, ConsoleConnection } from './console-connection';
 import { ConsoleEvent, ConversationSnapshot, SendPromptRequest } from './console-protocol';
 import { EditorStore } from '../editor/editor-store';
-import { ConsolePanel, PERMISSION_ARM_MS } from './console-panel';
+import { ConsolePanel } from './console-panel';
 import { ConsoleStore } from './console-store';
+import { PERMISSION_ARM_MS } from './permission-arming';
 
 /**
  * Integration: real ConsolePanel + ConsoleStore + ProjectContext + EditorStore.

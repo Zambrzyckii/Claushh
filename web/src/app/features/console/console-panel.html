@@ -122,7 +122,7 @@
         }
       </select>
     </label>
-    @if (busy()) {
+    @if (store.busy()) {
       <button type="button" class="primary icon composer__stop" aria-label="Interrupt" title="Interrupt (Esc)"
               (click)="store.interrupt()">
         <span class="codicon codicon-debug-stop" aria-hidden="true"></span>

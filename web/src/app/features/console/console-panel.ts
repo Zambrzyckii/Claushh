@@ -9,7 +9,6 @@ import {
   effect,
   inject,
   output,
-  signal,
   untracked,
   viewChild
 } from '@angular/core';
@@ -24,12 +23,7 @@ import { ConsoleEffort, ConsoleMode, ConsoleModel, PermissionDecision, PromptFil
 import { countLabel, formatTime } from '../../core/text/format';
 import { revealHidden } from '../../core/text/visible-text';
 import { ConsoleStore } from './console-store';
-
-/**
- * The permission buttons ("yes", "yes, always") stay inactive for this many ms after a request appears. The request arrives
- * asynchronously and scrolls the log to the bottom, so without this a click meant for something else could land on them.
- */
-export const PERMISSION_ARM_MS = 600;
+import { PermissionArming } from './permission-arming';
 
 /**
  * The Console panel, VS Code's secondary side bar (docs/ARCHITECTURE.md, "Console"): the conversation with Claude Code
@@ -54,13 +48,10 @@ export class ConsolePanel {
   private readonly injector = inject(Injector);
   readonly collapse = output<void>();
 
-  /** Permission requests that can already be answered "yes" (`PERMISSION_ARM_MS` has passed). */
-  protected readonly armed = signal<ReadonlySet<string>>(new Set());
-  private readonly arming = new Set<string>();
-  private readonly armTimers = new Set<ReturnType<typeof setTimeout>>();
+  private readonly arming = new PermissionArming();
+  protected readonly armed = this.arming.armed;
   /** Permission request to whose beginning the log has already been scrolled. */
   private scrolledToQuestion: string | null = null;
-  private armedConversation: string | null = null;
 
   private readonly log = viewChild.required<ElementRef<HTMLElement>>('log');
   /** We read and clear the prompt field directly: sending right after pasting text clears it too. */
@@ -86,8 +77,6 @@ export class ConsolePanel {
     { value: 'plan', label: 'plan' }
   ];
 
-  /** While the console works or waits for an answer, Stop takes the place of Send. */
-  protected readonly busy = computed(() => this.store.state() === 'working' || this.store.state() === 'waiting');
   protected readonly modeLabel = computed(() => labelOf(this.modes, this.store.options().mode));
   protected readonly modeIcon = computed(() => MODE_ICONS[this.store.options().mode]);
   protected readonly modelLabel = computed(() => labelOf(this.models, this.store.options().model));
@@ -100,21 +89,13 @@ export class ConsolePanel {
       untracked(() => {
         // Request identifiers are unique within a conversation. In a new conversation everything counts from scratch, so that a repeated
         // identifier does not skip the button delay or the scroll to the beginning of the request.
-        if (conversation !== this.armedConversation) {
-          this.armedConversation = conversation;
-          this.resetArming();
-        }
-        for (const entry of entries) {
-          if (entry.kind === 'permission' && entry.decision === null && !this.arming.has(entry.requestId)) {
-            this.arm(entry.requestId);
-          }
+        if (this.arming.track(conversation, entries)) {
+          this.scrolledToQuestion = null;
         }
       });
     });
     inject(DestroyRef).onDestroy(() => {
-      for (const timer of this.armTimers) {
-        clearTimeout(timer);
-      }
+      this.arming.stop();
     });
 
     // Scrolling to the bottom on new entries, unless the user scrolled up to read something.
@@ -240,25 +221,6 @@ export class ConsolePanel {
       return `The command has ${countLabel(lines, 'line', 'lines')}. Read all of it above.`;
     }
     return shown.length > 200 ? `The command has ${countLabel(shown.length, 'character', 'characters')}. Read all of it above.` : null;
-  }
-
-  private resetArming(): void {
-    for (const timer of this.armTimers) {
-      clearTimeout(timer);
-    }
-    this.armTimers.clear();
-    this.arming.clear();
-    this.armed.set(new Set());
-    this.scrolledToQuestion = null;
-  }
-
-  private arm(requestId: string): void {
-    this.arming.add(requestId);
-    const timer = setTimeout(() => {
-      this.armTimers.delete(timer);
-      this.armed.update((ids) => new Set(ids).add(requestId));
-    }, PERMISSION_ARM_MS);
-    this.armTimers.add(timer);
   }
 
   protected verb(kind: StepKind): string {
