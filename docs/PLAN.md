@@ -515,7 +515,7 @@ Backend decisions (stage 3):
   `alwaysRule` only for exactly one suggested rule, and the answer is built from the server's own copy of the
   question, so allow-always saves exactly that rule. Rejected: joining several rules into one (the contract saves one).
 - "Always" rules live in PostgreSQL per project (`ConsoleRules`) and go to every launch in `--settings`
-  `permissions.allow`; the answer adds the rule for the session only. A rule is removed with SQL (README.md).
+  `permissions.allow`; the answer adds the rule for the session only. A rule is removed with SQL (DEVELOPMENT.md, DEPLOYMENT.md).
   Rejected: the CLI's `.claude/settings.local.json` in the repository (it needs the project's settings files, and a
   cloned repository could commit one).
 - Plan mode stays: ExitPlanMode is a question with the plan as its text, and allowing it switches the mode back to
@@ -750,7 +750,7 @@ passkey on someone else's computer.
   of the API, installed like any update.
 - Backup: a daily `pg_dump` in the custom format from a systemd timer, kept 14 days, with a restore command. The git
   remotes are the copy of `/srv/projects`.
-- Before the portal goes behind the tunnel (commands and checks: `README.md`, "Deployment"):
+- Before the portal goes behind the tunnel (commands and checks: `DEPLOYMENT.md`):
   - ntfy: an unguessable topic (whoever knows it can read and send its messages), subscribed in the ntfy app on the
     phone, optionally with an access token; the API gets `Notifications__NtfyUrl` (and `Notifications__NtfyToken`) from
     its `600` environment file.
@@ -883,7 +883,7 @@ Deployment decisions:
   setting that switches it off, and reading `ASPNETCORE_ENVIRONMENT` directly (a host that defaults to Production
   without it would skip it). It has no automated test: an in-process test would change the test host itself, and a
   test in a child process would need a second runnable API with a database, tmux and a frontend build; the acceptance
-  check on the server covers it (`README.md`, "Deployment", phase A).
+  check on the server covers it (`DEPLOYMENT.md`, phase A).
 
 ## Stages
 

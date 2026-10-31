@@ -1,5 +1,5 @@
 # Starts claushh-wal-sync@%i.service whenever pywal rewrites the colours of the user %i, so the portal's terminal takes
-# the desktop terminal's palette (README.md, "Deployment" → "The terminal's colours (pywal)"). Optional: install.sh
+# the desktop terminal's palette (docs/DEPLOYMENT.md, "The terminal's colours (pywal)"). Optional: install.sh
 # installs it and never enables it.
 [Unit]
 Description=Claushh: watch the pywal colours of %i

@@ -34,14 +34,14 @@ On the server (decisions: `PLAN.md`, "Deployment decisions"):
 - `claushh.service` runs the API as the user `workspace` on `http://127.0.0.1:5090`, from `/opt/claushh/api`, serving
   `/opt/claushh/web`; `cloudflared.service` connects the tunnel; `claushh-backup.timer` dumps the database daily into
   `/var/backups/claushh`; the optional `claushh-wal-sync@<owner>.path` copies the owner's pywal colours for the
-  terminal into `/home/workspace/.cache/wal`. `deploy/install.sh` installs the build and the units (`README.md`,
-  "Deployment").
+  terminal into `/home/workspace/.cache/wal`. `deploy/install.sh` installs the build and the units
+  (`DEPLOYMENT.md`).
 - PostgreSQL is the compose project `claushh-prod` on `127.0.0.1:5435` (`/opt/claushh/deploy/docker-compose.yml`).
 - `/opt/claushh` (the API, the frontend build, `deploy/`) belongs to root; `/etc/claushh` (root only) holds
   `claushh.env` (the unit's install-specific settings and secrets) and `compose.env` (the compose variables);
   `/srv/projects` belongs to `workspace`; the tmux socket is in `/run/claushh`.
 - The console runs `/home/workspace/.local/bin/claude` (Anthropic's installer, updates off; `Console__ClaudePath` in the
-  unit), logged in once in `/home/workspace/.local/state/claushh/claude` (`README.md`, "Deployment" → "The console").
+  unit), logged in once in `/home/workspace/.local/state/claushh/claude` (`DEPLOYMENT.md`, "The console").
 
 ## Repository map
 
@@ -82,7 +82,7 @@ On the server (decisions: `PLAN.md`, "Deployment decisions"):
 | `web/src/app/core/text/` | the shared text helpers (plurals, relative time, `en-GB` dates, the wait of a `429`, the session countdown's `formatDuration` as "24:13" or "1:05:00", the shared failure texts `tooManyAttempts`, `NO_CONNECTION` and `PASSKEYS_AT_DOMAIN_ONLY`) and `revealHidden` and `previewText` for commands to approve |
 | `web/src/app/core/icons/` | `fileIconUrl` and `folderIconUrl` (a file's or folder's icon in `public/file-icons/`), `fileIconFor` (the icon of a path or a name) and `file-icon-map.ts`, which `scripts/file-icons.mjs` generates |
 | `web/public/file-icons/` | the shipped selection of Material Icon Theme's SVGs and its `LICENSE`, copied by `scripts/file-icons.mjs` and committed |
-| `web/scripts/` | `file-icons.mjs`, which copies the allowed icons of `material-icon-theme` and writes the map (`README.md`, "Updating the file icons") |
+| `web/scripts/` | `file-icons.mjs`, which copies the allowed icons of `material-icon-theme` and writes the map (`DEVELOPMENT.md`, "Updating the file icons") |
 | `web/src/app/features/` | one folder per feature with its store, its views and their integration specs |
 | `web/src/app/features/explorer/` | file tree, directories loaded lazily on expand, the theme's file and folder icons, git badges and git-colored names, "Refresh" |
 | `web/src/app/features/search/` | the Search view: `search-api.ts` (the search request and its results by file), `search-store.ts` (the query, toggles, globs, results and folded files; searches 300 ms after typing and drops the older search), `search-view.*` (the field and its toggles, the files to include and exclude, the results by file with the matches highlighted) |
@@ -111,14 +111,14 @@ On the server (decisions: `PLAN.md`, "Deployment decisions"):
 | `deploy/backup.sh` | dump and restore of the production database (the container's `pg_dump -Fc`, 14 days kept), run as root |
 | `deploy/podman-socket.conf` | user drop-in that moves the `podman.socket` of `workspace` into its home, where the API's unit sees it |
 | `deploy/install.sh` | `build <dir>` (as you: the self-contained API, the frontend build, `deploy/`) and `install <dir>` (as root: the checks, a dump before an update, `/opt/claushh` replaced with the old copy kept as `*.previous`, the units (the pywal copy installed, never enabled), the restart and the health check) |
-| `docs/` | project documentation: `PLAN.md` (goal, decisions, stages) and `ARCHITECTURE.md` (this code map) |
-| `docs/images/` | the README's screenshot, taken from the built frontend on the e2e mock (its files and shell are made up) |
+| `docs/` | project documentation: `PLAN.md` (goal, decisions, stages), `ARCHITECTURE.md` (this code map), `DEVELOPMENT.md` (running in development, the built frontend, the tests, updating the file icons) and `DEPLOYMENT.md` (the install on the server, the acceptance checks, updates, rollback, restoring a dump) |
+| `docs/images/` | the README's GIF, recorded from the built frontend on the e2e mock (its files, shell and console replies are made up) |
 | `.github/workflows/ci.yml` | CI for every push to `main` and every pull request, which runs the frontend's `npm ci`, integration tests, build and e2e tests |
 | `.github/workflows/release.yml` | on every published release, builds with `deploy/install.sh build`, attaches `claushh-<tag>-linux-x64.tar.gz` to the release and publishes the same files as the package `ghcr.io/zambrzyckii/claushh` (an image that only holds them under `/claushh`, tagged with the version and `latest`) |
 | `.github/dependabot.yml` | Dependabot's weekly version updates for npm in `web/` and for the workflow's actions (NuGet stays out while CI does not run the backend's tests) |
 | `LICENSE` | the MIT License of the project's own code (the third-party files keep their own, `README.md`, "License") |
 | `SECURITY.md` | how to report a vulnerability, privately through GitHub's private vulnerability reporting |
-| `README.md` | what the portal is, running in development, deployment, updates, tests and the third-party assets |
+| `README.md` | what the portal is and its stack, running in development and the built frontend, where the deployment and the tests are described, the license and the third-party assets |
 | `CLAUDE.md` | working rules for the repository (also for Claude Code): documentation in every change, commits, tests, security |
 | `.editorconfig` | UTF-8, LF, final newline, 2-space indent (4 for `*.cs`) |
 | `.gitignore` | .NET build output, `.env` files and local `appsettings.*.local.json`, editor and OS files |
@@ -1273,7 +1273,7 @@ Console (`Claude/`; the contract is in "Console"; decisions: `PLAN.md`, "Backend
   (`cleanupPeriodDays: 90`).
 
 Commands (`dotnet run --project src -- <command>`; on the server as `workspace`, with the service's
-environment file and a terminal, through `systemd-run`: README.md, "Deployment", step 10):
+environment file and a terminal, through `systemd-run`: DEPLOYMENT.md, "First install", step 10):
 
 | Command | What it does |
 |---|---|

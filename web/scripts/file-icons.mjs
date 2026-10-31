@@ -1,7 +1,7 @@
 // Copies a selection of Material Icon Theme's file and folder icons into public/file-icons/ (with the theme's LICENSE)
 // and writes their name map to src/app/core/icons/file-icon-map.ts (docs/ARCHITECTURE.md, "Frontend"). Both are
 // committed, so builds and tests never need the package. Run it after changing ALLOWED or updating the package:
-// node scripts/file-icons.mjs (README.md, "Updating the file icons").
+// node scripts/file-icons.mjs (docs/DEVELOPMENT.md, "Updating the file icons").
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';

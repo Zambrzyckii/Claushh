@@ -10,7 +10,8 @@ In this repository documentation has priority. It should let you find your way a
 - Every code change that adds, removes or moves a module, endpoint, route, dependency, configuration
   variable or command updates `docs/ARCHITECTURE.md` in the same step.
 - A change of a decision, the stack or a stage's scope updates `docs/PLAN.md`. Tick off a completed stage in the "Stages" section.
-- A change in how the app is run updates `README.md`.
+- A change in how the app is run updates `README.md` and `docs/DEVELOPMENT.md`, and a change in how it is deployed
+  updates `docs/DEPLOYMENT.md`.
 - A new file or class with a non-obvious role gets a short comment at the top: why it exists and where it is described.
 - Documentation, comments and code identifiers in English.
 
