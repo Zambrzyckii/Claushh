@@ -111,7 +111,7 @@ On the server (decisions: `PLAN.md`, "Deployment decisions"):
 | `deploy/backup.sh` | dump and restore of the production database (the container's `pg_dump -Fc`, 14 days kept), run as root |
 | `deploy/podman-socket.conf` | user drop-in that moves the `podman.socket` of `workspace` into its home, where the API's unit sees it |
 | `deploy/install.sh` | `build <dir>` (as you: the self-contained API, the frontend build, `deploy/`) and `install <dir>` (as root: the checks, a dump before an update, `/opt/claushh` replaced with the old copy kept as `*.previous`, the units (the pywal copy installed, never enabled), the restart and the health check) |
-| `docs/` | project documentation: `PLAN.md` (goal, decisions, stages) and `ARCHITECTURE.md` (this code map) |
+| `docs/` | project documentation: `PLAN.md` (goal, decisions, stages), `ARCHITECTURE.md` (this code map), `DEVELOPMENT.md` (running in development, the built frontend, the tests, updating the file icons) and `DEPLOYMENT.md` (the install on the server, the acceptance checks, updates, rollback, restoring a dump) |
 | `docs/images/` | the README's GIF, recorded from the built frontend on the e2e mock (its files, shell and console replies are made up) |
 | `.github/workflows/ci.yml` | CI for every push to `main` and every pull request, which runs the frontend's `npm ci`, integration tests, build and e2e tests |
 | `.github/workflows/release.yml` | on every published release, builds with `deploy/install.sh build`, attaches `claushh-<tag>-linux-x64.tar.gz` to the release and publishes the same files as the package `ghcr.io/zambrzyckii/claushh` (an image that only holds them under `/claushh`, tagged with the version and `latest`) |
