@@ -1,10 +1,10 @@
 import { APIRequestContext, CDPSession, Locator, Page, expect } from '@playwright/test';
 
-/** Data and paths from the mock backend (e2e/mock-api/server.mjs). */
-export const USER = { userName: 'owner', password: 'secret', totpCode: '123456' };
-export const MAIN = 'studia/lab-3-sieci/src/main.c';
+import seed from '../mock-api/seed.json';
+
+/** Data and paths from the mock backend. USER, MAIN and BAZY_SQL come from its seed, e2e/mock-api/seed.json. */
+export const { USER, MAIN, BAZY_SQL } = seed;
 export const LAB = 'studia/lab-3-sieci';
-export const BAZY_SQL = 'studia/bazy-danych-lab/zadanie4.sql';
 
 /** The mock and its /__test/* endpoints: always at 127.0.0.1, also in tests that open the portal at localhost. */
 export const MOCK_ORIGIN = 'http://127.0.0.1:4400';

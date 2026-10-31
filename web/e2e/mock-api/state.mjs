@@ -2,8 +2,10 @@
 // "committed" content that simulated git compares with, and the directory queries several areas use. The route order
 // is listed in server.mjs.
 
-export const USER = { userName: 'owner', password: 'secret', totpCode: '123456' };
-export const MAIN = 'studia/lab-3-sieci/src/main.c';
+import fs from 'node:fs';
+
+const seed = JSON.parse(fs.readFileSync(new URL('./seed.json', import.meta.url), 'utf8'));
+export const { USER, MAIN, BAZY_SQL } = seed;
 
 const INITIAL_FILES = {
   [MAIN]: '#include <stdio.h>\n\nint main(void)\n{\n    return 0;\n}\n',
@@ -14,8 +16,6 @@ const INITIAL_FILES = {
   'studia/bazy-danych-lab/zadanie4.sql': '-- zadanie 4\nCREATE VIEW v AS SELECT 1;\n',
   'prywatne/notatki/README.md': '# Notatki\n'
 };
-
-export const BAZY_SQL = 'studia/bazy-danych-lab/zadanie4.sql';
 
 const INITIAL_WORKSPACES = [
   ['studia', 'Studia'],

@@ -1,0 +1,5 @@
+{
+  "USER": { "userName": "owner", "password": "secret", "totpCode": "123456" },
+  "MAIN": "studia/lab-3-sieci/src/main.c",
+  "BAZY_SQL": "studia/bazy-danych-lab/zadanie4.sql"
+}
