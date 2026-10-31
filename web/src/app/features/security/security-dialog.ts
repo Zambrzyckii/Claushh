@@ -1,13 +1,12 @@
-import { Component, ElementRef, inject, input, output, signal, viewChild } from '@angular/core';
-import { firstValueFrom } from 'rxjs';
+import { Component, ElementRef, inject, input, output, viewChild } from '@angular/core';
 
 import { Passkey } from './passkeys-api';
-import { ActiveSession, LoginAttempt, SessionsApi } from './sessions-api';
 import { SessionTimer } from '../../core/auth/session-timer';
 import { DeviceLayout } from '../../core/browser/device-layout';
 import { Dialogs } from '../../core/browser/dialogs';
 import { formatDateTime } from '../../core/text/format';
 import { PasskeysStore } from './passkeys-store';
+import { SessionsStore } from './sessions-store';
 
 /**
  * The Security window (opened by the user name in the top bar, on a phone from the menu): time until the session
@@ -17,16 +16,16 @@ import { PasskeysStore } from './passkeys-store';
  */
 @Component({
   selector: 'app-security-dialog',
-  providers: [PasskeysStore],
+  providers: [PasskeysStore, SessionsStore],
   templateUrl: './security-dialog.html',
   styleUrl: './security-dialog.scss'
 })
 export class SecurityDialog {
-  private readonly api = inject(SessionsApi);
   private readonly dialogs = inject(Dialogs);
   protected readonly timer = inject(SessionTimer);
   protected readonly layout = inject(DeviceLayout);
   protected readonly passkeys = inject(PasskeysStore);
+  protected readonly sessions = inject(SessionsStore);
 
   /** Number of unsaved files. "Log out everywhere" asks about them right away, together with the confirmation. */
   readonly unsavedCount = input(0);
@@ -41,17 +40,12 @@ export class SecurityDialog {
   private readonly reauthPassword = viewChild<ElementRef<HTMLInputElement>>('reauthPassword');
   private readonly reauthCode = viewChild<ElementRef<HTMLInputElement>>('reauthCode');
 
-  protected readonly sessions = signal<readonly ActiveSession[] | null>(null);
-  protected readonly logins = signal<readonly LoginAttempt[] | null>(null);
-  protected readonly error = signal<string | null>(null);
-  protected readonly busy = signal(false);
-
   open(): void {
     const dialog = this.dialog().nativeElement;
     if (!dialog.open) {
       dialog.showModal();
     }
-    void this.load();
+    void this.sessions.load();
     // Apart from the sessions, so a slow or failing passkey list never holds them up.
     void this.passkeys.load();
   }
@@ -60,18 +54,6 @@ export class SecurityDialog {
   protected close(): void {
     this.passkeys.cancelReauthentication();
     this.dialog().nativeElement.close();
-  }
-
-  protected otherSessions(): number {
-    return this.sessions()?.filter((s) => !s.current).length ?? 0;
-  }
-
-  protected async revoke(session: ActiveSession): Promise<void> {
-    await this.run(() => firstValueFrom(this.api.revoke(session.id)), 'Could not end the session.');
-  }
-
-  protected async revokeOthers(): Promise<void> {
-    await this.run(() => firstValueFrom(this.api.revokeOthers()), 'Could not end the other sessions.');
   }
 
   protected async everywhere(): Promise<void> {
@@ -84,7 +66,7 @@ export class SecurityDialog {
     if (!this.dialogs.confirm(question)) {
       return;
     }
-    const ok = await this.run(() => firstValueFrom(this.api.revokeOthers()), 'Could not end the other sessions.', false);
+    const ok = await this.sessions.revokeOthers(false);
     if (ok) {
       this.close();
       this.logoutEverywhere.emit();
@@ -133,36 +115,5 @@ export class SecurityDialog {
 
   protected date(iso: string): string {
     return formatDateTime(iso);
-  }
-
-  private async load(): Promise<void> {
-    this.error.set(null);
-    try {
-      const [sessions, logins] = await Promise.all([firstValueFrom(this.api.list()), firstValueFrom(this.api.logins())]);
-      this.sessions.set(sessions);
-      this.logins.set(logins);
-    } catch {
-      this.error.set('Could not load the sessions.');
-    }
-  }
-
-  private async run(action: () => Promise<void>, failure: string, reload = true): Promise<boolean> {
-    if (this.busy()) {
-      return false;
-    }
-    this.busy.set(true);
-    this.error.set(null);
-    try {
-      await action();
-      if (reload) {
-        await this.load();
-      }
-      return true;
-    } catch {
-      this.error.set(failure);
-      return false;
-    } finally {
-      this.busy.set(false);
-    }
   }
 }
