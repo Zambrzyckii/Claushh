@@ -3,7 +3,7 @@
 [![CI](https://github.com/Zambrzyckii/Claushh/actions/workflows/ci.yml/badge.svg)](https://github.com/Zambrzyckii/Claushh/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-![Claushh with a repository open, showing the explorer, a C file in the editor, a terminal below it and a console conversation that edited the file and ran the tests](docs/images/workspace.png)
+![Claushh with a repository open: a command in the terminal, then a console prompt whose steps edit main.c, create NOTES.md and run the tests, and the editor shows the new comment](docs/images/workbench.gif)
 
 A private web portal for working on projects from any device: code editor, console for Claude Code,
 terminal and git in the browser. Runs on a home computer (EndeavourOS), access through Cloudflare Tunnel,

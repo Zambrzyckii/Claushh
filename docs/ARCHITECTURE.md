@@ -112,7 +112,7 @@ On the server (decisions: `PLAN.md`, "Deployment decisions"):
 | `deploy/podman-socket.conf` | user drop-in that moves the `podman.socket` of `workspace` into its home, where the API's unit sees it |
 | `deploy/install.sh` | `build <dir>` (as you: the self-contained API, the frontend build, `deploy/`) and `install <dir>` (as root: the checks, a dump before an update, `/opt/claushh` replaced with the old copy kept as `*.previous`, the units (the pywal copy installed, never enabled), the restart and the health check) |
 | `docs/` | project documentation: `PLAN.md` (goal, decisions, stages) and `ARCHITECTURE.md` (this code map) |
-| `docs/images/` | the README's screenshot, taken from the built frontend on the e2e mock (its files and shell are made up) |
+| `docs/images/` | the README's GIF, recorded from the built frontend on the e2e mock (its files, shell and console replies are made up) |
 | `.github/workflows/ci.yml` | CI for every push to `main` and every pull request, which runs the frontend's `npm ci`, integration tests, build and e2e tests |
 | `.github/workflows/release.yml` | on every published release, builds with `deploy/install.sh build`, attaches `claushh-<tag>-linux-x64.tar.gz` to the release and publishes the same files as the package `ghcr.io/zambrzyckii/claushh` (an image that only holds them under `/claushh`, tagged with the version and `latest`) |
 | `.github/dependabot.yml` | Dependabot's weekly version updates for npm in `web/` and for the workflow's actions (NuGet stays out while CI does not run the backend's tests) |
