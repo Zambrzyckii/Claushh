@@ -5,6 +5,7 @@ import { firstValueFrom } from 'rxjs';
 import { FileApiError, FilesApi, fileErrorMessage } from '../../core/api/files-api';
 import { GitApi } from '../../core/api/git-api';
 import { baseName, repoOf } from '../../core/api/project-path';
+import { Dialogs } from '../../core/browser/dialogs';
 import { ProjectContext } from '../../core/project/project-context';
 
 /**
@@ -81,6 +82,7 @@ export interface LineSelection {
 export class EditorStore {
   private readonly files = inject(FilesApi);
   private readonly git = inject(GitApi);
+  private readonly dialogs = inject(Dialogs);
 
   private readonly docs = signal<readonly OpenDocument[]>([]);
   private readonly activePathSignal = signal<string | null>(null);
@@ -230,7 +232,7 @@ export class EditorStore {
 
   /**
    * Closes a tab. With unsaved changes it closes only with `force`
-   * (the component asks the user first). Returns whether it was closed.
+   * (`closeWithQuestion` asks the user first). Returns whether it was closed.
    */
   close(path: string, force = false): boolean {
     const doc = this.find(path);
@@ -256,6 +258,17 @@ export class EditorStore {
       }
     }
     return true;
+  }
+
+  /** Closes a tab, asking the user first when it has unsaved changes. */
+  closeWithQuestion(path: string): void {
+    const doc = this.find(path);
+    if (!doc || this.close(path)) {
+      return;
+    }
+    if (this.dialogs.confirm(`${doc.name} has unsaved changes. Close it without saving?`)) {
+      this.close(path, true);
+    }
   }
 
   async save(path = this.activePathSignal()): Promise<void> {

@@ -30,12 +30,7 @@ export class EditorPane {
 
   protected close(doc: OpenDocument, event?: Event): void {
     event?.stopPropagation();
-    if (this.store.close(doc.path)) {
-      return;
-    }
-    if (this.dialogs.confirm(`${doc.name} has unsaved changes. Close it without saving?`)) {
-      this.store.close(doc.path, true);
-    }
+    this.store.closeWithQuestion(doc.path);
   }
 
   protected closeWithMiddleClick(doc: OpenDocument, event: MouseEvent): void {
