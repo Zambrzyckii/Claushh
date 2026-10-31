@@ -87,7 +87,7 @@ const PORTAL_ANSI: ITheme = {
  *
  * Deliberately without clipboard addons (OSC 52): a program in the terminal cannot write anything to the browser clipboard.
  */
-export function terminalOptions(phone: boolean, theme: TerminalTheme | null): ITerminalOptions {
+function terminalOptions(phone: boolean, theme: TerminalTheme | null): ITerminalOptions {
   const background = theme?.background ?? cssToken('--surface');
   return {
     fontFamily: TERMINAL_FONT,

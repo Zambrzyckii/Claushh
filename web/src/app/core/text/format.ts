@@ -66,7 +66,7 @@ export function formatDateTime(iso: string): string {
  * The wait from `Retry-After`, rounded up, with the sentence's full stop: "30 s." below a minute, "15 min." below an
  * hour, "24 h." otherwise. Abbreviations need no plural forms.
  */
-export function formatWait(seconds: number): string {
+function formatWait(seconds: number): string {
   if (seconds < 60) {
     return `${seconds} s.`;
   }
