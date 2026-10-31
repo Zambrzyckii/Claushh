@@ -1,0 +1,45 @@
+<div #host class="host"></div>
+@if (loadFailed()) {
+  <p class="failed" role="alert">Could not load the terminal. Reload the page.</p>
+}
+@if (pasteRequest(); as request) {
+  <div class="decision decision--top" role="alertdialog" [attr.aria-labelledby]="ids.pasteTitle"
+       [attr.aria-describedby]="ids.pasteText" (keydown.escape)="cancelPaste()">
+    <p [id]="ids.pasteTitle">
+      The pasted text has {{ request.breaksLabel }}, so it can run commands at once. Paste it into the terminal?
+    </p>
+    <pre [id]="ids.pasteText">{{ request.preview }}</pre>
+    <div>
+      <button type="button" (click)="confirmPaste()">Paste</button>
+      <button #cancelPasteButton type="button" (click)="cancelPaste()">Cancel</button>
+    </div>
+  </div>
+}
+@if (inputState().held) {
+  <div class="decision" role="alertdialog" [attr.aria-labelledby]="ids.staleTitle" [attr.aria-describedby]="ids.staleText">
+    <p [id]="ids.staleTitle">Characters typed while disconnected did not reach the terminal. Send them now?</p>
+    <pre [id]="ids.staleText">{{ stalePreview() }}</pre>
+    <p class="faint">The terminal shows what already reached it. “Discard” removes only the characters above.</p>
+    <div>
+      <button type="button" (click)="sendStaleInput()">Send</button>
+      <button type="button" (click)="discardStaleInput()">Discard</button>
+    </div>
+  </div>
+} @else if (inputNotice(); as notice) {
+  <p class="notice" role="status">{{ notice }}</p>
+}
+@if (layout.phone()) {
+  <div class="keys" role="toolbar" aria-label="Terminal keys">
+    @for (key of keys; track key.id) {
+      <button type="button" [disabled]="!!pasteRequest()" [attr.aria-label]="key.label"
+              [attr.aria-pressed]="key.id === 'ctrl' ? ctrl() : null"
+              (pointerdown)="$event.preventDefault()" (mousedown)="$event.preventDefault()" (click)="press(key.id)">
+        @if (key.icon) {
+          <span [class]="'codicon codicon-' + key.icon" aria-hidden="true"></span>
+        } @else {
+          {{ key.label }}
+        }
+      </button>
+    }
+  </div>
+}

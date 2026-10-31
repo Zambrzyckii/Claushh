@@ -1,0 +1,94 @@
+:host {
+  display: block;
+  position: relative;
+  height: 100%;
+}
+.host {
+  position: absolute;
+  inset: 10px;
+}
+.failed {
+  position: absolute;
+  margin: 12px 16px;
+  color: var(--error);
+}
+.notice {
+  position: absolute;
+  right: 12px;
+  bottom: 8px;
+  margin: 0;
+  padding: 4px 8px;
+  background: var(--surface);
+  border: 1px solid var(--warning);
+  border-radius: 3px;
+  color: var(--warning);
+  font-size: 12px;
+}
+.decision {
+  box-sizing: border-box;
+  position: absolute;
+  right: 12px;
+  bottom: 8px;
+  max-width: min(560px, calc(100% - 24px));
+  max-height: calc(100% - 16px);
+  overflow: auto;
+  padding: 8px 12px;
+  background: var(--surface);
+  border: 1px solid var(--warning);
+  border-radius: 3px;
+  font-size: 12px;
+
+  &--top {
+    top: 8px;
+    bottom: auto;
+  }
+  p {
+    margin: 0 0 6px;
+  }
+  pre {
+    margin: 0 0 6px;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font-family: var(--font-mono);
+    color: var(--text-strong);
+  }
+  .faint {
+    color: var(--text-muted);
+  }
+  button {
+    margin-right: 8px;
+    border-color: var(--border-strong);
+  }
+}
+.keys {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 40px;
+  display: flex;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+}
+.keys button {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border-radius: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.keys button[aria-pressed='true'] {
+  color: var(--accent);
+}
+:host(.phone) .host {
+  bottom: 50px;
+}
+:host(.phone) .notice,
+:host(.phone) .decision:not(.decision--top) {
+  bottom: 48px;
+}
+:host(.phone) .decision {
+  max-height: calc(100% - 56px);
+}
