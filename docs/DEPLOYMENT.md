@@ -9,8 +9,10 @@ home network's address (e.g. `192.168.1.0`).
 
 ## First install
 
-1. Packages: `sudo pacman -S --needed podman cloudflared`. Choose `netavark` when pacman asks for the network stack.
-   Do not install `podman-docker`: the `docker` CLI already talks to Podman's Docker-compatible API.
+1. Packages: Docker with its compose plugin (the database and the backup run `docker compose`, and `claushh.service`
+   waits for `docker.service`), then `sudo pacman -S --needed podman cloudflared`. Choose `netavark` when pacman asks
+   for the network stack. Do not install `podman-docker`: the `docker` CLI already talks to Podman's Docker-compatible
+   API.
 2. The user: `sudo useradd -m -s /usr/bin/zsh workspace` (no password: nobody logs in as it). Then
    `grep workspace /etc/subuid /etc/subgid` shows 65536 IDs in each file, overlapping no other range there; otherwise
    `sudo usermod --add-subuids 165536-231071 --add-subgids 165536-231071 workspace` (any free range).
@@ -283,7 +285,7 @@ sudo mv /opt/claushh/deploy /opt/claushh/deploy.failed
 sudo mv /opt/claushh/api.previous /opt/claushh/api
 sudo mv /opt/claushh/web.previous /opt/claushh/web
 sudo mv /opt/claushh/deploy.previous /opt/claushh/deploy
-sudo install -m 0644 /opt/claushh/deploy/*.service /opt/claushh/deploy/*.timer /etc/systemd/system/
+sudo install -m 0644 /opt/claushh/deploy/*.service /opt/claushh/deploy/*.timer /opt/claushh/deploy/*.path /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo /opt/claushh/deploy/backup.sh restore /var/backups/claushh/<the dump from before the update>
 sudo systemctl start claushh

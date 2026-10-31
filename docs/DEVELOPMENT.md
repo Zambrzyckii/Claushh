@@ -31,8 +31,9 @@ belong to the user the API runs as: libgit2 refuses others, like git's safe.dire
 
 The Terminal tab runs your login shell (your `SHELL`) as you, on a tmux server of the API's own (socket in
 `$XDG_RUNTIME_DIR/claushh`, apart from your own tmux), with only a few variables of the API's environment (HOME, USER,
-PATH, the locale): none of the API's connection string, `ASPNETCORE_*`, `DOTNET_*` or `CLAUDECODE*` reach it (your login
-profile may still set its own, e.g. `DOTNET_ROOT`). Terminals end when the API stops, also on Ctrl+C. Open the portal
+LOGNAME, SHELL, PATH, TZ and the locale, plus COLORTERM and the variables in `Terminal:Environment`): none of the API's
+connection string, `ASPNETCORE_*`, `DOTNET_*` or `CLAUDECODE*` reach it (your login profile may still set its own, e.g.
+`DOTNET_ROOT`). Terminals end when the API stops, also on Ctrl+C. Open the portal
 at `http://localhost:4200`: hubs accept only the origins in `Hubs:AllowedOrigins` (`appsettings.Development.json`), so
 `http://127.0.0.1:4200` gets no terminal or console.
 
