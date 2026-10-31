@@ -26,6 +26,7 @@ import { countLabel } from '../../core/text/format';
 import { previewText } from '../../core/text/visible-text';
 import { MAX_PENDING_INPUT, lineBreaks, sanitizePaste, withCtrl } from './terminal-input';
 import { PhoneKey, TerminalKeys, keySequence } from './terminal-keys';
+import { TerminalOutputOrder } from './terminal-output';
 import { TerminalStore } from './terminal-store';
 import { TERMINAL_FONT, createTerminal, loadXterm } from './xterm-loader';
 
@@ -89,9 +90,7 @@ export class TerminalView {
   private term: Terminal | null = null;
   private fit: FitAddon | null = null;
   private resizeObserver: ResizeObserver | null = null;
-  private attached = false;
-  private lastSeq = 0;
-  private pending: { seq: number; data: string }[] = [];
+  private readonly outputOrder = new TerminalOutputOrder({ reset: () => this.term?.reset(), write: (data) => this.term?.write(data) });
   private exitShown = false;
   private destroyed = false;
   /** Stops re-measuring on late fonts (set in `init`). */
@@ -145,7 +144,7 @@ export class TerminalView {
     // confirms what arrived and pauses characters that are too old (also when the connection comes back via a manual "reconnect").
     effect(() => {
       if (this.store.connectionState() !== 'connected') {
-        this.attached = false;
+        this.outputOrder.detach();
       }
     });
 
@@ -210,11 +209,11 @@ export class TerminalView {
       void this.flushInput();
     });
     term.onResize(({ cols, rows }) => {
-      if (this.attached) {
+      if (this.outputOrder.attached) {
         this.store.resize(this.id, cols, rows);
       }
     });
-    this.subscriptions.add(this.store.output(this.id).subscribe((chunk) => this.onOutput(chunk)));
+    this.subscriptions.add(this.store.output(this.id).subscribe((chunk) => this.outputOrder.receive(chunk)));
     this.subscriptions.add(this.store.reattach.subscribe(() => void this.attach()));
 
     this.resizeObserver = new ResizeObserver(() => this.fitToContainer());
@@ -231,22 +230,14 @@ export class TerminalView {
     if (!term) {
       return;
     }
-    this.attached = false;
-    this.pending = [];
+    this.outputOrder.beginAttach();
     try {
       const attachment = await this.store.attach(this.id, term.cols, term.rows);
       if (this.destroyed) {
         return;
       }
-      term.reset();
-      term.write(attachment.snapshot);
-      this.lastSeq = attachment.seq;
-      this.attached = true;
+      this.outputOrder.completeAttach(attachment.snapshot, attachment.seq);
       this.exitShown = false;
-      for (const chunk of this.pending) {
-        this.onOutput(chunk);
-      }
-      this.pending = [];
       if (this.terminal().exited) {
         this.showExit();
       }
@@ -260,7 +251,7 @@ export class TerminalView {
 
   /** Sends the waiting characters if the view is attached (the queue will not send paused ones on its own). */
   private flushInput(): Promise<void> {
-    return this.attached ? this.inputQueue().flush() : Promise.resolve();
+    return this.outputOrder.attached ? this.inputQueue().flush() : Promise.resolve();
   }
 
   protected sendStaleInput(): void {
@@ -359,20 +350,8 @@ export class TerminalView {
     afterNextRender(() => this.cancelPasteButton()?.nativeElement.focus(), { injector: this.injector });
   }
 
-  private onOutput(chunk: { seq: number; data: string }): void {
-    if (!this.attached) {
-      this.pending.push(chunk);
-      return;
-    }
-    if (chunk.seq <= this.lastSeq) {
-      return; // already in the snapshot
-    }
-    this.lastSeq = chunk.seq;
-    this.term?.write(chunk.data);
-  }
-
   private showExit(): void {
-    if (!this.term || !this.attached || this.exitShown) {
+    if (!this.term || !this.outputOrder.attached || this.exitShown) {
       return;
     }
     this.exitShown = true;

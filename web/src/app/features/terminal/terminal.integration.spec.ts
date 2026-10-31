@@ -6,6 +6,7 @@ import { Subject } from 'rxjs';
 import { ConnectionState } from '../../core/realtime/hub-client';
 import { ProjectContext } from '../../core/project/project-context';
 import { MAX_PENDING_INPUT } from './terminal-input';
+import { TerminalOutputOrder } from './terminal-output';
 import { TerminalConnection } from './terminal-connection';
 import { TerminalAttachment, TerminalExit, TerminalInfo, TerminalOutput } from './terminal-protocol';
 import { TerminalStore } from './terminal-store';
@@ -14,7 +15,8 @@ import { AUTO_RESEND_MS } from './terminal-view';
 /**
  * Integration: the real TerminalStore with the real TerminalInputQueue and ProjectContext (router). Only the network
  * boundary is replaced: the SignalR connection (FakeTerminalConnection). No TerminalPanel and no TerminalView, so xterm
- * never loads. The test settles the fake's list, attach and input calls itself.
+ * never loads. The test settles the fake's list, attach and input calls itself. In "output order" the store's output
+ * goes into a real TerminalOutputOrder with a sink that records what it writes.
  */
 
 interface Deferred<T> {
@@ -371,5 +373,62 @@ describe('Terminal (integration)', () => {
     await tick();
 
     expect(store.terminals().map((t) => t.id)).toEqual(['t1', 't4']);
+  });
+
+  describe('output order', () => {
+    async function orderSetup() {
+      const { store, connection } = await setup();
+      const written: string[] = [];
+      const order = new TerminalOutputOrder({
+        reset: () => written.push('reset'),
+        write: (data) => written.push(data)
+      });
+      store.output('t1').subscribe((chunk) => order.receive(chunk));
+      const send = (seq: number, data: string) => connection.output$.next({ id: 't1', seq, data });
+      return { order, written, send };
+    }
+
+    it('writes the snapshot, then the buffered chunks after its seq', async () => {
+      const { order, written, send } = await orderSetup();
+
+      order.beginAttach();
+      send(3, 'in the snapshot');
+      send(4, 'after the snapshot');
+
+      expect(written).toEqual([]);
+
+      order.completeAttach('screen', 3);
+
+      expect(written).toEqual(['reset', 'screen', 'after the snapshot']);
+    });
+
+    it('skips a chunk the snapshot holds and writes the next one at once', async () => {
+      const { order, written, send } = await orderSetup();
+      order.beginAttach();
+      order.completeAttach('s', 5);
+
+      send(5, 'in the snapshot');
+
+      expect(written).toEqual(['reset', 's']);
+
+      send(6, 'next');
+
+      expect(written).toEqual(['reset', 's', 'next']);
+    });
+
+    it('buffers after a lost connection until the next attach', async () => {
+      const { order, written, send } = await orderSetup();
+      order.beginAttach();
+      order.completeAttach('s1', 5);
+
+      order.detach();
+      send(7, 'while detached');
+
+      expect(written).toEqual(['reset', 's1']);
+
+      order.completeAttach('s2', 6);
+
+      expect(written).toEqual(['reset', 's1', 'reset', 's2', 'while detached']);
+    });
   });
 });
