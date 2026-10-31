@@ -1,6 +1,8 @@
 # Development
 
-How to run Claushh on a development machine, how the API serves the built frontend, how the tests run, and how the file icons are updated. Deploying it on a server is described in [DEPLOYMENT.md](DEPLOYMENT.md), the goal and the decisions in [PLAN.md](PLAN.md), and the code map in [ARCHITECTURE.md](ARCHITECTURE.md).
+How to run Claushh on a development machine, how the API serves the built frontend, how the tests run, and how the file
+icons are updated. Deploying it on a server is described in [DEPLOYMENT.md](DEPLOYMENT.md), the goal and the decisions
+in [PLAN.md](PLAN.md), and the code map in [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Running in development
 

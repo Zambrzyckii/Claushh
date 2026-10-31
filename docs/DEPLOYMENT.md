@@ -1,10 +1,10 @@
 # Deployment
 
-The portal runs on a Linux server of your own: the API as `claushh.service` under the user `workspace` on
-`127.0.0.1:5090`, PostgreSQL as the compose project `claushh-prod` on `127.0.0.1:5435`, and in front of them Cloudflare
-Access (a one-time PIN by e-mail) and a remotely managed Cloudflare Tunnel (`cloudflared.service`). The steps were
-written for EndeavourOS on a desktop, so step 1 (the packages), step 13 (the firewall) and step 14 (power) depend on
-the distribution and the machine. Decisions: `docs/PLAN.md`, "Deployment decisions"; the files: `deploy/`
+The portal runs on a Linux server of your own. The API runs as `claushh.service` under the user `workspace` on
+`127.0.0.1:5090`, PostgreSQL runs as the compose project `claushh-prod` on `127.0.0.1:5435`, and Cloudflare Access (a
+one-time PIN by e-mail) and a remotely managed Cloudflare Tunnel (`cloudflared.service`) stand in front of them. The
+steps were written for EndeavourOS on a desktop, so step 1 (the packages), step 13 (the firewall) and step 14 (power)
+depend on the distribution and the machine. Decisions: `docs/PLAN.md`, "Deployment decisions"; the files: `deploy/`
 (`docs/ARCHITECTURE.md`, "Repository map"). You run every step yourself, from the repository root; `<domain>` is the
 portal's public host name and `<LAN>` the address of the network SSH stays open to (e.g. `192.168.1.0`).
 
