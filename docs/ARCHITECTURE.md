@@ -118,7 +118,7 @@ On the server (decisions: `PLAN.md`, "Deployment decisions"):
 | `.github/dependabot.yml` | Dependabot's weekly version updates for npm in `web/` and for the workflow's actions (NuGet stays out while CI does not run the backend's tests) |
 | `LICENSE` | the MIT License of the project's own code (the third-party files keep their own, `README.md`, "License") |
 | `SECURITY.md` | how to report a vulnerability, privately through GitHub's private vulnerability reporting |
-| `README.md` | what the portal is, running in development, deployment, updates, tests and the third-party assets |
+| `README.md` | what the portal is and its stack, running in development and the built frontend, where the deployment and the tests are described, the license and the third-party assets |
 | `CLAUDE.md` | working rules for the repository (also for Claude Code): documentation in every change, commits, tests, security |
 | `.editorconfig` | UTF-8, LF, final newline, 2-space indent (4 for `*.cs`) |
 | `.gitignore` | .NET build output, `.env` files and local `appsettings.*.local.json`, editor and OS files |
