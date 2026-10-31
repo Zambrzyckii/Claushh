@@ -83,7 +83,7 @@ function loadStylesheet(href: string): Promise<void> {
 
 export const MONACO_THEME = 'claushh-dark';
 
-/** Theme from the tokens of `web/src/styles.scss`; only the syntax colors and the selection are fixed here. */
+/** Theme from the tokens of `web/src/styles.scss`. Only the syntax colors are fixed here. */
 function defineTheme(monaco: Monaco): void {
   monaco.editor.defineTheme(MONACO_THEME, {
     base: 'vs-dark',

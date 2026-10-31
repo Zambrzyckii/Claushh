@@ -81,9 +81,9 @@ const PORTAL_ANSI: ITheme = {
 /**
  * Terminal appearance, read when a terminal is created. `theme`: the server's (pywal's) colors, which give the
  * background, the foreground, the cursor and the 16 ANSI colors; without one they come from the tokens of
- * `web/src/styles.scss` and the 16 ANSI colors above. The selection stays fixed here. `phone`: the phone layout's
- * smaller font. The line height adds about a pixel to the font's own, and bold text keeps its color instead of turning
- * bright, as in a desktop terminal.
+ * `web/src/styles.scss` and the 16 ANSI colors above. The selection always comes from the token `--editor-selection`.
+ * `phone`: the phone layout's smaller font. The line height adds about a pixel to the font's own, and bold text keeps
+ * its color instead of turning bright, as in a desktop terminal.
  *
  * Deliberately without clipboard addons (OSC 52): a program in the terminal cannot write anything to the browser clipboard.
  */
