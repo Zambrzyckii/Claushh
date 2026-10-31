@@ -29,17 +29,5 @@
   <p class="notice" role="status">{{ notice }}</p>
 }
 @if (layout.phone()) {
-  <div class="keys" role="toolbar" aria-label="Terminal keys">
-    @for (key of keys; track key.id) {
-      <button type="button" [disabled]="!!pasteRequest()" [attr.aria-label]="key.label"
-              [attr.aria-pressed]="key.id === 'ctrl' ? ctrl() : null"
-              (pointerdown)="$event.preventDefault()" (mousedown)="$event.preventDefault()" (click)="press(key.id)">
-        @if (key.icon) {
-          <span [class]="'codicon codicon-' + key.icon" aria-hidden="true"></span>
-        } @else {
-          {{ key.label }}
-        }
-      </button>
-    }
-  </div>
+  <app-terminal-keys [ctrl]="ctrl()" [disabled]="!!pasteRequest()" (pressed)="press($event)" />
 }

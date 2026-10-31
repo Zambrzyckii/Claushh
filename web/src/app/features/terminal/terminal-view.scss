@@ -60,28 +60,6 @@
     border-color: var(--border-strong);
   }
 }
-.keys {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 40px;
-  display: flex;
-  background: var(--surface);
-  border-top: 1px solid var(--border);
-}
-.keys button {
-  flex: 1 1 0;
-  min-width: 0;
-  height: 100%;
-  padding: 0;
-  border-radius: 0;
-  font-family: var(--font-mono);
-  font-size: 12px;
-}
-.keys button[aria-pressed='true'] {
-  color: var(--accent);
-}
 :host(.phone) .host {
   bottom: 50px;
 }

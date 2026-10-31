@@ -1,0 +1,13 @@
+<div class="keys" role="toolbar" aria-label="Terminal keys">
+  @for (key of keys; track key.id) {
+    <button type="button" [disabled]="disabled()" [attr.aria-label]="key.label"
+            [attr.aria-pressed]="key.id === 'ctrl' ? ctrl() : null"
+            (pointerdown)="$event.preventDefault()" (mousedown)="$event.preventDefault()" (click)="pressed.emit(key.id)">
+      @if (key.icon) {
+        <span [class]="'codicon codicon-' + key.icon" aria-hidden="true"></span>
+      } @else {
+        {{ key.label }}
+      }
+    </button>
+  }
+</div>
