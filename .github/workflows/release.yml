@@ -1,7 +1,7 @@
 # Builds the self-contained API, the frontend and deploy/ with deploy/install.sh whenever a release is published,
 # attaches them to the release as claushh-<tag>-linux-x64.tar.gz and publishes the same files as the package
-# ghcr.io/zambrzyckii/claushh, an image that holds them under /claushh and runs nothing. README.md, "Updates", says how
-# to install from either. Described in docs/ARCHITECTURE.md, "Repository map".
+# ghcr.io/zambrzyckii/claushh, an image that holds them under /claushh and runs nothing. docs/DEPLOYMENT.md, "Updates",
+# says how to install from either. Described in docs/ARCHITECTURE.md, "Repository map".
 name: Release
 
 on:

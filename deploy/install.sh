@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds Claushh and installs it on the server (README.md, "Deployment"; decisions: docs/PLAN.md, "Deployment
+# Builds Claushh and installs it on the server (docs/DEPLOYMENT.md; decisions: docs/PLAN.md, "Deployment
 # decisions").
 #   install.sh build <dir>     as you: the self-contained API, the frontend build and deploy/ into <dir>
 #   install.sh install <dir>   as root: checks, a dump before an update, /opt/claushh/{api,web,deploy} replaced (the
@@ -59,7 +59,7 @@ allowed_host() {
   host=$(. /etc/claushh/claushh.env && printf '%s' "${AllowedHosts:-}")
   host=${host%%;*}
   [[ -n $host && $host != *'<'* ]] \
-    || die "set AllowedHosts in /etc/claushh/claushh.env (README.md, \"Deployment\", step 5)"
+    || die "set AllowedHosts in /etc/claushh/claushh.env (docs/DEPLOYMENT.md, \"First install\", step 5)"
   printf '%s' "$host"
 }
 
@@ -73,7 +73,7 @@ wait_for_health() {
     fi
     sleep 1
   done
-  die "no answer from /api/health within 60 s: journalctl -u claushh; rollback: README.md, \"Deployment\""
+  die "no answer from /api/health within 60 s: journalctl -u claushh; rollback: docs/DEPLOYMENT.md, \"Rollback\""
 }
 
 install_build() {
@@ -88,12 +88,12 @@ install_build() {
   done
   for file in /etc/claushh/compose.env /etc/claushh/claushh.env; do
     [[ $(stat -c '%U %a' -- "$file" 2>/dev/null) == 'root 600' ]] \
-      || die "$file must exist, owned by root, with mode 600 (README.md, \"Deployment\", step 5)"
+      || die "$file must exist, owned by root, with mode 600 (docs/DEPLOYMENT.md, \"First install\", step 5)"
   done
   allowed_host >/dev/null
-  id -u workspace >/dev/null 2>&1 || die "the user workspace does not exist (README.md, \"Deployment\", step 2)"
+  id -u workspace >/dev/null 2>&1 || die "the user workspace does not exist (docs/DEPLOYMENT.md, \"First install\", step 2)"
   [[ $(stat -c '%U' -- /srv/projects 2>/dev/null) == workspace ]] \
-    || die "/srv/projects must exist and belong to workspace (README.md, \"Deployment\", step 4)"
+    || die "/srv/projects must exist and belong to workspace (docs/DEPLOYMENT.md, \"First install\", step 4)"
   # The copies are made while the API still runs, so a failed copy (a full disk) leaves it running.
   install -d -o root -g root -m 0755 "$prefix"
   for part in api web deploy; do
@@ -124,7 +124,7 @@ install_build() {
     systemctl start claushh.service
     wait_for_health
   else
-    printf 'install.sh: installed into %s; the API is not enabled and stays stopped (first install: README.md, "Deployment", step 9)\n' "$prefix"
+    printf 'install.sh: installed into %s; the API is not enabled and stays stopped (first install: docs/DEPLOYMENT.md, "First install", step 9)\n' "$prefix"
   fi
 }
 

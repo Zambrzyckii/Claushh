@@ -1,5 +1,5 @@
 # Copies pywal's colors.json and sequences of the user %i into /home/workspace/.cache/wal, where the API reads the
-# terminal's colours (Terminal:ThemeFile) and the shell can print the sequences (README.md, "Deployment" → "The
+# terminal's colours (Terminal:ThemeFile) and the shell can print the sequences (docs/DEPLOYMENT.md, "The
 # terminal's colours (pywal)"). Started by claushh-wal-sync@%i.path. It runs as workspace and sees of /home only those
 # two directories, the source read-only; each file is written next to its place and then renamed over it, so a reader
 # never gets half a file. colors.json goes first, so a missing sequences file cannot keep the colours from the API.
